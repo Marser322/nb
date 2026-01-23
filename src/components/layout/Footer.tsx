@@ -1,8 +1,29 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Scissors, Instagram, Phone, MapPin, Clock } from "lucide-react";
 import { ROUTES, BUSINESS_CONFIG } from "@/lib/constants";
 
 export function Footer() {
+    const [clickCount, setClickCount] = useState(0);
+    const router = useRouter();
+
+    // Triple-click handler for hidden admin access
+    const handleSecretClick = () => {
+        const newCount = clickCount + 1;
+        setClickCount(newCount);
+
+        if (newCount >= 5) {
+            router.push(ROUTES.ADMIN_DASHBOARD);
+            setClickCount(0);
+        }
+
+        // Reset after 2 seconds
+        setTimeout(() => setClickCount(0), 2000);
+    };
+
     return (
         <footer className="bg-card border-t border-border">
             <div className="container mx-auto px-4 py-12 md:py-16">
@@ -105,9 +126,17 @@ export function Footer() {
                         >
                             <Instagram className="h-5 w-5" />
                         </a>
+                        {/* Hidden admin access - 5 clicks activates */}
+                        <span
+                            onClick={handleSecretClick}
+                            className="text-xs text-muted-foreground/50 cursor-default select-none"
+                        >
+                            v1.0.0
+                        </span>
                     </div>
                 </div>
             </div>
         </footer>
     );
 }
+

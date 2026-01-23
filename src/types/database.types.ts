@@ -129,3 +129,15 @@ export interface Lookbook {
   is_featured: boolean
   created_at: string
 }
+
+export interface Branch {
+  id: string
+  name: string
+  address: string
+  phone: string | null
+  image_url: string | null
+  working_hours: WorkingHours | null
+  is_active: boolean
+  created_at: string
+}
+

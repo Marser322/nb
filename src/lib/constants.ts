@@ -104,6 +104,9 @@ export const ROUTES = {
     ADMIN_CITAS: '/admin/citas',
     ADMIN_PRODUCTOS: '/admin/productos',
     ADMIN_CAJA: '/admin/caja',
+    ADMIN_SUCURSALES: '/admin/sucursales',
+    ADMIN_BARBEROS: '/admin/barberos',
+    ADMIN_SERVICIOS: '/admin/servicios',
 
     // Barbero
     BARBERO_AGENDA: '/barbero/mi-agenda',

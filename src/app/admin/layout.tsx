@@ -10,6 +10,9 @@ import {
     Scissors,
     LogOut,
     Menu,
+    Building2,
+    Users,
+    Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -36,6 +39,21 @@ const sidebarLinks = [
         href: ROUTES.ADMIN_CAJA,
         label: "Caja",
         icon: Wallet,
+    },
+    {
+        href: ROUTES.ADMIN_SUCURSALES,
+        label: "Sucursales",
+        icon: Building2,
+    },
+    {
+        href: ROUTES.ADMIN_BARBEROS,
+        label: "Barberos",
+        icon: Users,
+    },
+    {
+        href: ROUTES.ADMIN_SERVICIOS,
+        label: "Servicios",
+        icon: Sparkles,
     },
 ];
 
