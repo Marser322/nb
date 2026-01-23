@@ -64,8 +64,12 @@ function SidebarContent() {
         <div className="flex flex-col h-full">
             {/* Logo */}
             <div className="p-6 border-b border-border">
-                <Link href="/" className="flex items-center gap-2">
-                    <Scissors className="h-8 w-8 text-primary" />
+                <Link href="/" className="flex items-center gap-3">
+                    <img
+                        src="/logo.png"
+                        alt="NB Barber"
+                        className="h-10 w-10 object-contain"
+                    />
                     <div>
                         <span className="text-xl font-bold">NB Barber</span>
                         <p className="text-xs text-muted-foreground">Panel Admin</p>

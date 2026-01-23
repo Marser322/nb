@@ -141,3 +141,13 @@ export interface Branch {
   created_at: string
 }
 
+export interface CashMovement {
+  id: string
+  type: 'ingreso' | 'egreso'
+  amount: number
+  description: string
+  payment_method: 'efectivo' | 'transferencia' | 'tarjeta'
+  created_at: string
+}
+
+

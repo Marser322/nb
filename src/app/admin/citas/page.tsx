@@ -9,6 +9,8 @@ import {
     XCircle,
     Clock,
     User,
+    Plus,
+    Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,11 +23,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
 import { formatPrice, formatDate } from "@/lib/utils";
 import {
     APPOINTMENT_STATUS_LABELS,
     APPOINTMENT_STATUS_COLORS,
     APPOINTMENT_STATUS,
+    BUSINESS_CONFIG,
 } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { Appointment, Service, Barber, Profile } from "@/types/database.types";
@@ -45,6 +55,22 @@ export default function AdminCitasPage() {
     const [selectedDate, setSelectedDate] = useState(format(startOfToday(), "yyyy-MM-dd"));
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [isLoading, setIsLoading] = useState(true);
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+    // Form state for new appointment
+    const [services, setServices] = useState<Service[]>([]);
+    const [barbers, setBarbers] = useState<Barber[]>([]);
+    const [formData, setFormData] = useState({
+        clientName: "",
+        clientPhone: "",
+        serviceId: "",
+        barberId: "",
+        date: format(startOfToday(), "yyyy-MM-dd"),
+        time: "",
+        paymentMethod: "",
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const supabase = createClient();
 
     // Cargar citas
@@ -63,6 +89,19 @@ export default function AdminCitasPage() {
         }
         loadAppointments();
     }, [selectedDate]);
+
+    // Cargar servicios y barberos para el formulario
+    useEffect(() => {
+        async function loadFormData() {
+            const [{ data: servicesData }, { data: barbersData }] = await Promise.all([
+                supabase.from("services").select("*").eq("is_active", true).order("name"),
+                supabase.from("barbers").select("*").eq("is_active", true).order("name"),
+            ]);
+            setServices(servicesData || []);
+            setBarbers(barbersData || []);
+        }
+        loadFormData();
+    }, []);
 
     // Filtrar por estado
     useEffect(() => {
@@ -93,17 +132,189 @@ export default function AdminCitasPage() {
         );
     };
 
+    // Crear cita manual
+    const handleCreateAppointment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+
+        try {
+            const selectedService = services.find(s => s.id === formData.serviceId);
+            if (!selectedService) {
+                toast.error("Selecciona un servicio");
+                return;
+            }
+
+            // Calcular hora de fin
+            const [hours, minutes] = formData.time.split(":").map(Number);
+            const endMinutes = hours * 60 + minutes + selectedService.duration_minutes;
+            const endHours = Math.floor(endMinutes / 60);
+            const endMins = endMinutes % 60;
+            const endTime = `${endHours.toString().padStart(2, "0")}:${endMins.toString().padStart(2, "0")}:00`;
+
+            // Crear o buscar cliente (simplificado: usar nombre como referencia)
+            // En producción deberías buscar/crear el perfil correctamente
+
+            const { error } = await supabase.from("appointments").insert({
+                barber_id: formData.barberId,
+                service_id: formData.serviceId,
+                appointment_date: formData.date,
+                start_time: formData.time + ":00",
+                end_time: endTime,
+                status: "confirmed",
+                notes: `Cliente: ${formData.clientName} - Tel: ${formData.clientPhone}`,
+            });
+
+            if (error) {
+                toast.error("Error al crear la cita: " + error.message);
+            } else {
+                toast.success("Cita creada exitosamente");
+                setIsDialogOpen(false);
+                setFormData({
+                    clientName: "",
+                    clientPhone: "",
+                    serviceId: "",
+                    barberId: "",
+                    date: format(startOfToday(), "yyyy-MM-dd"),
+                    time: "",
+                    paymentMethod: "",
+                });
+                // Recargar citas si la fecha coincide
+                if (formData.date === selectedDate) {
+                    const { data } = await supabase
+                        .from("appointments")
+                        .select("*, service:services(*), barber:barbers(*), client:profiles(*)")
+                        .eq("appointment_date", selectedDate)
+                        .order("start_time");
+                    setAppointments(data || []);
+                }
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // Generar slots de tiempo
+    const generateTimeSlots = () => {
+        const slots = [];
+        for (let h = BUSINESS_CONFIG.workingHours.start; h < BUSINESS_CONFIG.workingHours.end; h++) {
+            slots.push(`${h.toString().padStart(2, "0")}:00`);
+            slots.push(`${h.toString().padStart(2, "0")}:30`);
+        }
+        return slots;
+    };
+
     // Generar fechas para selector rápido
     const quickDates = Array.from({ length: 7 }, (_, i) => addDays(startOfToday(), i));
 
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl md:text-3xl font-bold">Gestión de Citas</h1>
-                <p className="text-muted-foreground">
-                    Administra las citas del día
-                </p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-bold">Gestión de Citas</h1>
+                    <p className="text-muted-foreground">
+                        Administra las citas del día
+                    </p>
+                </div>
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                    <DialogTrigger asChild>
+                        <Button>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Nueva Cita
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Crear Cita Manual</DialogTitle>
+                        </DialogHeader>
+                        <form onSubmit={handleCreateAppointment} className="space-y-4 mt-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium mb-2 block">Nombre Cliente</label>
+                                    <Input
+                                        placeholder="Juan Pérez"
+                                        value={formData.clientName}
+                                        onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium mb-2 block">Teléfono</label>
+                                    <Input
+                                        placeholder="099 123 456"
+                                        value={formData.clientPhone}
+                                        onChange={(e) => setFormData({ ...formData, clientPhone: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Servicio</label>
+                                <Select value={formData.serviceId} onValueChange={(v) => setFormData({ ...formData, serviceId: v })}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Seleccionar servicio" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {services.map((s) => (
+                                            <SelectItem key={s.id} value={s.id}>
+                                                {s.name} - {formatPrice(s.price)} ({s.duration_minutes}min)
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Barbero</label>
+                                <Select value={formData.barberId} onValueChange={(v) => setFormData({ ...formData, barberId: v })}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Seleccionar barbero" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {barbers.map((b) => (
+                                            <SelectItem key={b.id} value={b.id}>
+                                                {b.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium mb-2 block">Fecha</label>
+                                    <Input
+                                        type="date"
+                                        value={formData.date}
+                                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium mb-2 block">Hora</label>
+                                    <Select value={formData.time} onValueChange={(v) => setFormData({ ...formData, time: v })}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Hora" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {generateTimeSlots().map((slot) => (
+                                                <SelectItem key={slot} value={slot}>
+                                                    {slot}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                                    Cancelar
+                                </Button>
+                                <Button type="submit" disabled={isSubmitting}>
+                                    {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                    Crear Cita
+                                </Button>
+                            </div>
+                        </form>
+                    </DialogContent>
+                </Dialog>
             </div>
 
             {/* Filtros */}
@@ -118,8 +329,8 @@ export default function AdminCitasPage() {
                                 key={dateStr}
                                 onClick={() => setSelectedDate(dateStr)}
                                 className={`flex-shrink-0 flex flex-col items-center p-2 rounded-lg border transition-colors min-w-[60px] ${isSelected
-                                        ? "border-primary bg-primary/10 text-primary"
-                                        : "border-border hover:border-primary/50"
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "border-border hover:border-primary/50"
                                     }`}
                             >
                                 <span className="text-xs uppercase">
@@ -171,6 +382,10 @@ export default function AdminCitasPage() {
                         <div className="text-center py-12 text-muted-foreground">
                             <Calendar className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
                             <p>No hay citas para este día</p>
+                            <Button variant="outline" className="mt-4" onClick={() => setIsDialogOpen(true)}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                Crear primera cita
+                            </Button>
                         </div>
                     ) : (
                         <div className="space-y-3">
@@ -201,7 +416,7 @@ export default function AdminCitasPage() {
                                             </div>
                                             <p className="text-sm text-muted-foreground">
                                                 <User className="inline h-3 w-3 mr-1" />
-                                                {cita.client?.full_name || "Cliente"}
+                                                {cita.client?.full_name || cita.notes?.split(" - ")[0]?.replace("Cliente: ", "") || "Cliente"}
                                                 {" • "}
                                                 Barbero: {cita.barber?.name || "Sin asignar"}
                                             </p>

@@ -14,15 +14,41 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Minus, Plus, Search, Package, Loader2 } from "lucide-react";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Minus, Plus, Search, Package, Loader2, Edit2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils";
+import { PRODUCT_CATEGORIES } from "@/lib/constants";
 import type { Product } from "@/types/database.types";
 
 export default function AdminProductsPage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+    const [formData, setFormData] = useState({
+        name: "",
+        description: "",
+        price: "",
+        stock: "",
+        category: "",
+        image_url: "",
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const supabase = createClient();
 
     // Cargar productos
@@ -57,7 +83,6 @@ export default function AdminProductsPage() {
 
         if (error) {
             toast.error("Error al actualizar stock");
-            // Revert on error
             loadProducts();
         } else {
             toast.success("Stock actualizado");
@@ -79,7 +104,105 @@ export default function AdminProductsPage() {
         if (error) {
             toast.error("Error al cambiar estado");
             loadProducts();
+        } else {
+            toast.success(currentState ? "Producto desactivado" : "Producto activado");
         }
+    };
+
+    // Crear/Editar producto
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+
+        try {
+            const productData = {
+                name: formData.name,
+                description: formData.description || null,
+                price: parseFloat(formData.price),
+                stock: parseInt(formData.stock),
+                category: formData.category,
+                image_url: formData.image_url || null,
+                is_active: true,
+            };
+
+            if (editingProduct) {
+                const { error } = await supabase
+                    .from("products")
+                    .update(productData)
+                    .eq("id", editingProduct.id);
+
+                if (error) {
+                    toast.error("Error al actualizar producto");
+                } else {
+                    toast.success("Producto actualizado");
+                    loadProducts();
+                }
+            } else {
+                const { error } = await supabase
+                    .from("products")
+                    .insert(productData);
+
+                if (error) {
+                    toast.error("Error al crear producto: " + error.message);
+                } else {
+                    toast.success("Producto creado");
+                    loadProducts();
+                }
+            }
+
+            setIsDialogOpen(false);
+            resetForm();
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // Eliminar producto
+    const deleteProduct = async (productId: string) => {
+        if (!confirm("¿Estás seguro de eliminar este producto?")) return;
+
+        const { error } = await supabase
+            .from("products")
+            .delete()
+            .eq("id", productId);
+
+        if (error) {
+            toast.error("Error al eliminar producto");
+        } else {
+            toast.success("Producto eliminado");
+            loadProducts();
+        }
+    };
+
+    const openEditDialog = (product: Product) => {
+        setEditingProduct(product);
+        setFormData({
+            name: product.name,
+            description: product.description || "",
+            price: product.price.toString(),
+            stock: product.stock.toString(),
+            category: product.category,
+            image_url: product.image_url || "",
+        });
+        setIsDialogOpen(true);
+    };
+
+    const openNewDialog = () => {
+        setEditingProduct(null);
+        resetForm();
+        setIsDialogOpen(true);
+    };
+
+    const resetForm = () => {
+        setFormData({
+            name: "",
+            description: "",
+            price: "",
+            stock: "0",
+            category: "",
+            image_url: "",
+        });
+        setEditingProduct(null);
     };
 
     const filteredProducts = products.filter(p =>
@@ -95,7 +218,94 @@ export default function AdminProductsPage() {
                         Gestiona el stock y la visibilidad de tus productos.
                     </p>
                 </div>
-                {/* Futuro: Botón agregar producto */}
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                    <DialogTrigger asChild>
+                        <Button onClick={openNewDialog}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Agregar Producto
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>
+                                {editingProduct ? "Editar Producto" : "Nuevo Producto"}
+                            </DialogTitle>
+                        </DialogHeader>
+                        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Nombre</label>
+                                <Input
+                                    placeholder="Cera Mate Premium"
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Descripción</label>
+                                <Input
+                                    placeholder="Cera de acabado mate para estilos texturizados..."
+                                    value={formData.description}
+                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium mb-2 block">Precio (UYU)</label>
+                                    <Input
+                                        type="number"
+                                        placeholder="450"
+                                        value={formData.price}
+                                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium mb-2 block">Stock</label>
+                                    <Input
+                                        type="number"
+                                        placeholder="10"
+                                        value={formData.stock}
+                                        onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Categoría</label>
+                                <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v })}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Seleccionar categoría" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {PRODUCT_CATEGORIES.map((cat) => (
+                                            <SelectItem key={cat} value={cat}>
+                                                {cat}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">URL de Imagen</label>
+                                <Input
+                                    placeholder="https://ejemplo.com/producto.jpg"
+                                    value={formData.image_url}
+                                    onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                                />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                                    Cancelar
+                                </Button>
+                                <Button type="submit" disabled={isSubmitting}>
+                                    {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                    {editingProduct ? "Guardar Cambios" : "Crear Producto"}
+                                </Button>
+                            </div>
+                        </form>
+                    </DialogContent>
+                </Dialog>
             </div>
 
             <div className="flex items-center gap-4 bg-card p-4 rounded-lg border">
@@ -117,12 +327,13 @@ export default function AdminProductsPage() {
                             <TableHead>Precio</TableHead>
                             <TableHead className="text-center">Stock</TableHead>
                             <TableHead className="text-center">Estado</TableHead>
+                            <TableHead className="text-center">Acciones</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">
+                                <TableCell colSpan={6} className="h-24 text-center">
                                     <div className="flex justify-center items-center gap-2">
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                         Cargando inventario...
@@ -131,8 +342,11 @@ export default function AdminProductsPage() {
                             </TableRow>
                         ) : filteredProducts.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                                     No se encontraron productos.
+                                    <Button variant="link" onClick={openNewDialog} className="ml-2">
+                                        Agregar uno
+                                    </Button>
                                 </TableCell>
                             </TableRow>
                         ) : (
@@ -185,6 +399,25 @@ export default function AdminProductsPage() {
                                             checked={product.is_active}
                                             onCheckedChange={() => toggleActive(product.id, product.is_active)}
                                         />
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        <div className="flex justify-center gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => openEditDialog(product)}
+                                            >
+                                                <Edit2 className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="text-red-400 hover:text-red-500"
+                                                onClick={() => deleteProduct(product.id)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))

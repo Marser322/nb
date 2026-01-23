@@ -129,7 +129,7 @@ export function Footer() {
                         {/* Hidden admin access - 5 clicks activates */}
                         <span
                             onClick={handleSecretClick}
-                            className="text-xs text-muted-foreground/50 cursor-default select-none"
+                            className="text-xs text-muted-foreground/70 cursor-pointer select-none hover:text-muted-foreground transition-colors"
                         >
                             v1.0.0
                         </span>
