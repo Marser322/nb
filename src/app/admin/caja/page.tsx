@@ -115,12 +115,14 @@ export default function AdminCajaPage() {
         // Servicios
         if (appointments) {
             appointments.forEach(apt => {
-                const price = apt.service?.price || 0;
+                const service = apt.service as unknown as { name: string; price: number } | null;
+                const barber = apt.barber as unknown as { name: string } | null;
+                const price = service?.price || 0;
                 sIncome += Number(price);
                 trans.push({
                     id: apt.id,
                     type: 'servicio',
-                    description: `${apt.service?.name} con ${apt.barber?.name}`,
+                    description: `${service?.name || 'Servicio'} con ${barber?.name || 'Barbero'}`,
                     amount: Number(price),
                     date: `${apt.appointment_date}T${apt.start_time}`,
                     status: 'Completado',
