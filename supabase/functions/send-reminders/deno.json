@@ -1,0 +1,7 @@
+{
+    "functions": {
+        "send-reminders": {
+            "verifyJwt": true
+        }
+    }
+}
