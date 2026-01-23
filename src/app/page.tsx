@@ -308,8 +308,8 @@ export default function HomePage() {
             <div className="space-y-4">
               {/* Slider 2: Sharp Fade Transformation */}
               <BeforeAfterSlider
-                beforeImage="https://images.unsplash.com/photo-1517832606299-7ae9b720a47e?w=800&q=80"
-                afterImage="https://images.unsplash.com/photo-1593702295094-aea8c5be851e?w=800&q=80"
+                beforeImage="https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=800&q=80"
+                afterImage="https://images.unsplash.com/photo-1622286342621-4bd786c2447c?w=800&q=80"
               />
               <div className="text-center">
                 <h3 className="text-xl font-bold text-white">Classic Fade</h3>
