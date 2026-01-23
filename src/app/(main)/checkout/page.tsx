@@ -1,0 +1,266 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCartStore } from "@/stores/cartStore";
+import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
+import { formatPrice } from "@/lib/utils";
+import { Loader2, ShieldCheck, Wallet, Landmark } from "lucide-react";
+import { toast } from "sonner";
+import Image from "next/image";
+
+type PaymentMethod = "efectivo" | "transferencia";
+
+// Definición manual de tipo CartItem para evitar imports circulares si no está exportado correctamente
+interface CartItem {
+    product: {
+        id: string;
+        name: string;
+        price: number;
+        image_url?: string | null;
+    };
+    quantity: number;
+}
+
+export default function CheckoutPage() {
+    const router = useRouter();
+    const { items, getTotalPrice, clearCart } = useCartStore();
+    const [isLoading, setIsLoading] = useState(true);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [user, setUser] = useState<any>(null);
+    const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("efectivo");
+    const supabase = createClient();
+
+    // 1. Verificar Autenticación
+    useEffect(() => {
+        async function checkAuth() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                toast.error("Debes iniciar sesión para finalizar la compra");
+                router.push("/login?next=/checkout");
+                return;
+            }
+            setUser(user);
+            setIsLoading(false);
+        }
+        checkAuth();
+    }, [supabase, router]);
+
+    // 2. Verificar Carrito Vacío
+    useEffect(() => {
+        if (!isLoading && items.length === 0) {
+            router.push("/tienda");
+        }
+    }, [isLoading, items, router]);
+
+    const handleCheckout = async () => {
+        if (!user) return;
+        setIsProcessing(true);
+
+        try {
+            const total = getTotalPrice();
+
+            // 1. Crear Orden
+            // Obtenemos el profile_id basado en el auth_user_id
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('auth_user_id', user.id)
+                .single();
+
+            if (profileError || !profileData) throw new Error("Error al obtener perfil de usuario");
+
+            const { data: orderData, error: orderError } = await supabase
+                .from('orders')
+                .insert({
+                    client_id: profileData.id,
+                    subtotal: total,
+                    total: total,
+                    status: 'pending',
+                    payment_method: paymentMethod
+                })
+                .select()
+                .single();
+
+            if (orderError) throw orderError;
+
+            // 2. Crear Items de Orden
+            const orderItems = items.map((item: CartItem) => ({
+                order_id: orderData.id,
+                product_id: item.product.id,
+                quantity: item.quantity,
+                unit_price: item.product.price
+            }));
+
+            const { error: itemsError } = await supabase
+                .from('order_items')
+                .insert(orderItems);
+
+            if (itemsError) throw itemsError;
+
+            // 3. Descontar Stock (llamando a la RPC creada en migracion 004)
+            for (const item of items) {
+                const { error: stockError } = await supabase.rpc('decrement_stock', {
+                    p_product_id: item.product.id,
+                    p_quantity: item.quantity
+                });
+
+                if (stockError) {
+                    console.error("Error al descontar stock:", stockError);
+                    // No detenemos el flujo, pero idealmente manejaríamos esto mejor
+                }
+            }
+
+            // 4. Éxito
+            clearCart();
+            toast.success("¡Pedido confirmado!");
+            router.push("/checkout/success");
+
+        } catch (error: any) {
+            console.error("Checkout error:", error);
+            toast.error("Error al procesar el pedido: " + error.message);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    if (items.length === 0) return null;
+
+    return (
+        <div className="min-h-screen bg-background pt-24 pb-12">
+            <div className="container mx-auto px-4 max-w-4xl">
+                <h1 className="text-3xl font-bold mb-8 text-center md:text-left">Finalizar Compra</h1>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {/* Columna Izquierda: Método de Pago */}
+                    <div className="md:col-span-2 space-y-6">
+                        <Card className="bg-card/50 border-border/50">
+                            <CardHeader>
+                                <CardTitle className="text-xl flex items-center gap-2">
+                                    <Wallet className="h-5 w-5 text-primary" />
+                                    Método de Pago
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <RadioGroup
+                                    value={paymentMethod}
+                                    onValueChange={(val) => setPaymentMethod(val as PaymentMethod)}
+                                    className="space-y-4"
+                                >
+                                    {/* Opción Efectivo */}
+                                    <div className={`flex items-center space-x-4 border p-4 rounded-lg cursor-pointer transition-colors ${paymentMethod === 'efectivo' ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                                        <RadioGroupItem value="efectivo" id="efectivo" />
+                                        <Label htmlFor="efectivo" className="flex-1 cursor-pointer">
+                                            <div className="font-semibold text-base">Efectivo / Tarjeta en Local</div>
+                                            <p className="text-sm text-muted-foreground mt-1">
+                                                Pagás al retirar tus productos en la barbería.
+                                            </p>
+                                        </Label>
+                                        <ShieldCheck className="h-5 w-5 text-muted-foreground" />
+                                    </div>
+
+                                    {/* Opción Transferencia */}
+                                    <div className={`flex items-center space-x-4 border p-4 rounded-lg cursor-pointer transition-colors ${paymentMethod === 'transferencia' ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                                        <RadioGroupItem value="transferencia" id="transferencia" />
+                                        <Label htmlFor="transferencia" className="flex-1 cursor-pointer">
+                                            <div className="font-semibold text-base">Transferencia Bancaria</div>
+                                            <p className="text-sm text-muted-foreground mt-1">
+                                                Enviá el comprobante por WhatsApp tras confirmar.
+                                            </p>
+                                        </Label>
+                                        <Landmark className="h-5 w-5 text-muted-foreground" />
+                                    </div>
+                                </RadioGroup>
+
+                                {paymentMethod === 'transferencia' && (
+                                    <div className="mt-4 p-4 bg-muted/50 rounded-lg text-sm space-y-2 border border-border">
+                                        <p className="font-semibold text-primary">Datos Bancarios:</p>
+                                        <p>Banco: <span className="text-foreground">Santander</span></p>
+                                        <p>Cuenta: <span className="text-foreground">1234 5678 9012</span></p>
+                                        <p>Titular: <span className="text-foreground">NB Barber S.A.</span></p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Columna Derecha: Resumen */}
+                    <div className="md:col-span-1">
+                        <Card className="bg-card border-border sticky top-24">
+                            <CardHeader>
+                                <CardTitle>Resumen del Pedido</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                                    {items.map((item: CartItem) => (
+                                        <div key={item.product.id} className="flex gap-3">
+                                            <div className="h-12 w-12 rounded bg-muted relative overflow-hidden flex-shrink-0">
+                                                {item.product.image_url && (
+                                                    <Image
+                                                        src={item.product.image_url}
+                                                        alt={item.product.name}
+                                                        fill
+                                                        className="object-cover"
+                                                    />
+                                                )}
+                                            </div>
+                                            <div className="flex-1 text-sm">
+                                                <p className="font-medium line-clamp-1">{item.product.name}</p>
+                                                <p className="text-muted-foreground">x{item.quantity}</p>
+                                            </div>
+                                            <div className="text-sm font-semibold">
+                                                {formatPrice(item.product.price * item.quantity)}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <Separator />
+
+                                <div className="space-y-2">
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-muted-foreground">Subtotal</span>
+                                        <span>{formatPrice(getTotalPrice())}</span>
+                                    </div>
+                                    <div className="flex justify-between text-lg font-bold">
+                                        <span>Total</span>
+                                        <span className="text-primary">{formatPrice(getTotalPrice())}</span>
+                                    </div>
+                                </div>
+
+                                <Button
+                                    className="w-full text-lg h-12"
+                                    onClick={handleCheckout}
+                                    disabled={isProcessing}
+                                >
+                                    {isProcessing ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                            Procesando...
+                                        </>
+                                    ) : (
+                                        "Confirmar Pedido"
+                                    )}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
