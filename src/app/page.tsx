@@ -297,8 +297,8 @@ export default function HomePage() {
             <div className="space-y-4">
               {/* Slider 1: Beard & Hair Transformation */}
               <BeforeAfterSlider
-                beforeImage="https://images.unsplash.com/photo-1605493171135-622b72017c60?w=800&q=80"
-                afterImage="https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800&q=80"
+                beforeImage="/images/before-makeover.png"
+                afterImage="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80"
               />
               <div className="text-center">
                 <h3 className="text-xl font-bold text-white">Full Makeover</h3>
@@ -308,8 +308,8 @@ export default function HomePage() {
             <div className="space-y-4">
               {/* Slider 2: Sharp Fade Transformation */}
               <BeforeAfterSlider
-                beforeImage="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=800&q=80"
-                afterImage="https://images.unsplash.com/photo-1534030347209-7147fd9e7b2a?w=800&q=80"
+                beforeImage="https://images.unsplash.com/photo-1517832606299-7ae9b720a47e?w=800&q=80"
+                afterImage="https://images.unsplash.com/photo-1593702295094-aea8c5be851e?w=800&q=80"
               />
               <div className="text-center">
                 <h3 className="text-xl font-bold text-white">Classic Fade</h3>
