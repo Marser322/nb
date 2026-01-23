@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { TourOverlay } from "@/components/tour/TourOverlay";
+import { HelpFab } from "@/components/tour/HelpFab";
 import "./globals.css";
 
 const inter = Inter({
@@ -35,6 +37,8 @@ export default function RootLayout({
         className={`${inter.variable} font-sans antialiased`}
       >
         {children}
+        <TourOverlay />
+        <HelpFab />
         <Toaster position="top-right" richColors />
       </body>
     </html>

@@ -102,6 +102,7 @@ export function Header() {
                             <Link
                                 key={link.href}
                                 href={link.href}
+                                id={`nav-${link.label.toLowerCase()}`}
                                 className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
                             >
                                 {link.label}

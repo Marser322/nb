@@ -83,6 +83,7 @@ function SidebarContent() {
                     <Link
                         key={link.href}
                         href={link.href}
+                        id={`sidebar-${link.label.toLowerCase()}`}
                         className={cn(
                             "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
                             pathname === link.href

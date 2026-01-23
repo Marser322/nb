@@ -144,7 +144,7 @@ export default function HomePage() {
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="lg" asChild className="text-lg h-14 px-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl shadow-primary/20">
+              <Button id="hero-cta" size="lg" asChild className="text-lg h-14 px-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl shadow-primary/20">
                 <Link href={ROUTES.RESERVAR}>
                   Reservar Turno
                   <ArrowRight className="ml-2 h-5 w-5" />

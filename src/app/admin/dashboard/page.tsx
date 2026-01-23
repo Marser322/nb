@@ -134,7 +134,7 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div id="admin-stats" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {statCards.map((stat) => (
                     <Card key={stat.title} className="border-border/50">
                         <CardContent className="p-4 md:p-6">
