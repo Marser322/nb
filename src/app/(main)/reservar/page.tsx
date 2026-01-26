@@ -61,54 +61,6 @@ export default function ReservarPage() {
         }
     ];
 
-    // Static Services with Images (Overrides DB for UI Demo)
-    const STATIC_SERVICES: Service[] = [
-        {
-            id: "1",
-            name: "Corte Clásico / Fade",
-            description: "Degradado perfecto con tijera o máquina. Incluye lavado y peinado.",
-            price: 600,
-            duration_minutes: 45,
-            image_url: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800&q=80",
-            is_active: true,
-            sort_order: 1,
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "2",
-            name: "Barba Express",
-            description: "Perfilado rápido y afeitado con navaja.",
-            price: 400,
-            duration_minutes: 30,
-            image_url: "https://images.unsplash.com/photo-1622286342621-4bd786c2447c?w=800&q=80",
-            is_active: true,
-            sort_order: 2,
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "3",
-            name: "Full Service (Corte + Barba)",
-            description: "La experiencia completa. Corte, barba, toalla caliente y bebida.",
-            price: 900,
-            duration_minutes: 60,
-            image_url: "https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=800&q=80",
-            is_active: true,
-            sort_order: 3,
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "4",
-            name: "Color / Platinado",
-            description: "Cambio de look total con productos de alta calidad.",
-            price: 1500,
-            duration_minutes: 120,
-            image_url: "https://images.unsplash.com/photo-1620331317329-363f8f66ed53?w=800&q=80",
-            is_active: true,
-            sort_order: 4,
-            created_at: new Date().toISOString()
-        }
-    ];
-
     const [services, setServices] = useState<Service[]>([]);
     const [barbers, setBarbers] = useState<Barber[]>([]);
     const [bookedSlots, setBookedSlots] = useState<string[]>([]);
@@ -449,8 +401,8 @@ export default function ReservarPage() {
                                         ¿Qué servicio necesitás?
                                     </h2>
                                     <div className="space-y-3">
-                                        {/* Definimos servicios estáticos enriquecidos para la UI */}
-                                        {STATIC_SERVICES.map((service) => (
+                                        {/* Lista de Servicios desde DB */}
+                                        {services.map((service) => (
                                             <Card
                                                 key={service.id}
                                                 className={cn(

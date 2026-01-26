@@ -1,41 +1,50 @@
 "use client";
 
-import { loginAdmin } from "./actions";
-
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Eye, EyeOff, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Lock, ArrowRight, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
+import { createClient } from "@/lib/supabase/client";
 
 export default function AdminLoginPage() {
+    const [email, setEmail] = useState("admin@nbbarber.com"); // Default email
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
+    const supabase = createClient();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
 
-        const formData = new FormData();
-        formData.append("password", password);
-
         try {
-            const result = await loginAdmin(formData);
+            const { error } = await supabase.auth.signInWithPassword({
+                email,
+                password
+            });
 
-            if (result.success) {
-                toast.success("Bienvenido Administrador");
-                router.push(ROUTES.ADMIN_DASHBOARD);
-            } else {
-                toast.error(result.message);
+            if (error) {
+                toast.error("Credenciales inválidas");
                 setIsLoading(false);
+                return;
             }
+
+            // Optional: Check if user is actually admin
+            // For now, we rely on RLS policies to restrict data access
+            // But good UX is to redirect if not admin.
+            // We'll verify this in the dashboard page or assume success for now.
+
+            toast.success("Bienvenido Administrador");
+            router.push(ROUTES.ADMIN_DASHBOARD);
+            router.refresh();
+
         } catch (error) {
             toast.error("Ocurrió un error al intentar iniciar sesión");
             setIsLoading(false);
@@ -60,11 +69,25 @@ export default function AdminLoginPage() {
                     </div>
                     <CardTitle className="text-2xl font-bold tracking-tight">Acceso Administrativo</CardTitle>
                     <CardDescription>
-                        Ingresá la contraseña maestra para continuar
+                        Ingresá tus credenciales de administrador
                     </CardDescription>
                 </CardHeader>
                 <form onSubmit={handleLogin}>
                     <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Email</Label>
+                            <div className="relative">
+                                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    id="email"
+                                    type="email"
+                                    placeholder="admin@nbbarber.com"
+                                    className="pl-9 bg-background/50 border-input/50 focus:border-amber-500/50 transition-colors"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                />
+                            </div>
+                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="password">Contraseña</Label>
                             <div className="relative">
@@ -98,7 +121,7 @@ export default function AdminLoginPage() {
                         <Button
                             type="submit"
                             className="w-full bg-amber-500 hover:bg-amber-600 text-black font-semibold h-11"
-                            disabled={isLoading || !password}
+                            disabled={isLoading || !password || !email}
                         >
                             {isLoading ? (
                                 <>
