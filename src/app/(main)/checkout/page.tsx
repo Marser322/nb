@@ -72,7 +72,7 @@ export default function CheckoutPage() {
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('id')
-                .eq('auth_user_id', user.id)
+                .eq('id', user.id)
                 .single();
 
             if (profileError || !profileData) throw new Error("Error al obtener perfil de usuario");

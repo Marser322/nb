@@ -8,7 +8,7 @@ export type PaymentMethod = 'mercadopago' | 'efectivo' | 'transferencia'
 
 export interface Profile {
   id: string
-  auth_user_id: string
+
   full_name: string | null
   phone: string | null
   avatar_url: string | null
