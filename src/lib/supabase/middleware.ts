@@ -56,5 +56,17 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url)
     }
 
+    // Protección simple para carpetas /admin usando la cookie demo
+    // Excluir explícitamente /admin-login para evitar bucles de redirección
+    if ((request.nextUrl.pathname.startsWith('/admin/') || request.nextUrl.pathname === '/admin') &&
+        request.nextUrl.pathname !== '/admin-login') {
+        const adminSession = request.cookies.get('admin_session');
+        if (adminSession?.value !== 'true') {
+            const url = request.nextUrl.clone();
+            url.pathname = '/admin-login';
+            return NextResponse.redirect(url);
+        }
+    }
+
     return supabaseResponse
 }

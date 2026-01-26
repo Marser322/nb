@@ -110,4 +110,7 @@ export const ROUTES = {
 
     // Barbero
     BARBERO_AGENDA: '/barbero/mi-agenda',
+
+    // Auth Admin
+    ADMIN_LOGIN: '/admin-login',
 } as const

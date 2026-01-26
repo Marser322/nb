@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCartStore } from "@/stores/cartStore";
 import { createClient } from "@/lib/supabase/client";
+import { User } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -33,7 +34,7 @@ export default function CheckoutPage() {
     const { items, getTotalPrice, clearCart } = useCartStore();
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<User | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("efectivo");
     const supabase = createClient();
 
@@ -122,9 +123,10 @@ export default function CheckoutPage() {
             toast.success("¡Pedido confirmado!");
             router.push("/checkout/success");
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Checkout error:", error);
-            toast.error("Error al procesar el pedido: " + error.message);
+            const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+            toast.error("Error al procesar el pedido: " + errorMessage);
         } finally {
             setIsProcessing(false);
         }

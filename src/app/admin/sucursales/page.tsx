@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,14 +35,10 @@ export default function AdminSucursalesPage() {
         address: "",
         phone: "",
     });
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
 
-    useEffect(() => {
-        loadBranches();
-    }, []);
-
-    async function loadBranches() {
-        setIsLoading(true);
+    const loadBranches = useCallback(async (showLoading = true) => {
+        if (showLoading) setIsLoading(true);
         const { data } = await supabase
             .from("branches")
             .select("*")
@@ -50,7 +46,12 @@ export default function AdminSucursalesPage() {
 
         if (data) setBranches(data);
         setIsLoading(false);
-    }
+    }, [supabase]);
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        loadBranches(false);
+    }, [loadBranches]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

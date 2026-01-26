@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTourStore } from '@/lib/store/tour-store';
+import { TourStep, useTourStore } from '@/lib/store/tour-store';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, ArrowLeft, X } from 'lucide-react';
 
@@ -99,11 +99,21 @@ export function TourOverlay() {
     );
 }
 
-function Tooltip({ step, index, total, targetRect, onNext, onPrev, onClose }: any) {
+interface TooltipProps {
+    step: TourStep;
+    index: number;
+    total: number;
+    targetRect: DOMRect | null;
+    onNext: () => void;
+    onPrev: () => void;
+    onClose: () => void;
+}
+
+function Tooltip({ step, index, total, targetRect, onNext, onPrev, onClose }: TooltipProps) {
     // Calculate tooltip position relative to target
     // If targetRect is null (center), we center it.
 
-    let style: any = {};
+    let style: React.CSSProperties = {};
     const SPACING = 20;
 
     if (targetRect) {

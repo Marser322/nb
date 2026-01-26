@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,14 +34,10 @@ export default function AdminBarberosPage() {
         bio: "",
         avatar_url: "",
     });
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
 
-    useEffect(() => {
-        loadBarbers();
-    }, []);
-
-    async function loadBarbers() {
-        setIsLoading(true);
+    const loadBarbers = useCallback(async (showLoading = true) => {
+        if (showLoading) setIsLoading(true);
         const { data } = await supabase
             .from("barbers")
             .select("*")
@@ -49,7 +45,12 @@ export default function AdminBarberosPage() {
 
         if (data) setBarbers(data);
         setIsLoading(false);
-    }
+    }, [supabase]);
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        loadBarbers(false);
+    }, [loadBarbers]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

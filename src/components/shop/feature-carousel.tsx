@@ -36,13 +36,6 @@ const FEATURED_PRODUCTS = [
 export function FeaturedProductsCarousel() {
     const [currentIndex, setCurrentIndex] = useState(0);
 
-    useEffect(() => {
-        const timer = setInterval(() => {
-            handleNext();
-        }, 6000); // Slower interval for better readability
-        return () => clearInterval(timer);
-    }, []);
-
     const handlePrev = () => {
         setCurrentIndex((prev) => (prev === 0 ? FEATURED_PRODUCTS.length - 1 : prev - 1));
     };
@@ -50,6 +43,13 @@ export function FeaturedProductsCarousel() {
     const handleNext = () => {
         setCurrentIndex((prev) => (prev + 1) % FEATURED_PRODUCTS.length);
     };
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            handleNext();
+        }, 6000); // Slower interval for better readability
+        return () => clearInterval(timer);
+    }, []);
 
     return (
         <div className="relative h-[500px] w-full overflow-hidden rounded-2xl mb-12 group shadow-2xl">

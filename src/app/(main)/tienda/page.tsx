@@ -125,7 +125,6 @@ export default function TiendaPage() {
     ];
 
     const [products, setProducts] = useState<Product[]>([]);
-    const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState<string>("all");
     const [isLoading, setIsLoading] = useState(true);
@@ -143,32 +142,20 @@ export default function TiendaPage() {
             await new Promise(resolve => setTimeout(resolve, 800));
 
             setProducts(STATIC_PRODUCTS);
-            setFilteredProducts(STATIC_PRODUCTS);
             setIsLoading(false);
         }
         loadProducts();
     }, []);
 
-    // Filtrar productos
-    useEffect(() => {
-        let filtered = products;
+    // Filter logic derived directly from state (no separate state needed)
+    const filteredProducts = products.filter(p => {
+        const matchesSearch = !searchQuery ||
+            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.description?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesCategory = selectedCategory === "all" || p.category === selectedCategory;
 
-        // Filtrar por búsqueda
-        if (searchQuery) {
-            filtered = filtered.filter(
-                (p) =>
-                    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    p.description?.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-        }
-
-        // Filtrar por categoría
-        if (selectedCategory !== "all") {
-            filtered = filtered.filter((p) => p.category === selectedCategory);
-        }
-
-        setFilteredProducts(filtered);
-    }, [searchQuery, selectedCategory, products]);
+        return matchesSearch && matchesCategory;
+    });
 
     const handleAddToCart = (product: Product) => {
         if (product.stock <= 0) {

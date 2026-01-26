@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Menu, Scissors, ShoppingBag, User, LogOut } from "lucide-react";
+import { Menu, Scissors, ShoppingBag, User, LogOut, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -112,6 +112,13 @@ export function Header() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 md:gap-4">
+                        {/* Admin Access (Desktop) */}
+                        <Button variant="ghost" size="icon" className="hidden md:inline-flex text-muted-foreground hover:text-amber-500" asChild>
+                            <Link href={ROUTES.ADMIN_LOGIN} title="Acceso Admin">
+                                <Lock className="h-5 w-5" />
+                            </Link>
+                        </Button>
+
                         {/* Cart */}
                         <Button
                             variant="ghost"
@@ -234,6 +241,17 @@ export function Header() {
                                             <Link href={ROUTES.LOGIN}>Iniciar Sesión</Link>
                                         </Button>
                                     )}
+
+                                    <div className="border-t border-border pt-4 mt-auto">
+                                        <Link
+                                            href={ROUTES.ADMIN_LOGIN}
+                                            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-amber-500 p-2"
+                                            onClick={() => setIsMobileMenuOpen(false)}
+                                        >
+                                            <Lock className="h-4 w-4" />
+                                            Acceso Administrativo
+                                        </Link>
+                                    </div>
                                 </div>
                             </SheetContent>
                         </Sheet>

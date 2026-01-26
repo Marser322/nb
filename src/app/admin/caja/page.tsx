@@ -195,7 +195,7 @@ export default function AdminCajaPage() {
         if (orders) {
             orders.forEach(ord => {
                 pIncome += Number(ord.total);
-                const itemsCount = ord.order_items.reduce((acc: number, item: any) => acc + item.quantity, 0);
+                const itemsCount = ord.order_items.reduce((acc: number, item: { quantity: number }) => acc + item.quantity, 0);
                 pSold += itemsCount;
 
                 // Clasificar por método de pago

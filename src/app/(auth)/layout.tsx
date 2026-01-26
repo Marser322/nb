@@ -30,7 +30,7 @@ export default function AuthLayout({
                         <span className="text-primary text-glow">Nuestra Pasión.</span>
                     </h2>
                     <blockquote className="text-lg text-zinc-300 italic border-l-2 border-primary pl-4 max-w-md">
-                        "La excelencia en el cuidado personal comienza aquí."
+                        &quot;La excelencia en el cuidado personal comienza aquí.&quot;
                     </blockquote>
                 </div>
             </div>
