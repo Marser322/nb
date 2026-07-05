@@ -119,6 +119,12 @@ export default function LookbookPage() {
         ? styles.filter((s) => s.tags?.includes(selectedTag))
         : styles;
 
+    const getServiceIdForStyle = (styleId: string) => {
+        if (["1", "4", "6", "8"].includes(styleId)) return "1"; // Corte Clásico
+        if (["2", "3"].includes(styleId)) return "3"; // Diseño de Barba
+        return null;
+    };
+
     return (
         <div className="min-h-screen bg-background">
             <Header />
@@ -260,7 +266,7 @@ export default function LookbookPage() {
                                             </div>
                                         )}
 
-                                        <div className="absolute bottom-0 left-0 right-0 p-5 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 z-20">
+                                        <div className="absolute bottom-0 left-0 right-0 p-5 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 z-20 bg-gradient-to-t from-black via-black/80 to-transparent">
                                             <h3 className="font-bold text-lg text-white mb-2 leading-tight">{style.title}</h3>
 
                                             {style.tags && (
@@ -273,14 +279,23 @@ export default function LookbookPage() {
                                                 </div>
                                             )}
 
+                                            {getServiceIdForStyle(style.id) && (
+                                                <Button asChild size="sm" className="w-full mt-3 rounded-full bg-primary hover:bg-primary/90 text-black font-bold text-xs h-8">
+                                                    <Link href={`/reservar?styleId=${style.id}&serviceId=${getServiceIdForStyle(style.id)}`}>
+                                                        Reservar Estilo
+                                                        <ArrowRight className="ml-1.5 h-3 w-3" />
+                                                    </Link>
+                                                </Button>
+                                            )}
+
                                             {style.instagram_url && (
                                                 <a
                                                     href={style.instagram_url}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="flex items-center text-xs text-amber-400 font-bold hover:text-amber-300 uppercase tracking-widest mt-2"
+                                                    className="flex items-center justify-center text-[10px] text-amber-400 font-bold hover:text-amber-300 uppercase tracking-widest mt-3 transition-colors"
                                                 >
-                                                    <Instagram className="h-3 w-3 mr-1.5" />
+                                                    <Instagram className="h-3 w-3 mr-1" />
                                                     Ver en Instagram
                                                 </a>
                                             )}
