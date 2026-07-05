@@ -102,7 +102,8 @@ export default function AdminCitasPage() {
             const [{ data: servicesData }, { data: barbersData }, { data: branchesData }] = await Promise.all([
                 supabase.from("services").select("*").eq("is_active", true).order("name"),
                 supabase.from("barbers").select("*").eq("is_active", true).order("name"),
-                supabase.from("branches").select("*").eq("is_active", true).order("name"),
+                // branches usa "active" en la DB real (la migración 011 de F8 lo renombra a is_active)
+                supabase.from("branches").select("*").eq("active", true).order("name"),
             ]);
             setServices(servicesData || []);
             setBarbers(barbersData || []);
