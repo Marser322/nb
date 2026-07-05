@@ -14,6 +14,14 @@ Antes de desplegar, asegúrate de que tu base de datos tenga todas las tablas ne
     - Políticas de seguridad (RLS).
     - Datos iniciales de configuración.
 
+### 1.1 Migraciones pendientes (ejecutar en orden)
+
+Después del setup base, ejecutá en el **SQL Editor** las migraciones de `supabase/migrations/` que falten en tu proyecto:
+
+- **`005_transactional_checkout.sql`** — Crea la función `create_order_with_items`: orden + items + descuento de stock en una sola transacción, con precios leídos del servidor. Sin esta migración el checkout usa un flujo de respaldo desde el cliente (funcional pero no atómico).
+- **`006_harden_rls.sql`** — Endurece RLS para producción: elimina las policies de desarrollo que daban acceso total a cualquier usuario autenticado (caja, sucursales, recordatorios), restringe escrituras del catálogo a admins, permite a los barberos ver/actualizar solo sus citas, y crea `get_booked_slots` para consultar disponibilidad sin exponer citas ajenas.
+  - ⚠️ **Antes de ejecutarla**, verificá que tu usuario admin tenga `role = 'admin'` en `profiles` (la migración incluye la query de verificación en su encabezado). Si no, el panel admin quedará sin permisos de escritura.
+
 ## 2. Edge Functions (Mensajes Automáticos)
 
 Para activar el sistema de recordatorios:
