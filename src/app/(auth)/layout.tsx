@@ -11,7 +11,7 @@ export default function AuthLayout({
             <div className="hidden lg:relative lg:block lg:w-1/2 overflow-hidden bg-zinc-900 border-r border-white/5">
                 {/* Imagen de fondo */}
                 <Image
-                    src="/images/hero/detalle-corte.png"
+                    src="/images/hero/detalle-corte.jpg"
                     alt="Interior Barbería NB"
                     fill
                     className="object-cover opacity-60 mix-blend-overlay"

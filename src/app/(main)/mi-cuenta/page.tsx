@@ -13,9 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { APPOINTMENT_STATUS_COLORS, APPOINTMENT_STATUS_LABELS, ROUTES } from "@/lib/constants";
+import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils";
-import { getBarberAvatarUrl } from "@/lib/static-data";
-import type { Appointment, Barber, HaircutHistory, Profile, Service } from "@/types/database.types";
+import { getBarberAvatarUrl, STATIC_SERVICES, STATIC_BARBERS } from "@/lib/static-data";
+import type { Appointment, Barber, HaircutHistory, Profile, Service, Subscription } from "@/types/database.types";
 
 type AppointmentWithRelations = Appointment & {
     service?: Service | null;
@@ -35,10 +36,80 @@ export default function MiCuentaPage() {
     const [upcomingAppointments, setUpcomingAppointments] = useState<AppointmentWithRelations[]>([]);
     const [recentAppointments, setRecentAppointments] = useState<AppointmentWithRelations[]>([]);
     const [history, setHistory] = useState<HaircutHistoryWithRelations[]>([]);
+    const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
 
     useEffect(() => {
         async function loadAccount() {
             setIsLoading(true);
+
+            const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
+
+            if (isDummy) {
+                // Simulación local completa
+                const dummyProfile: Profile = {
+                    id: "mock-client-id",
+                    full_name: "Cliente de Prueba",
+                    phone: "099 123 456",
+                    avatar_url: null,
+                    role: "cliente",
+                    notes: "Perfil de prueba local offline",
+                    created_at: new Date().toISOString(),
+                };
+
+                const todayStr = new Date().toISOString().slice(0, 10);
+                const localApps = JSON.parse(localStorage.getItem("nb-appointments") || "[]") as Appointment[];
+                
+                const hydratedApps = localApps.map((app) => {
+                    const service = STATIC_SERVICES.find((s) => s.id === app.service_id) || {
+                        id: app.service_id,
+                        name: "Servicio Especial",
+                        price: 500,
+                        duration_minutes: 30,
+                        image_url: null,
+                        is_active: true,
+                        sort_order: 99,
+                        description: null,
+                        created_at: new Date().toISOString(),
+                    };
+                    const barber = STATIC_BARBERS.find((b) => b.id === app.barber_id) || {
+                        id: app.barber_id,
+                        profile_id: "mock-barber-profile",
+                        name: "Barbero",
+                        bio: null,
+                        avatar_url: null,
+                        is_active: true,
+                        branch_id: null,
+                        working_hours: null,
+                        created_at: new Date().toISOString(),
+                    };
+                    return { ...app, service, barber } as AppointmentWithRelations;
+                });
+
+                const upcoming = hydratedApps.filter(
+                    (app) => app.appointment_date >= todayStr && ["pending", "confirmed"].includes(app.status)
+                );
+                const recent = hydratedApps.filter(
+                    (app) => app.appointment_date < todayStr || app.status === "completed"
+                );
+
+                const localSubs = JSON.parse(localStorage.getItem("nb-subscriptions") || "[]") as Subscription[];
+                const hydratedSubs = localSubs
+                    .filter((sub) => sub.status === "active")
+                    .map((sub) => {
+                        const service = STATIC_SERVICES.find((s) => s.id === sub.service_id) || null;
+                        const barber = STATIC_BARBERS.find((b) => b.id === sub.barber_id) || null;
+                        return { ...sub, service, barber } as Subscription;
+                    });
+
+                setProfile(dummyProfile);
+                setUpcomingAppointments(upcoming);
+                setRecentAppointments(recent);
+                setSubscriptions(hydratedSubs);
+                setHistory([]);
+                setIsLoading(false);
+                return;
+            }
+
             const { data: { user } } = await supabase.auth.getUser();
 
             if (!user) {
@@ -59,7 +130,7 @@ export default function MiCuentaPage() {
             }
 
             const today = new Date().toISOString().slice(0, 10);
-            const [upcomingRes, recentRes, historyRes] = await Promise.all([
+            const [upcomingRes, recentRes, historyRes, subsRes] = await Promise.all([
                 supabase
                     .from("appointments")
                     .select("*, service:services(*), barber:barbers(*)")
@@ -83,12 +154,19 @@ export default function MiCuentaPage() {
                     .eq("client_id", profileData.id)
                     .order("created_at", { ascending: false })
                     .limit(5),
+                supabase
+                    .from("subscriptions")
+                    .select("*, service:services(*), barber:barbers(*)")
+                    .eq("client_id", profileData.id)
+                    .eq("status", "active")
+                    .order("created_at", { ascending: false }),
             ]);
 
             setProfile(profileData);
             setUpcomingAppointments(upcomingRes.data || []);
             setRecentAppointments(recentRes.data || []);
             setHistory(historyRes.data || []);
+            setSubscriptions(subsRes.data || []);
             setIsLoading(false);
         }
 
@@ -114,6 +192,43 @@ export default function MiCuentaPage() {
         } satisfies HaircutHistoryWithRelations;
     }, [history, recentAppointments]);
 
+    const handleCancelSubscription = async (subId: string) => {
+        if (!window.confirm("¿Estás seguro de que deseas cancelar este turno fijo semanal?")) {
+            return;
+        }
+
+        const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
+
+        if (isDummy) {
+            const localSubs = JSON.parse(localStorage.getItem("nb-subscriptions") || "[]") as Subscription[];
+            const updatedSubs = localSubs.map(sub => {
+                if (sub.id === subId) {
+                    return { ...sub, status: "cancelled" as const, updated_at: new Date().toISOString() };
+                }
+                return sub;
+            });
+            localStorage.setItem("nb-subscriptions", JSON.stringify(updatedSubs));
+            setSubscriptions(prev => prev.filter(sub => sub.id !== subId));
+            toast.success("Turno fijo cancelado correctamente");
+            return;
+        }
+
+        try {
+            const { error } = await supabase
+                .from("subscriptions")
+                .update({ status: "cancelled", updated_at: new Date().toISOString() })
+                .eq("id", subId);
+
+            if (error) throw error;
+
+            setSubscriptions(prev => prev.filter(sub => sub.id !== subId));
+            toast.success("Turno fijo cancelado correctamente");
+        } catch (err) {
+            console.error("Error cancelling subscription:", err);
+            toast.error("No se pudo cancelar el turno fijo. Inténtalo de nuevo.");
+        }
+    };
+
     const repeatHref = lastExperience
         ? `${ROUTES.RESERVAR}?serviceId=${lastExperience.service_id}&barberId=${lastExperience.barber_id}`
         : ROUTES.RESERVAR;
@@ -133,7 +248,7 @@ export default function MiCuentaPage() {
                             <div className="relative overflow-hidden rounded-lg border border-white/10 bg-zinc-950 p-8 md:p-10">
                                 <div className="absolute inset-0">
                                     <Image
-                                        src="/images/hero/detalle-corte.png"
+                                        src="/images/hero/detalle-corte.jpg"
                                         alt="Detalle de corte"
                                         fill
                                         className="object-cover opacity-20"
@@ -285,6 +400,68 @@ export default function MiCuentaPage() {
                                 </CardContent>
                             </Card>
                         </section>
+
+                        {/* Sección de Suscripciones (Turnos Fijos) */}
+                        <Card className="border-white/10 bg-card/70">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Repeat className="h-5 w-5 text-primary animate-pulse" />
+                                    Mis Turnos Fijos (Suscripciones Semanales)
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {subscriptions.length === 0 ? (
+                                    <div className="py-10 text-center">
+                                        <Repeat className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
+                                        <p className="font-semibold text-white">No tenés suscripciones de turnos fijos activas</p>
+                                        <p className="text-xs text-muted-foreground mt-2 max-w-md mx-auto">
+                                            Al agendar un turno, podés activar la opción "¿Querés reservar este turno de forma fija semanal?" para asegurar tu espacio de forma recurrente todas las semanas.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {subscriptions.map((sub) => {
+                                            const weekdays = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+                                            const dayName = weekdays[sub.day_of_week];
+
+                                            return (
+                                                <div key={sub.id} className="rounded-lg border border-primary/20 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 p-5 flex flex-col justify-between gap-4">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div>
+                                                            <p className="font-bold text-white text-base md:text-lg">{sub.service?.name}</p>
+                                                            <p className="text-sm text-primary font-medium flex items-center gap-1.5 mt-1">
+                                                                <Repeat className="h-4 w-4" />
+                                                                Todos los {dayName} a las {sub.start_time.slice(0, 5)} hs
+                                                            </p>
+                                                            <p className="text-xs text-muted-foreground mt-2">
+                                                                Profesional: <span className="text-zinc-200">{sub.barber?.name}</span>
+                                                            </p>
+                                                        </div>
+                                                        <Badge className="bg-primary/20 text-primary border-primary/30 uppercase tracking-wider text-[9px] h-5 rounded-full">
+                                                            Fijo Semanal
+                                                        </Badge>
+                                                    </div>
+                                                    
+                                                    <div className="flex items-center justify-between border-t border-white/5 pt-3 mt-1">
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {sub.service && formatPrice(sub.service.price)} / sesión
+                                                        </span>
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            onClick={() => handleCancelSubscription(sub.id)}
+                                                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs px-3 rounded-full h-8"
+                                                        >
+                                                            Cancelar turno fijo
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
                     </div>
                 )}
             </main>

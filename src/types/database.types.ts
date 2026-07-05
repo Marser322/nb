@@ -13,6 +13,7 @@ export interface Profile {
   phone: string | null
   avatar_url: string | null
   role: UserRole
+  notes: string | null
   created_at: string
 }
 
@@ -23,6 +24,7 @@ export interface Barber {
   bio: string | null
   avatar_url: string | null
   is_active: boolean
+  branch_id: string | null
   working_hours: WorkingHours | null
   created_at: string
 }
@@ -59,6 +61,7 @@ export interface Appointment {
   status: AppointmentStatus
   notes: string | null
   style_reference: string | null
+  subscription_id?: string | null
   created_at: string
   // Relaciones expandidas
   client?: Profile
@@ -149,5 +152,54 @@ export interface CashMovement {
   payment_method: 'efectivo' | 'transferencia' | 'tarjeta'
   created_at: string
 }
+
+export interface CommunicationLog {
+  id: string
+  client_id: string | null
+  client_name: string | null
+  client_phone: string | null
+  message_sent: string | null
+  status: 'sent' | 'failed' | 'delivered'
+  sent_at: string
+  metadata: any
+}
+
+export interface RemindersConfig {
+  id: string
+  days_since_last_visit: number
+  message_template: string
+  is_active: boolean
+  channel: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ClientOverview {
+  id: string
+  full_name: string | null
+  phone: string | null
+  avatar_url: string | null
+  created_at: string
+  notes: string | null
+  last_visit: string | null
+  total_appointments: number
+  total_spent: number
+}
+
+export interface Subscription {
+  id: string
+  client_id: string
+  barber_id: string
+  service_id: string
+  day_of_week: number
+  start_time: string
+  status: 'active' | 'paused' | 'cancelled'
+  created_at: string
+  updated_at: string
+  // Relaciones opcionales para UI
+  barber?: Barber | null
+  service?: Service | null
+}
+
 
 

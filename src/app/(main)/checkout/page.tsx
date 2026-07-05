@@ -190,8 +190,53 @@ export default function CheckoutPage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="min-h-screen bg-background pt-24 pb-12">
+                <div className="container mx-auto px-4 max-w-4xl">
+                    {/* Skeleton Title */}
+                    <div className="h-8 bg-muted/40 rounded w-1/3 mb-8 mx-auto md:text-left animate-pulse" />
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {/* Columna Izquierda: Método de Pago Skeleton */}
+                        <div className="md:col-span-2 space-y-6">
+                            <Card className="bg-card/50 border-border/50 animate-pulse">
+                                <CardHeader>
+                                    <div className="h-6 bg-muted/40 rounded w-1/4" />
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="h-20 bg-muted/30 rounded-lg" />
+                                    <div className="h-20 bg-muted/30 rounded-lg" />
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* Columna Derecha: Resumen Skeleton */}
+                        <div className="md:col-span-1">
+                            <Card className="bg-card border-border animate-pulse">
+                                <CardHeader>
+                                    <div className="h-6 bg-muted/40 rounded w-1/2" />
+                                </CardHeader>
+                                <CardContent className="space-y-6">
+                                    <div className="space-y-4">
+                                        <div className="flex gap-3">
+                                            <div className="h-12 w-12 rounded bg-muted/30 flex-shrink-0" />
+                                            <div className="flex-1 space-y-2">
+                                                <div className="h-4 bg-muted/40 rounded w-3/4" />
+                                                <div className="h-3 bg-muted/30 rounded w-1/4" />
+                                            </div>
+                                            <div className="h-4 bg-muted/40 rounded w-10" />
+                                        </div>
+                                    </div>
+                                    <Separator className="bg-border/30" />
+                                    <div className="space-y-2">
+                                        <div className="h-4 bg-muted/30 rounded w-1/3" />
+                                        <div className="h-6 bg-muted/40 rounded w-1/2" />
+                                    </div>
+                                    <div className="h-12 bg-muted/30 rounded" />
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                </div>
             </div>
         );
     }

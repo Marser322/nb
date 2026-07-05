@@ -42,29 +42,59 @@ export async function updateSession(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser()
 
-    // Rutas protegidas
-    // TODO: Descomentar para producción
-    const protectedRoutes = ['/mi-cuenta'] // Admin y barbero temporalmente sin protección para demo
-    // const protectedRoutes = ['/admin', '/barbero', '/mi-cuenta']
-    const isProtectedRoute = protectedRoutes.some(route =>
-        request.nextUrl.pathname.startsWith(route)
-    )
+    const pathname = request.nextUrl.pathname
 
-    if (isProtectedRoute && !user) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/login'
-        return NextResponse.redirect(url)
+    // 1. Ruta /admin y subrutas (excluyendo /admin-login)
+    if ((pathname.startsWith('/admin/') || pathname === '/admin') && pathname !== '/admin-login') {
+        if (!user) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/admin-login'
+            return NextResponse.redirect(url)
+        }
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+            .limit(1)
+            .maybeSingle()
+
+        if (profile?.role !== 'admin') {
+            const url = request.nextUrl.clone()
+            url.pathname = '/admin-login'
+            url.searchParams.set('error', 'forbidden')
+            return NextResponse.redirect(url)
+        }
     }
 
-    // Protección simple para carpetas /admin usando la cookie demo
-    // Excluir explícitamente /admin-login para evitar bucles de redirección
-    if ((request.nextUrl.pathname.startsWith('/admin/') || request.nextUrl.pathname === '/admin') &&
-        request.nextUrl.pathname !== '/admin-login') {
-        const adminSession = request.cookies.get('admin_session');
-        if (adminSession?.value !== 'true') {
-            const url = request.nextUrl.clone();
-            url.pathname = '/admin-login';
-            return NextResponse.redirect(url);
+    // 2. Ruta /barbero y subrutas
+    if (pathname.startsWith('/barbero/') || pathname === '/barbero') {
+        if (!user) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/login'
+            return NextResponse.redirect(url)
+        }
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+            .limit(1)
+            .maybeSingle()
+
+        if (profile?.role !== 'barbero' && profile?.role !== 'admin') {
+            const url = request.nextUrl.clone()
+            url.pathname = '/login'
+            return NextResponse.redirect(url)
+        }
+    }
+
+    // 3. Ruta /mi-cuenta
+    if (pathname.startsWith('/mi-cuenta') || pathname === '/mi-cuenta') {
+        if (!user) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/login'
+            return NextResponse.redirect(url)
         }
     }
 

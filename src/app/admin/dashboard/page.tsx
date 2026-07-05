@@ -9,13 +9,21 @@ import {
     TrendingUp,
     Package,
     Clock,
+    Filter,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatPrice, formatDate } from "@/lib/utils";
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_COLORS } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
-import type { Appointment, Service, Barber } from "@/types/database.types";
+import type { Appointment, Service, Barber, Branch } from "@/types/database.types";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { format, startOfToday, startOfMonth, endOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -34,6 +42,10 @@ export default function AdminDashboardPage() {
         productosLowStock: 0,
     });
     const [citasHoy, setCitasHoy] = useState<(Appointment & { service?: Service; barber?: Barber })[]>([]);
+    const [barbers, setBarbers] = useState<Barber[]>([]);
+    const [branches, setBranches] = useState<Branch[]>([]);
+    const [branchFilter, setBranchFilter] = useState<string>("all");
+    const [barberFilter, setBarberFilter] = useState<string>("all");
     const [isLoading, setIsLoading] = useState(true);
     const supabase = createClient();
 
@@ -44,53 +56,64 @@ export default function AdminDashboardPage() {
             const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
             const monthEnd = format(endOfMonth(new Date()), "yyyy-MM-dd");
 
-            // Citas de hoy
-            const { data: citasHoyData } = await supabase
-                .from("appointments")
-                .select("*, service:services(*), barber:barbers(*)")
-                .eq("appointment_date", today)
-                .order("start_time");
+            // Citas de hoy, barberos y sucursales
+            const [citasHoyRes, barbersRes, branchesRes, citasMesRes, lowStockRes, completedRes] = await Promise.all([
+                supabase.from("appointments").select("*, service:services(*), barber:barbers(*)").eq("appointment_date", today).order("start_time"),
+                supabase.from("barbers").select("*").eq("is_active", true).order("name"),
+                supabase.from("branches").select("*").eq("active", true).order("name"),
+                supabase.from("appointments").select("*", { count: "exact", head: true }).gte("appointment_date", monthStart).lte("appointment_date", monthEnd),
+                supabase.from("products").select("*", { count: "exact", head: true }).lte("stock", 5).eq("is_active", true),
+                supabase.from("appointments").select("service:services(price)").eq("status", "completed").gte("appointment_date", monthStart).lte("appointment_date", monthEnd)
+            ]);
 
-            // Citas del mes
-            const { count: citasMesCount } = await supabase
-                .from("appointments")
-                .select("*", { count: "exact", head: true })
-                .gte("appointment_date", monthStart)
-                .lte("appointment_date", monthEnd);
+            const citasHoyData = citasHoyRes.data || [];
+            const barbersData = barbersRes.data || [];
+            const branchesData = branchesRes.data || [];
+            const citasMesCount = citasMesRes.count || 0;
+            const lowStockCount = lowStockRes.count || 0;
+            const completedAppointments = completedRes.data || [];
 
-            // Productos con bajo stock
-            const { count: lowStockCount } = await supabase
-                .from("products")
-                .select("*", { count: "exact", head: true })
-                .lte("stock", 5)
-                .eq("is_active", true);
-
-            // Calcular ingresos del mes (citas completadas)
-            const { data: completedAppointments } = await supabase
-                .from("appointments")
-                .select("service:services(price)")
-                .eq("status", "completed")
-                .gte("appointment_date", monthStart)
-                .lte("appointment_date", monthEnd);
-
-            const ingresosMes = completedAppointments?.reduce((sum, apt) => {
+            const ingresosMes = completedAppointments.reduce((sum, apt) => {
                 const service = Array.isArray(apt.service) ? apt.service[0] : apt.service;
                 return sum + (service?.price || 0);
             }, 0) || 0;
 
             setStats({
-                citasHoy: citasHoyData?.length || 0,
-                citasMes: citasMesCount || 0,
+                citasHoy: citasHoyData.length,
+                citasMes: citasMesCount,
                 ingresosMes,
-                productosLowStock: lowStockCount || 0,
+                productosLowStock: lowStockCount,
             });
 
-            setCitasHoy(citasHoyData || []);
+            setCitasHoy(citasHoyData);
+            setBarbers(barbersData);
+            setBranches(branchesData);
             setIsLoading(false);
         }
 
         loadDashboard();
     }, []);
+
+    // Reset de barbero si ya no es compatible con la sucursal elegida
+    useEffect(() => {
+        if (branchFilter !== "all" && barberFilter !== "all") {
+            const barber = barbers.find((b) => b.id === barberFilter);
+            if (barber && barber.branch_id !== branchFilter) {
+                setBarberFilter("all");
+            }
+        }
+    }, [branchFilter, barberFilter, barbers]);
+
+    // Filtrar citas en memoria
+    const filteredCitasHoy = citasHoy.filter((cita) => {
+        if (branchFilter !== "all" && cita.barber?.branch_id !== branchFilter) {
+            return false;
+        }
+        if (barberFilter !== "all" && cita.barber_id !== barberFilter) {
+            return false;
+        }
+        return true;
+    });
 
     const statCards = [
         {
@@ -152,14 +175,53 @@ export default function AdminDashboardPage() {
 
             {/* Citas de Hoy */}
             <Card className="border-border/50">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Clock className="h-5 w-5 text-primary" />
-                        Agenda de Hoy
-                    </CardTitle>
-                    <CardDescription>
-                        {stats.citasHoy} {stats.citasHoy === 1 ? "cita" : "citas"} programadas
-                    </CardDescription>
+                <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <Clock className="h-5 w-5 text-primary" />
+                            Agenda de Hoy
+                        </CardTitle>
+                        <CardDescription>
+                            {filteredCitasHoy.length} {filteredCitasHoy.length === 1 ? "cita" : "citas"} programadas en la selección
+                        </CardDescription>
+                    </div>
+
+                    {/* Filtros rápidos */}
+                    <div className="flex flex-wrap gap-2">
+                        {/* Selector de Sucursal */}
+                        <Select value={branchFilter} onValueChange={setBranchFilter}>
+                            <SelectTrigger className="w-[160px] h-9 text-xs">
+                                <Filter className="h-3 w-3 mr-1" />
+                                <SelectValue placeholder="Sucursal" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todas las sucursales</SelectItem>
+                                {branches.map((b) => (
+                                    <SelectItem key={b.id} value={b.id}>
+                                        {b.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        {/* Selector de Barbero */}
+                        <Select value={barberFilter} onValueChange={setBarberFilter}>
+                            <SelectTrigger className="w-[160px] h-9 text-xs">
+                                <Filter className="h-3 w-3 mr-1" />
+                                <SelectValue placeholder="Barbero" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todos los barberos</SelectItem>
+                                {barbers
+                                    .filter((b) => branchFilter === "all" || b.branch_id === branchFilter)
+                                    .map((b) => (
+                                        <SelectItem key={b.id} value={b.id}>
+                                            {b.name}
+                                        </SelectItem>
+                                    ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? (
@@ -168,14 +230,14 @@ export default function AdminDashboardPage() {
                                 <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
                             ))}
                         </div>
-                    ) : citasHoy.length === 0 ? (
+                    ) : filteredCitasHoy.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
                             <Calendar className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
-                            <p>No hay citas programadas para hoy</p>
+                            <p>No hay citas programadas para hoy con los filtros seleccionados</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {citasHoy.map((cita) => (
+                            {filteredCitasHoy.map((cita) => (
                                 <div
                                     key={cita.id}
                                     className="flex items-center justify-between p-4 rounded-lg bg-card border border-border/50"

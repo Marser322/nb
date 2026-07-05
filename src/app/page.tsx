@@ -20,7 +20,7 @@ const services = [
     price: 450,
     duration: 30,
     icon: Scissors,
-    image: "/images/hero/maquina-clippers.png",
+    image: "/images/hero/maquina-clippers.jpg",
   },
   {
     id: "2",
@@ -29,7 +29,7 @@ const services = [
     price: 750,
     duration: 60,
     icon: Sparkles,
-    image: "/images/hero/detalle-corte.png",
+    image: "/images/hero/detalle-corte.jpg",
   },
   {
     id: "3",
@@ -38,7 +38,7 @@ const services = [
     price: 350,
     duration: 30,
     icon: Star,
-    image: "/images/hero/herramientas-barberia.png",
+    image: "/images/hero/herramientas-barberia.jpg",
   },
 ];
 
@@ -50,7 +50,7 @@ export default function HomePage() {
       <section className="relative min-h-screen overflow-hidden pt-28 pb-16 flex items-center">
         <div className="absolute inset-0">
           <Image
-            src="/images/hero/ambiente-barberia.png"
+            src="/images/hero/ambiente-barberia.jpg"
             alt="Interior premium de New Brothers"
             fill
             priority
@@ -231,8 +231,8 @@ export default function HomePage() {
             <div className="space-y-4">
               {/* Slider 1: Beard & Hair Transformation */}
               <BeforeAfterSlider
-                beforeImage="/images/before-makeover.png"
-                afterImage="/images/after-makeover.png"
+                beforeImage="/images/before-makeover.jpg"
+                afterImage="/images/after-makeover.jpg"
               />
               <div className="text-center">
                 <h3 className="text-xl font-bold text-white">Full Makeover</h3>
@@ -242,8 +242,8 @@ export default function HomePage() {
             <div className="space-y-4">
               {/* Slider 2: Sharp Fade Transformation */}
               <BeforeAfterSlider
-                beforeImage="/images/hero/maquina-clippers.png"
-                afterImage="/images/hero/estilo-moderno.png"
+                beforeImage="/images/hero/maquina-clippers.jpg"
+                afterImage="/images/hero/estilo-moderno.jpg"
               />
               <div className="text-center">
                 <h3 className="text-xl font-bold text-white">Classic Fade</h3>
@@ -263,7 +263,7 @@ export default function HomePage() {
       <section className="py-24 relative overflow-hidden">
         <div className="absolute inset-0">
           <Image
-            src="/images/hero/ambiente-barberia.png"
+            src="/images/hero/ambiente-barberia.jpg"
             alt="Background"
             fill
             className="object-cover opacity-20"

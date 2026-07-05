@@ -73,6 +73,33 @@ export function AiAssistant() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Cargar mensajes desde sessionStorage al montar el componente (seguro para SSR)
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem("nb-chat-messages");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+        }
+      }
+    } catch (e) {
+      console.error("Error loading chat messages from sessionStorage:", e);
+    }
+  }, []);
+
+  // Guardar mensajes en sessionStorage al cambiar
+  useEffect(() => {
+    // Solo persistir si la conversación avanzó más allá del saludo inicial por defecto
+    if (messages.length > 1 || (messages.length === 1 && messages[0].content !== "¡Hola! Soy tu **Asesor de Estilo** de New Brothers. Estoy aquí para recomendarte cortes, darte información de servicios, precios, sucursales y ayudarte a reservar tu turno. ¿En qué te puedo asesorar hoy?")) {
+      try {
+        sessionStorage.setItem("nb-chat-messages", JSON.stringify(messages));
+      } catch (e) {
+        console.error("Error saving chat messages to sessionStorage:", e);
+      }
+    }
+  }, [messages]);
+
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });

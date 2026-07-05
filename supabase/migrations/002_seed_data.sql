@@ -5,9 +5,9 @@
 
 -- Insertar barberos de ejemplo
 INSERT INTO barbers (name, bio, avatar_url, is_active) VALUES
-    ('Carlos', 'Especialista en cortes clásicos y modernos', '/images/barbers/carlos.png', true),
-    ('Miguel', 'Experto en diseño de barba y estilos urbanos', '/images/barbers/miguel.png', true),
-    ('Diego', 'Barbero con 10 años de experiencia', '/images/barbers/diego.png', true);
+    ('Carlos', 'Especialista en cortes clásicos y modernos', '/images/barbers/carlos.jpg', true),
+    ('Miguel', 'Experto en diseño de barba y estilos urbanos', '/images/barbers/miguel.jpg', true),
+    ('Diego', 'Barbero con 10 años de experiencia', '/images/barbers/diego.jpg', true);
 
 -- Insertar productos de ejemplo
 INSERT INTO products (name, description, price, stock, category, image_url, is_active) VALUES
@@ -19,6 +19,6 @@ INSERT INTO products (name, description, price, stock, category, image_url, is_a
 
 -- Insertar estilos de lookbook
 INSERT INTO lookbook (title, image_url, tags, is_featured) VALUES
-    ('Fade Degradado Alto', '/lookbook/fade-cut.png', ARRAY['corte', 'fade', 'moderno'], true),
-    ('Perfilado de Barba', '/lookbook/beard-trim.png', ARRAY['barba', 'grooming', 'tijera'], true),
-    ('Styling Texturizado', '/lookbook/styling-pomade.png', ARRAY['styling', 'producto', 'textura'], true);
+    ('Fade Degradado Alto', '/lookbook/fade-cut.jpg', ARRAY['corte', 'fade', 'moderno'], true),
+    ('Perfilado de Barba', '/lookbook/beard-trim.jpg', ARRAY['barba', 'grooming', 'tijera'], true),
+    ('Styling Texturizado', '/lookbook/styling-pomade.jpg', ARRAY['styling', 'producto', 'textura'], true);

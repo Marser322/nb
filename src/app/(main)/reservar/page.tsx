@@ -3,10 +3,10 @@
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useState, useEffect, Suspense, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { format, addDays, isBefore, startOfToday, isToday } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar, Clock, User, Scissors, ArrowRight, ArrowLeft, Check, MapPin, Sparkles } from "lucide-react";
+import { Calendar, Clock, User, Scissors, ArrowRight, ArrowLeft, Check, MapPin, Sparkles, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,10 +16,11 @@ import { BUSINESS_CONFIG, BRANCHES } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { Service, Barber } from "@/types/database.types";
 import { toast } from "sonner";
-import { STATIC_STYLES, getBarberAvatarUrl } from "@/lib/static-data";
+import { STATIC_STYLES, getBarberAvatarUrl, STATIC_SERVICES, STATIC_BARBERS } from "@/lib/static-data";
+import { fetchActiveAppointments, computeBookedSlots, hasOverlap, bookAppointment } from "@/lib/booking";
 
 interface Branch {
-  id: number;
+  id: string | number;
   name: string;
   address: string;
   image: string;
@@ -32,11 +33,13 @@ const STEPS = ["Sucursal", "Servicio", "Referencia (Opcional)", "Barbero", "Fech
 
 function ReservarPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const paramStyleId = searchParams.get("styleId");
   const paramServiceId = searchParams.get("serviceId");
   const paramBarberId = searchParams.get("barberId");
 
   const [currentStep, setCurrentStep] = useState(0);
+  const [draftChecked, setDraftChecked] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<typeof STATIC_STYLES[0] | null>(
@@ -49,27 +52,45 @@ function ReservarPageContent() {
 
   const [services, setServices] = useState<Service[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
 
-  // Cargar servicios y barberos
+  // Cargar servicios, barberos y sucursales
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
 
-      const [servicesRes, barbersRes] = await Promise.all([
+      const [servicesRes, barbersRes, branchesRes] = await Promise.all([
         supabase.from("services").select("*").eq("is_active", true).order("sort_order"),
         supabase.from("barbers").select("*").eq("is_active", true),
+        supabase.from("branches").select("*").eq("active", true).order("name"),
       ]);
 
-      const loadedServices = servicesRes.data || [];
-      const loadedBarbers = barbersRes.data || [];
+      const loadedServices = servicesRes?.data && servicesRes.data.length > 0 ? servicesRes.data : STATIC_SERVICES;
+      const loadedBarbers = barbersRes?.data && barbersRes.data.length > 0 ? barbersRes.data : STATIC_BARBERS;
+      const loadedBranches = (branchesRes?.data || []).map((dbb: any) => {
+        const staticB = BRANCHES.find((sb) => sb.name === dbb.name);
+        return {
+          id: dbb.id,
+          name: dbb.name,
+          address: dbb.address || staticB?.address || "",
+          image: staticB?.image || "/images/branches/sucursal-central.jpg",
+          phone: dbb.phone || staticB?.phone || "",
+          tone: staticB?.tone || "",
+        };
+      });
+
+      const finalBranches = loadedBranches.length > 0 ? loadedBranches : BRANCHES;
 
       setServices(loadedServices);
       setBarbers(loadedBarbers);
+      setBranches(finalBranches);
 
       if (paramServiceId) {
         const numericServiceId = Number(paramServiceId);
@@ -89,27 +110,66 @@ function ReservarPageContent() {
     loadData();
   }, [paramBarberId, paramServiceId, supabase]);
 
-  // Citas que bloquean agenda (pendientes o confirmadas) de un barbero en una fecha.
-  // Usa la RPC get_booked_slots (migración 006), que devuelve solo horarios sin
-  // exponer datos de otros clientes; si aún no está migrada, consulta directa.
-  const fetchActiveAppointments = async (
-    barberId: string,
-    dateStr: string
-  ): Promise<{ start_time: string; end_time: string }[]> => {
-    const { data, error } = await supabase.rpc("get_booked_slots", {
-      p_barber_id: barberId,
-      p_date: dateStr,
-    });
-    if (!error) return data ?? [];
+  // Rehidratar borrador de sessionStorage
+  useEffect(() => {
+    if (isLoading || draftChecked) return;
+    setDraftChecked(true);
 
-    const { data: direct } = await supabase
-      .from("appointments")
-      .select("start_time, end_time")
-      .eq("barber_id", barberId)
-      .eq("appointment_date", dateStr)
-      .in("status", ["pending", "confirmed"]);
-    return direct ?? [];
-  };
+    async function checkDraft() {
+      const draftStr = sessionStorage.getItem("nb-reserva-draft");
+      if (!draftStr) return;
+
+      try {
+        const draft = JSON.parse(draftStr);
+        // Validar expiración (45 minutos)
+        if (!draft.savedAt || Date.now() - draft.savedAt > 2700000) {
+          sessionStorage.removeItem("nb-reserva-draft");
+          return;
+        }
+
+        // Verificar sesión activa
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          // Si no hay sesión, mantenemos el draft para cuando se loguee
+          return;
+        }
+
+        // Rehidratar si los elementos existen en las listas cargadas
+        const branch = branches.find((b) => String(b.id) === String(draft.branchId)) ?? null;
+        const service = services.find((s) => s.id === draft.serviceId) ?? null;
+        const style = STATIC_STYLES.find((st) => st.id === draft.styleId) ?? null;
+        const barber = barbers.find((ba) => ba.id === draft.barberId) ?? null;
+
+        if (branch && service && barber && draft.dateISO && draft.time) {
+          setSelectedBranch(branch);
+          setSelectedService(service);
+          setSelectedStyle(style);
+          setSelectedBarber(barber);
+          setSelectedDate(new Date(draft.dateISO));
+          setSelectedTime(draft.time);
+          setIsRecurring(draft.isRecurring || false);
+
+          // Saltar directamente a la confirmación (Paso 6, índice 5)
+          setCurrentStep(5);
+          toast.success("Retomamos tu reserva donde la dejaste");
+        }
+
+        sessionStorage.removeItem("nb-reserva-draft");
+      } catch (err) {
+        console.error("Error parsing or rehydrating draft:", err);
+        sessionStorage.removeItem("nb-reserva-draft");
+      }
+    }
+
+    checkDraft();
+  }, [isLoading, draftChecked, branches, services, barbers, supabase]);
+
+  // Filtrar barberos según la sucursal seleccionada (los barberos sin branch_id asignado se muestran en todas)
+  const filteredBarbers = useMemo(() => {
+    return barbers.filter(
+      (b) => !selectedBranch || !b.branch_id || String(b.branch_id) === String(selectedBranch.id)
+    );
+  }, [barbers, selectedBranch]);
 
   // Generar slots de tiempo
   const timeSlots = generateTimeSlots(
@@ -118,24 +178,16 @@ function ReservarPageContent() {
     30
   );
 
-  // Un slot está ocupado si cae dentro del rango [inicio, fin) de alguna cita
-  const computeBookedSlots = (
-    appointments: { start_time: string; end_time: string }[]
-  ): string[] =>
-    timeSlots.filter((slot) =>
-      appointments.some(
-        (apt) => slot >= apt.start_time.slice(0, 5) && slot < apt.end_time.slice(0, 5)
-      )
-    );
-
   // Cargar slots ocupados cuando cambia barbero o fecha
   useEffect(() => {
     async function loadBookedSlots() {
       if (!selectedBarber || !selectedDate) return;
 
+      setIsLoadingSlots(true);
       const dateStr = format(selectedDate, "yyyy-MM-dd");
-      const appointments = await fetchActiveAppointments(selectedBarber.id, dateStr);
+      const appointments = await fetchActiveAppointments(supabase, selectedBarber.id, dateStr);
       setBookedSlots(computeBookedSlots(appointments));
+      setIsLoadingSlots(false);
     }
     loadBookedSlots();
   }, [selectedBarber, selectedDate]);
@@ -207,75 +259,127 @@ function ReservarPageContent() {
 
     setIsSubmitting(true);
 
+    const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
+
+    if (isDummy) {
+      // Modo de prueba local interactivo
+      await new Promise((resolve) => setTimeout(resolve, 800)); // simular latencia
+
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
+      const endTime = calculateEndTime(selectedTime, selectedService.duration_minutes);
+
+      const mockAppointmentId = Math.random().toString(36).substring(2, 9);
+      let mockSubscriptionId = null;
+
+      if (isRecurring) {
+        mockSubscriptionId = "sub-" + Math.random().toString(36).substring(2, 9);
+        const localSubs = JSON.parse(localStorage.getItem("nb-subscriptions") || "[]");
+        const newSub = {
+          id: mockSubscriptionId,
+          client_id: "mock-client-id",
+          barber_id: selectedBarber.id,
+          service_id: selectedService.id,
+          day_of_week: selectedDate.getDay(),
+          start_time: selectedTime,
+          status: "active",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        localSubs.push(newSub);
+        localStorage.setItem("nb-subscriptions", JSON.stringify(localSubs));
+      }
+
+      const localAppointments = JSON.parse(localStorage.getItem("nb-appointments") || "[]");
+      const newAppointment = {
+        id: mockAppointmentId,
+        client_id: "mock-client-id",
+        barber_id: selectedBarber.id,
+        service_id: selectedService.id,
+        appointment_date: dateStr,
+        start_time: selectedTime,
+        end_time: endTime,
+        status: "pending",
+        style_reference: selectedStyle ? `${selectedStyle.title}` : null,
+        subscription_id: mockSubscriptionId,
+        created_at: new Date().toISOString(),
+      };
+      localAppointments.push(newAppointment);
+      localStorage.setItem("nb-appointments", JSON.stringify(localAppointments));
+
+      toast.success(
+        isRecurring
+          ? "¡Suscripción y primera cita confirmadas en modo local!"
+          : "¡Reserva confirmada en modo local! Te esperamos."
+      );
+
+      // Reset form
+      setCurrentStep(0);
+      setSelectedService(null);
+      setSelectedStyle(null);
+      setSelectedBarber(null);
+      setSelectedDate(null);
+      setSelectedTime(null);
+      setIsRecurring(false);
+      setIsSubmitting(false);
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      toast.error("Debés iniciar sesión para reservar");
+      // Guardar borrador en sessionStorage
+      const draft = {
+        branchId: selectedBranch?.id,
+        serviceId: selectedService?.id,
+        styleId: selectedStyle?.id,
+        barberId: selectedBarber?.id,
+        dateISO: selectedDate?.toISOString(),
+        time: selectedTime,
+        isRecurring,
+        savedAt: Date.now()
+      };
+      sessionStorage.setItem("nb-reserva-draft", JSON.stringify(draft));
+      toast.error("Debés iniciar sesión para reservar. Guardamos tu borrador.");
       setIsSubmitting(false);
+      router.push("/login?next=/reservar");
       return;
     }
 
-    // Obtener profile_id (tolera schemas donde profiles.id == auth.uid()
-    // o donde el trigger de signup usa auth_user_id)
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id")
-      .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
-      .limit(1)
-      .maybeSingle();
-
-    if (!profile) {
-      toast.error("Error al obtener tu perfil");
-      setIsSubmitting(false);
-      return;
-    }
-
-    const endTime = calculateEndTime(selectedTime, selectedService.duration_minutes);
     const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const styleRef = selectedStyle ? `${selectedStyle.title} (${selectedStyle.image_url})` : null;
 
-    // Revalidar disponibilidad justo antes de insertar: otro cliente pudo reservar
-    // un horario solapado mientras este usuario completaba el wizard (el índice
-    // único de la DB solo cubre coincidencia exacta de start_time, no solapes)
-    const existing = await fetchActiveAppointments(selectedBarber.id, dateStr);
-    const hasConflict = existing.some(
-      (apt) => selectedTime < apt.end_time.slice(0, 5) && apt.start_time.slice(0, 5) < endTime
-    );
-
-    if (hasConflict) {
-      toast.error("Ese horario acaba de ser reservado por otro cliente. Por favor elegí otro.");
-      setBookedSlots(computeBookedSlots(existing));
-      setSelectedTime(null);
-      setCurrentStep(4);
-      setIsSubmitting(false);
-      return;
-    }
-
-    const { error } = await supabase.from("appointments").insert({
-      client_id: profile.id,
-      barber_id: selectedBarber.id,
-      service_id: selectedService.id,
-      appointment_date: dateStr,
-      start_time: selectedTime,
-      end_time: endTime,
-      status: "pending",
-      style_reference: selectedStyle ? `${selectedStyle.title} (${selectedStyle.image_url})` : null,
+    const res = await bookAppointment(supabase, {
+      barberId: selectedBarber.id,
+      serviceId: selectedService.id,
+      date: dateStr,
+      startTime: selectedTime,
+      isRecurring,
+      styleReference: styleRef,
+      notes: null,
     });
 
-    if (error) {
-      if (error.code === "23505") {
-        toast.error("Ese horario ya fue reservado. Por favor elegí otro.");
-        const refreshed = await fetchActiveAppointments(selectedBarber.id, dateStr);
+    if (!res.ok) {
+      toast.error(res.message);
+      if (res.code === "SLOT_OCUPADO" || res.code === "23P01") {
+        // Volver al paso de Fecha y Hora y recargar slots
+        const refreshed = await fetchActiveAppointments(supabase, selectedBarber.id, dateStr);
         setBookedSlots(computeBookedSlots(refreshed));
         setSelectedTime(null);
         setCurrentStep(4);
-      } else {
-        toast.error("Error al crear la reserva. Intentá de nuevo.");
       }
       setIsSubmitting(false);
       return;
     }
 
-    toast.success("¡Reserva confirmada! Te esperamos.");
+    toast.success(
+      isRecurring
+        ? "¡Suscripción de Turno Fijo y cita confirmadas!"
+        : "¡Reserva confirmada! Te esperamos."
+    );
+
+    // Borrar draft tras submit exitoso
+    sessionStorage.removeItem("nb-reserva-draft");
+
     // Reset form
     setCurrentStep(0);
     setSelectedService(null);
@@ -283,6 +387,7 @@ function ReservarPageContent() {
     setSelectedBarber(null);
     setSelectedDate(null);
     setSelectedTime(null);
+    setIsRecurring(false);
     setIsSubmitting(false);
   };
 
@@ -305,7 +410,7 @@ function ReservarPageContent() {
                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
                 className="relative w-20 h-20 md:w-32 md:h-32 opacity-20"
               >
-                <Image src="/images/hero/herramientas-barberia.png" alt="Scissor" fill className="object-cover rounded-2xl grayscale border border-white/10" />
+                <Image src="/images/hero/herramientas-barberia.jpg" alt="Scissor" fill className="object-cover rounded-2xl grayscale border border-white/10" />
               </motion.div>
             </div>
 
@@ -315,7 +420,7 @@ function ReservarPageContent() {
                 transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1 }}
                 className="relative w-24 h-24 md:w-40 md:h-40 opacity-20"
               >
-                <Image src="/images/hero/maquina-clippers.png" alt="Clippers" fill className="object-cover rounded-full grayscale blur-[1px]" />
+                <Image src="/images/hero/maquina-clippers.jpg" alt="Clippers" fill className="object-cover rounded-full grayscale blur-[1px]" />
               </motion.div>
             </div>
           </div>
@@ -384,14 +489,17 @@ function ReservarPageContent() {
                   ¿A cuál sucursal querés ir?
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {BRANCHES.map((branch) => (
+                  {branches.map((branch) => (
                     <Card
                       key={branch.id}
                       className={cn(
                         "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative h-full flex flex-col",
                         selectedBranch?.id === branch.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card/50 hover:bg-card/80"
                       )}
-                      onClick={() => setSelectedBranch(branch)}
+                      onClick={() => {
+                        setSelectedBranch(branch);
+                        setCurrentStep(1);
+                      }}
                     >
                       <div className="relative h-48 w-full overflow-hidden">
                         <Image
@@ -439,11 +547,21 @@ function ReservarPageContent() {
                   </h2>
                   <div className="space-y-3">
                     {isLoading ? (
-                      <Card className="bg-card/50 border-white/10">
-                        <CardContent className="p-6 text-sm text-muted-foreground">
-                          Cargando servicios...
-                        </CardContent>
-                      </Card>
+                      <div className="space-y-3">
+                        {[...Array(4)].map((_, i) => (
+                          <Card key={i} className="bg-card/50 border-white/5 animate-pulse">
+                            <CardContent className="p-6 space-y-3">
+                              <div className="flex justify-between items-center">
+                                <div className="h-5 bg-muted/60 rounded w-1/3" />
+                                <div className="h-5 bg-muted/40 rounded w-16" />
+                              </div>
+                              <div className="h-3 bg-muted/30 rounded w-3/4" />
+                              <div className="h-3 bg-muted/20 rounded w-1/2" />
+                              <div className="h-6 bg-muted/50 rounded w-20 pt-2" />
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
                     ) : services.map((service) => (
                       <Card
                         key={service.id}
@@ -451,7 +569,10 @@ function ReservarPageContent() {
                           "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative",
                           selectedService?.id === service.id ? "border-primary bg-primary/5" : "bg-card/50 hover:bg-card/80"
                         )}
-                        onClick={() => setSelectedService(service)}
+                        onClick={() => {
+                          setSelectedService(service);
+                          setCurrentStep(2);
+                        }}
                         onMouseEnter={() => setHoveredService(service)}
                       >
                         <CardContent className="p-6 relative z-10">
@@ -485,7 +606,7 @@ function ReservarPageContent() {
                       className="absolute inset-0"
                     >
                       <Image
-                        src={hoveredService?.image_url || selectedService?.image_url || "/images/hero/ambiente-barberia.png"}
+                        src={hoveredService?.image_url || selectedService?.image_url || "/images/hero/ambiente-barberia.jpg"}
                         alt="Service Preview"
                         fill
                         className="object-cover opacity-60"
@@ -526,16 +647,29 @@ function ReservarPageContent() {
                       Seleccioná un estilo visual del Lookbook para que tu barbero sepa exactamente qué estás buscando.
                     </p>
                   </div>
-                  {selectedStyle && (
+                  <div className="flex gap-2">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      onClick={() => setSelectedStyle(null)}
-                      className="text-xs text-muted-foreground hover:text-white"
+                      onClick={() => {
+                        setSelectedStyle(null);
+                        setCurrentStep(3);
+                      }}
+                      className="text-xs border-white/10 text-zinc-300 hover:text-white bg-white/5 rounded-full px-4"
                     >
-                      Limpiar selección
+                      Omitir e ir a Barbero
                     </Button>
-                  )}
+                    {selectedStyle && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedStyle(null)}
+                        className="text-xs text-muted-foreground hover:text-white"
+                      >
+                        Limpiar
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {STATIC_STYLES.map((style) => (
@@ -545,7 +679,10 @@ function ReservarPageContent() {
                         "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative flex flex-col h-full",
                         selectedStyle?.id === style.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card/50 hover:bg-card/80"
                       )}
-                      onClick={() => setSelectedStyle(style)}
+                      onClick={() => {
+                        setSelectedStyle(style);
+                        setCurrentStep(3);
+                      }}
                     >
                       <div className="relative aspect-[4/3] w-full overflow-hidden bg-zinc-900">
                         <Image
@@ -580,7 +717,24 @@ function ReservarPageContent() {
                   ¿Con qué barbero preferís?
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {barbers.map((barber) => {
+                  {isLoading ? (
+                    [...Array(3)].map((_, i) => (
+                      <Card key={i} className="bg-card/50 border-white/5 animate-pulse overflow-hidden">
+                        <div className="relative aspect-square w-full bg-muted/40 animate-pulse" />
+                        <div className="p-5 space-y-2">
+                          <div className="h-4 bg-muted/60 rounded w-1/2" />
+                          <div className="h-3 bg-muted/30 rounded w-3/4" />
+                          <div className="h-3 bg-muted/20 rounded w-1/2" />
+                        </div>
+                      </Card>
+                    ))
+                  ) : filteredBarbers.length === 0 ? (
+                    <div className="col-span-1 md:col-span-3 text-center py-12 text-muted-foreground bg-card/25 border border-white/5 rounded-xl">
+                      <User className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30 animate-pulse" />
+                      <p className="font-semibold text-white/80 text-base">No hay barberos asignados a esta sucursal</p>
+                      <p className="text-xs mt-1">Intentá seleccionando otra sucursal.</p>
+                    </div>
+                  ) : filteredBarbers.map((barber) => {
                     const avatarUrl = getBarberAvatarUrl(barber);
                     const isSelected = selectedBarber?.id === barber.id;
 
@@ -591,7 +745,10 @@ function ReservarPageContent() {
                           "group cursor-pointer transition-all duration-300 hover:border-primary/50 overflow-hidden",
                           isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card/50 hover:bg-card/80"
                         )}
-                        onClick={() => setSelectedBarber(barber)}
+                        onClick={() => {
+                          setSelectedBarber(barber);
+                          setCurrentStep(4);
+                        }}
                       >
                         <CardContent className="p-0">
                           <div className="relative aspect-square overflow-hidden bg-zinc-950">
@@ -678,7 +835,11 @@ function ReservarPageContent() {
                       ¿A qué hora?
                     </h2>
                     <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-                      {timeSlots.map((time) => {
+                      {isLoadingSlots ? (
+                        [...Array(12)].map((_, i) => (
+                          <div key={i} className="h-9 bg-muted/40 rounded-lg animate-pulse" />
+                        ))
+                      ) : timeSlots.map((time) => {
                         const available = isSlotAvailable(time);
                         return (
                           <button
@@ -760,6 +921,30 @@ function ReservarPageContent() {
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Toggle de Suscripción Recurrente */}
+                <div className="mt-6 p-5 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 backdrop-blur-md">
+                  <div className="flex items-start gap-4 justify-between">
+                    <div className="space-y-1">
+                      <h3 className="font-bold text-sm md:text-base text-white flex items-center gap-2">
+                        <Repeat className="h-5 w-5 text-primary animate-pulse" />
+                        ¿Querés reservar este turno de forma fija semanal?
+                      </h3>
+                      <p className="text-xs text-zinc-400 leading-relaxed max-w-lg">
+                        Activá una suscripción para asegurar automáticamente este horario ({selectedTime} todos los {selectedDate && format(selectedDate, "EEEE", { locale: es })}) con {selectedBarber?.name}. Podrás cancelarla en cualquier momento desde tu perfil.
+                      </p>
+                    </div>
+                    <div className="flex items-center pt-1">
+                      <input
+                        type="checkbox"
+                        id="recurring-toggle"
+                        checked={isRecurring}
+                        onChange={(e) => setIsRecurring(e.target.checked)}
+                        className="w-10 h-6 bg-zinc-800 checked:bg-primary border-zinc-700 rounded-full cursor-pointer appearance-none relative before:content-[''] before:absolute before:w-4 before:h-4 before:rounded-full before:bg-zinc-400 before:top-1 before:left-1 checked:before:left-5 checked:before:bg-black before:transition-all duration-300"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

@@ -1,4 +1,4 @@
-import type { Lookbook, Product, Barber } from "@/types/database.types";
+import type { Lookbook, Product, Barber, Service } from "@/types/database.types";
 import { BRANCHES, type Branch } from "@/lib/constants";
 
 export type StaticBranch = Branch;
@@ -11,11 +11,120 @@ export type StaticStyle = Lookbook & {
 // con el nombre histórico para no romper importaciones existentes.
 export const STATIC_BRANCHES: StaticBranch[] = BRANCHES;
 
+export const STATIC_SERVICES: Service[] = [
+  {
+    id: "service-1",
+    name: "Corte Clásico",
+    description: "Corte de precisión adaptado a tu estilo personal y fisionomía.",
+    price: 450,
+    duration_minutes: 30,
+    image_url: "/images/hero/maquina-clippers.jpg",
+    is_active: true,
+    sort_order: 1,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "service-2",
+    name: "Corte + Barba",
+    description: "El combo premium completo para el cuidado del cabello y la barba.",
+    price: 750,
+    duration_minutes: 60,
+    image_url: "/images/hero/detalle-corte.jpg",
+    is_active: true,
+    sort_order: 2,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "service-3",
+    name: "Diseño de Barba",
+    description: "Perfilado de barba con navaja y toalla caliente, hidratación final.",
+    price: 350,
+    duration_minutes: 30,
+    image_url: "/images/hero/detalle-barba.jpg",
+    is_active: true,
+    sort_order: 3,
+    created_at: new Date().toISOString(),
+  },
+];
+
+export const STATIC_BARBERS: Barber[] = [
+  // ── Sucursal Central (branch 1) ──
+  {
+    id: "barber-1",
+    profile_id: "carlos-profile",
+    name: "Carlos",
+    bio: "Especialista en cortes clásicos y modernos, con terminaciones de alta precisión.",
+    avatar_url: "/images/barbers/carlos.jpg",
+    is_active: true,
+    branch_id: "1",
+    working_hours: null,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "barber-2",
+    profile_id: "miguel-profile",
+    name: "Miguel",
+    bio: "Experto en diseño de barba, afeitados tradicionales hot towel y estilos urbanos.",
+    avatar_url: "/images/barbers/miguel.jpg",
+    is_active: true,
+    branch_id: "1",
+    working_hours: null,
+    created_at: new Date().toISOString(),
+  },
+  // ── Sucursal Norte (branch 2) ──
+  {
+    id: "barber-3",
+    profile_id: "diego-profile",
+    name: "Diego",
+    bio: "Estilista con más de 10 años de experiencia internacional en cortes texturizados.",
+    avatar_url: "/images/barbers/diego.jpg",
+    is_active: true,
+    branch_id: "2",
+    working_hours: null,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "barber-4",
+    profile_id: "martin-profile",
+    name: "Martín",
+    bio: "Fades impecables y diseños geométricos. Competidor nacional de barbería 2024.",
+    avatar_url: "/images/barbers/carlos.jpg",
+    is_active: true,
+    branch_id: "2",
+    working_hours: null,
+    created_at: new Date().toISOString(),
+  },
+  // ── Sucursal Beach (branch 3) ──
+  {
+    id: "barber-5",
+    profile_id: "lucas-profile",
+    name: "Lucas",
+    bio: "Cortes surferos y estilos relajados con acabado profesional. Onda costera, precisión NB.",
+    avatar_url: "/images/barbers/miguel.jpg",
+    is_active: true,
+    branch_id: "3",
+    working_hours: null,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "barber-6",
+    profile_id: "facu-profile",
+    name: "Facundo",
+    bio: "Especialista en barbas largas y tratamientos capilares. 8 años de experiencia.",
+    avatar_url: "/images/barbers/diego.jpg",
+    is_active: true,
+    branch_id: "3",
+    working_hours: null,
+    created_at: new Date().toISOString(),
+  },
+];
+
+
 export const STATIC_STYLES: StaticStyle[] = [
   {
     id: "1",
     title: "Fade Degradado Alto",
-    image_url: "/lookbook/fade-cut.png",
+    image_url: "/lookbook/fade-cut.jpg",
     tags: ["Corte", "Fade", "Moderno"],
     is_featured: true,
     instagram_url: "#",
@@ -25,7 +134,7 @@ export const STATIC_STYLES: StaticStyle[] = [
   {
     id: "2",
     title: "Perfilado de Barba",
-    image_url: "/lookbook/beard-trim.png",
+    image_url: "/lookbook/beard-trim.jpg",
     tags: ["Barba", "Grooming", "Tijera"],
     is_featured: true,
     instagram_url: "#",
@@ -35,7 +144,7 @@ export const STATIC_STYLES: StaticStyle[] = [
   {
     id: "3",
     title: "Afeitado Hot Towel",
-    image_url: "/lookbook/hot-towel.png",
+    image_url: "/lookbook/hot-towel.jpg",
     tags: ["Afeitado", "Spa", "Clásico"],
     is_featured: true,
     instagram_url: "#",
@@ -45,7 +154,7 @@ export const STATIC_STYLES: StaticStyle[] = [
   {
     id: "4",
     title: "Styling Texturizado",
-    image_url: "/lookbook/styling-pomade.png",
+    image_url: "/lookbook/styling-pomade.jpg",
     tags: ["Styling", "Producto", "Textura"],
     is_featured: false,
     instagram_url: "#",
@@ -55,7 +164,7 @@ export const STATIC_STYLES: StaticStyle[] = [
   {
     id: "5",
     title: "Instrumentos de Precisión",
-    image_url: "/lookbook/clipper-detail.png",
+    image_url: "/lookbook/clipper-detail.jpg",
     tags: ["Herramientas", "Calidad"],
     is_featured: false,
     instagram_url: "#",
@@ -65,7 +174,7 @@ export const STATIC_STYLES: StaticStyle[] = [
   {
     id: "6",
     title: "Corte a Tijera",
-    image_url: "/lookbook/scissor-cut.png",
+    image_url: "/lookbook/scissor-cut.jpg",
     tags: ["Corte", "Tijera", "Clásico"],
     is_featured: false,
     instagram_url: "#",
@@ -75,7 +184,7 @@ export const STATIC_STYLES: StaticStyle[] = [
   {
     id: "7",
     title: "Ambiente Industrial",
-    image_url: "/lookbook/barber-chair.png",
+    image_url: "/lookbook/barber-chair.jpg",
     tags: ["Local", "Ambiente"],
     is_featured: false,
     instagram_url: "#",
@@ -85,7 +194,7 @@ export const STATIC_STYLES: StaticStyle[] = [
   {
     id: "8",
     title: "Lavado Premium",
-    image_url: "/lookbook/hair-wash.png",
+    image_url: "/lookbook/hair-wash.jpg",
     tags: ["Servicio", "Relax"],
     is_featured: false,
     instagram_url: "#",
@@ -196,9 +305,12 @@ export const STATIC_PRODUCTS: Product[] = [
 export const FEATURED_PRODUCT_IDS = ["1", "2", "3"];
 
 const BARBER_AVATARS: Record<string, string> = {
-  carlos: "/images/barbers/carlos.png",
-  miguel: "/images/barbers/miguel.png",
-  diego: "/images/barbers/diego.png",
+  carlos: "/images/barbers/carlos.jpg",
+  miguel: "/images/barbers/miguel.jpg",
+  diego: "/images/barbers/diego.jpg",
+  martin: "/images/barbers/carlos.jpg",
+  lucas: "/images/barbers/miguel.jpg",
+  facundo: "/images/barbers/diego.jpg",
 };
 
 export function getBarberAvatarUrl(barber: Pick<Barber, "name" | "avatar_url">): string | null {

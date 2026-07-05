@@ -53,13 +53,19 @@ npm run lint    # eslint
 
 ## Roadmap y deuda conocida
 
-Plan activo de mejoras (auditoría 2026-07): ver historial. Pendientes clave:
+Plan activo de mejoras (auditoría 2026-07): ver historial.
 
-- **A1** Prevención de sobre-reservas en `reservar` (validar solapes + duración al generar slots)
-- **A2** Checkout: poblar `order_items` y descontar stock (hoy la orden se crea sin ítems)
-- **A3** `barbero/mi-agenda`: filtrar por barbero autenticado (hoy muestra todas las citas)
-- **A4** Endurecer RLS para producción (hoy es permisivo, solo apto para desarrollo)
-- **B** Reemplazar ~23 imágenes de Unsplash por assets propios en `public/images/{hero,branches,features,barbers}/`; OG image 1200×630; página `contacto`; metadata por página + JSON-LD
-- **C** Persistencia del chat en sessionStorage; página `mi-cuenta` con "lo mismo de la vez pasada"; password reset; skeletons
+- **A1-A4** Resueltos (prevención de sobre-reservas, descuento de stock en checkout, filtro de agenda de barbero, RLS endurecido via migraciones 005 y 006).
+- **B** Resuelto (reemplazo de imágenes por assets propios optimizados < 400KB, página contacto, metadatos, sitemap y robots.ts).
+- **C** Resuelto (persistencia del chat en sessionStorage, skeletons en reserva/checkout, flujos de password reset con /recuperar y /actualizar-password).
 
-Fases futuras (no empezar sin pedido explícito): Mercado Pago Checkout Pro, recordatorios WhatsApp/email (schema `reminders_config`/`communication_logs` ya existe, falta Edge Function + cron), OAuth Google.
+### CRM y Próximas Fases
+
+- **Mini-CRM (Fases 1-6)**: Fases 0, 1, 2, 3 y 4 completadas. Pendientes Fases 5 y 6 de `briefs/`.
+- **Segunda tanda (Fases 7-10, briefs aprobados 2026-07-05)**: pendientes de ejecución, en orden 7 → 8 → 9 → 10.
+  - **F7 Agendado sólido**: anti-solapes a nivel DB (EXCLUDE + btree_gist, migración 009), RPCs `book_appointment`/`cancel_appointment`, generación de citas desde suscripciones (pg_cron + invocación oportunista, 010), cancelación desde Mi Cuenta, `?next=` en login.
+  - **F8 Disponibilidad en vivo**: horarios reales por barbero/sucursal (JSONB `working_hours` + editor), bloqueos/vacaciones/feriados (`schedule_blocks`), RPC `get_availability` como fuente única del wizard (011).
+  - **F9 Contabilidad**: compensación por barbero (comisión/renta de sillón/híbrido/empleado con vigencias), diálogo de cobro con propina al completar cita, liquidaciones por período (012).
+  - **F10 Módulos**: feature flags en `app_settings` (tienda, suscripciones, contabilidad, propinas, mensajes CRM) + `/admin/configuracion` (013). Diseño preparado para multi-tenant (futuro SaaS).
+- **Drift conocido schema/código** (lo normalizan F8/F9 — verificar contra la DB real antes de migrar): `branches.active` vs `is_active` usado en el admin; CHECKs de `cash_movements` en inglés vs inserts en español desde `/admin/caja`; tabla `cash_register` legacy sin referencias.
+- **Fases futuras**: Integración Mercado Pago, recordatorios automáticos por WhatsApp/Email (reminders_config / communication_logs).

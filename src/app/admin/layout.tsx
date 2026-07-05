@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import {
     LayoutDashboard,
     Calendar,
+    Contact,
+    MessageSquare,
     Package,
     Wallet,
     LogOut,
@@ -18,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
+import { logoutAdmin } from "./actions";
 
 const sidebarLinks = [
     {
@@ -29,6 +32,16 @@ const sidebarLinks = [
         href: ROUTES.ADMIN_CITAS,
         label: "Citas",
         icon: Calendar,
+    },
+    {
+        href: ROUTES.ADMIN_CLIENTES,
+        label: "Clientes",
+        icon: Contact,
+    },
+    {
+        href: ROUTES.ADMIN_MENSAJES,
+        label: "Mensajes",
+        icon: MessageSquare,
     },
     {
         href: ROUTES.ADMIN_PRODUCTOS,
@@ -59,6 +72,14 @@ const sidebarLinks = [
 
 function SidebarContent() {
     const pathname = usePathname();
+
+    const handleLogout = async () => {
+        try {
+            await logoutAdmin();
+        } catch (error) {
+            console.error("Error al cerrar sesión:", error);
+        }
+    };
 
     return (
         <div className="flex flex-col h-full">
@@ -100,14 +121,20 @@ function SidebarContent() {
             </nav>
 
             {/* Bottom */}
-            <div className="p-4 border-t border-border">
+            <div className="p-4 border-t border-border space-y-2">
                 <Link
                     href="/"
-                    className="flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:bg-primary/5 hover:text-foreground transition-colors"
+                    className="flex items-center gap-3 px-4 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/5 hover:text-foreground transition-colors"
                 >
-                    <LogOut className="h-5 w-5" />
                     Volver al inicio
                 </Link>
+                <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer text-left"
+                >
+                    <LogOut className="h-4 w-4" />
+                    Cerrar sesión
+                </button>
             </div>
         </div>
     );

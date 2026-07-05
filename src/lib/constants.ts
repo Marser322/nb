@@ -103,7 +103,7 @@ export const BRANCHES: Branch[] = [
         id: 1,
         name: "New Brothers Central",
         address: "Av. Principal 1234, Centro",
-        image: "/images/branches/sucursal-central.png",
+        image: "/images/branches/sucursal-central.jpg",
         phone: "099 123 456",
         tone: "Urbana, precisa, cerca de todo.",
     },
@@ -111,7 +111,7 @@ export const BRANCHES: Branch[] = [
         id: 2,
         name: "New Brothers Norte",
         address: "Shopping Norte, Local 5",
-        image: "/images/branches/sucursal-norte.png",
+        image: "/images/branches/sucursal-norte.jpg",
         phone: "098 765 432",
         tone: "Moderna, ágil, ideal para pasar sin desvíos.",
     },
@@ -119,7 +119,7 @@ export const BRANCHES: Branch[] = [
         id: 3,
         name: "New Brothers Beach",
         address: "Rambla Costanera 500",
-        image: "/images/branches/sucursal-beach.png",
+        image: "/images/branches/sucursal-beach.jpg",
         phone: "091 112 233",
         tone: "Relajada, costera, con la misma precisión NB.",
     },
@@ -139,6 +139,8 @@ export const ROUTES = {
     // Admin
     ADMIN_DASHBOARD: '/admin/dashboard',
     ADMIN_CITAS: '/admin/citas',
+    ADMIN_CLIENTES: '/admin/clientes',
+    ADMIN_MENSAJES: '/admin/mensajes',
     ADMIN_PRODUCTOS: '/admin/productos',
     ADMIN_CAJA: '/admin/caja',
     ADMIN_SUCURSALES: '/admin/sucursales',
@@ -151,3 +153,6 @@ export const ROUTES = {
     // Auth Admin
     ADMIN_LOGIN: '/admin-login',
 } as const
+
+// Días de inactividad para marcar a un cliente
+export const INACTIVE_DAYS = 30;

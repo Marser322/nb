@@ -23,21 +23,21 @@ const TEAM = [
         name: "Carlos",
         role: "Cortes clásicos y modernos",
         bio: "Referente de la casa en fades y cortes de precisión. Carlos combina técnica de barbería tradicional con las tendencias que traen los clientes de referencia en mano.",
-        image: "/images/barbers/carlos.png",
+        image: "/images/barbers/carlos.jpg",
     },
     {
         slug: "miguel",
         name: "Miguel",
         role: "Diseño de barba y estilos urbanos",
         bio: "Especialista en perfilado de barba y en los cortes urbanos que marcan tendencia en Montevideo. Cada visita es una sesión de styling a medida.",
-        image: "/images/barbers/miguel.png",
+        image: "/images/barbers/miguel.jpg",
     },
     {
         slug: "diego",
         name: "Diego",
         role: "10 años de oficio",
         bio: "Una década de tijera y navaja. Diego es la mano de confianza para afeitados clásicos y esos detalles que solo da la experiencia.",
-        image: "/images/barbers/diego.png",
+        image: "/images/barbers/diego.jpg",
     },
 ];
 
@@ -100,7 +100,7 @@ export function ContactoContent() {
                                 className="relative aspect-[4/5] rounded-3xl overflow-hidden border border-white/10 shadow-2xl"
                             >
                                 <Image
-                                    src="/images/hero/ambiente-barberia.png"
+                                    src="/images/hero/ambiente-barberia.jpg"
                                     alt="Interior de New Brothers"
                                     fill
                                     sizes="(max-width: 1024px) 100vw, 50vw"
@@ -310,7 +310,7 @@ export function ContactoContent() {
                 <section className="relative py-24 overflow-hidden">
                     <div className="absolute inset-0">
                         <Image
-                            src="/images/hero/ambiente-barberia.png"
+                            src="/images/hero/ambiente-barberia.jpg"
                             alt="Background"
                             fill
                             className="object-cover opacity-20"

@@ -23,10 +23,18 @@ import {
 } from "@/components/ui/dialog";
 import { Users, Plus, Loader2, Edit2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Barber } from "@/types/database.types";
+import type { Barber, Branch } from "@/types/database.types";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 export default function AdminBarberosPage() {
     const [barbers, setBarbers] = useState<Barber[]>([]);
+    const [branches, setBranches] = useState<Branch[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingBarber, setEditingBarber] = useState<Barber | null>(null);
@@ -34,6 +42,7 @@ export default function AdminBarberosPage() {
         name: "",
         bio: "",
         avatar_url: "",
+        branch_id: "",
     });
     const supabase = useMemo(() => createClient(), []);
 
@@ -51,25 +60,34 @@ export default function AdminBarberosPage() {
         setIsLoading(false);
     }, [supabase]);
 
-    useEffect(() => {
-        const timer = window.setTimeout(() => {
-            loadBarbers(false);
-        }, 0);
+    const loadBranches = useCallback(async () => {
+        const { data } = await supabase
+            .from("branches")
+            .select("*")
+            .eq("is_active", true)
+            .order("name");
+        if (data) setBranches(data);
+    }, [supabase]);
 
-        return () => window.clearTimeout(timer);
-    }, [loadBarbers]);
+    useEffect(() => {
+        loadBarbers(true);
+        loadBranches();
+    }, [loadBarbers, loadBranches]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        const dataToSave = {
+            name: formData.name,
+            bio: formData.bio || null,
+            avatar_url: formData.avatar_url || null,
+            branch_id: formData.branch_id || null,
+        };
+
         if (editingBarber) {
             const { error } = await supabase
                 .from("barbers")
-                .update({
-                    name: formData.name,
-                    bio: formData.bio || null,
-                    avatar_url: formData.avatar_url || null,
-                })
+                .update(dataToSave)
                 .eq("id", editingBarber.id);
 
             if (error) {
@@ -82,9 +100,7 @@ export default function AdminBarberosPage() {
             const { error } = await supabase
                 .from("barbers")
                 .insert({
-                    name: formData.name,
-                    bio: formData.bio || null,
-                    avatar_url: formData.avatar_url || null,
+                    ...dataToSave,
                     is_active: true,
                 });
 
@@ -98,7 +114,7 @@ export default function AdminBarberosPage() {
 
         setIsDialogOpen(false);
         setEditingBarber(null);
-        setFormData({ name: "", bio: "", avatar_url: "" });
+        setFormData({ name: "", bio: "", avatar_url: "", branch_id: "" });
     };
 
     const toggleActive = async (barber: Barber) => {
@@ -120,13 +136,14 @@ export default function AdminBarberosPage() {
             name: barber.name,
             bio: barber.bio || "",
             avatar_url: barber.avatar_url || "",
+            branch_id: barber.branch_id || "",
         });
         setIsDialogOpen(true);
     };
 
     const openNewDialog = () => {
         setEditingBarber(null);
-        setFormData({ name: "", bio: "", avatar_url: "" });
+        setFormData({ name: "", bio: "", avatar_url: "", branch_id: "" });
         setIsDialogOpen(true);
     };
 
@@ -178,6 +195,25 @@ export default function AdminBarberosPage() {
                                     onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
                                 />
                             </div>
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Sucursal</label>
+                                <Select
+                                    value={formData.branch_id || "none"}
+                                    onValueChange={(v) => setFormData({ ...formData, branch_id: v === "none" ? "" : v })}
+                                >
+                                    <SelectTrigger className="bg-background/50 border-input/50 focus:border-amber-500/50">
+                                        <SelectValue placeholder="Seleccionar sucursal" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Sin asignar</SelectItem>
+                                        {branches.map((b) => (
+                                            <SelectItem key={b.id} value={b.id}>
+                                                {b.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                             <div className="flex justify-end gap-2 pt-4">
                                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                                     Cancelar
@@ -197,6 +233,7 @@ export default function AdminBarberosPage() {
                         <TableRow>
                             <TableHead>Barbero</TableHead>
                             <TableHead>Biografía</TableHead>
+                            <TableHead>Sucursal</TableHead>
                             <TableHead className="text-center">Estado</TableHead>
                             <TableHead className="text-center">Acciones</TableHead>
                         </TableRow>
@@ -204,7 +241,7 @@ export default function AdminBarberosPage() {
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="h-24 text-center">
+                                <TableCell colSpan={5} className="h-24 text-center">
                                     <div className="flex justify-center items-center gap-2">
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                         Cargando barberos...
@@ -213,7 +250,7 @@ export default function AdminBarberosPage() {
                             </TableRow>
                         ) : barbers.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                                     No hay barberos registrados.
                                 </TableCell>
                             </TableRow>
@@ -240,6 +277,9 @@ export default function AdminBarberosPage() {
                                     </TableCell>
                                     <TableCell className="max-w-xs truncate text-muted-foreground">
                                         {barber.bio || "—"}
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground">
+                                        {branches.find(b => b.id === barber.branch_id)?.name || "Sin asignar"}
                                     </TableCell>
                                     <TableCell className="text-center">
                                         <Switch

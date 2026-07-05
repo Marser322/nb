@@ -30,7 +30,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
-import { formatPrice, formatDate } from "@/lib/utils";
+import { formatPrice, formatDate, calculateEndTime } from "@/lib/utils";
 import {
     APPOINTMENT_STATUS_LABELS,
     APPOINTMENT_STATUS_COLORS,
@@ -38,10 +38,12 @@ import {
     BUSINESS_CONFIG,
 } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
-import type { Appointment, Service, Barber, Profile } from "@/types/database.types";
+import type { Appointment, Service, Barber, Profile, Branch } from "@/types/database.types";
 import { format, addDays, startOfToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import { normalizeUyPhone } from "@/lib/whatsapp";
+import { fetchActiveAppointments, computeBookedSlots, hasOverlap } from "@/lib/booking";
 
 type AppointmentWithRelations = Appointment & {
     service?: Service;
@@ -54,12 +56,17 @@ export default function AdminCitasPage() {
     const [filteredAppointments, setFilteredAppointments] = useState<AppointmentWithRelations[]>([]);
     const [selectedDate, setSelectedDate] = useState(format(startOfToday(), "yyyy-MM-dd"));
     const [statusFilter, setStatusFilter] = useState<string>("all");
+    const [branchFilter, setBranchFilter] = useState<string>("all");
+    const [barberFilter, setBarberFilter] = useState<string>("all");
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     // Form state for new appointment
     const [services, setServices] = useState<Service[]>([]);
     const [barbers, setBarbers] = useState<Barber[]>([]);
+    const [branches, setBranches] = useState<Branch[]>([]);
+    const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+    const [isLoadingSlots, setIsLoadingSlots] = useState(false);
     const [formData, setFormData] = useState({
         clientName: "",
         clientPhone: "",
@@ -84,33 +91,71 @@ export default function AdminCitasPage() {
                 .order("start_time");
 
             setAppointments(data || []);
-            setFilteredAppointments(data || []);
             setIsLoading(false);
         }
         loadAppointments();
     }, [selectedDate]);
 
-    // Cargar servicios y barberos para el formulario
+    // Cargar servicios, barberos y sucursales para el formulario/filtros
     useEffect(() => {
         async function loadFormData() {
-            const [{ data: servicesData }, { data: barbersData }] = await Promise.all([
+            const [{ data: servicesData }, { data: barbersData }, { data: branchesData }] = await Promise.all([
                 supabase.from("services").select("*").eq("is_active", true).order("name"),
                 supabase.from("barbers").select("*").eq("is_active", true).order("name"),
+                supabase.from("branches").select("*").eq("is_active", true).order("name"),
             ]);
             setServices(servicesData || []);
             setBarbers(barbersData || []);
+            setBranches(branchesData || []);
         }
         loadFormData();
     }, []);
 
-    // Filtrar por estado
+    // Filtrar por estado, sucursal y barbero (en memoria)
     useEffect(() => {
-        if (statusFilter === "all") {
-            setFilteredAppointments(appointments);
-        } else {
-            setFilteredAppointments(appointments.filter((a) => a.status === statusFilter));
+        let temp = appointments;
+
+        if (statusFilter !== "all") {
+            temp = temp.filter((a) => a.status === statusFilter);
         }
-    }, [statusFilter, appointments]);
+
+        if (branchFilter !== "all") {
+            temp = temp.filter((a) => a.barber?.branch_id === branchFilter);
+        }
+
+        if (barberFilter !== "all") {
+            temp = temp.filter((a) => a.barber_id === barberFilter);
+        }
+
+        setFilteredAppointments(temp);
+    }, [statusFilter, branchFilter, barberFilter, appointments]);
+
+    // Cargar slots ocupados en el formulario
+    useEffect(() => {
+        async function loadBookedSlots() {
+            if (!formData.barberId || !formData.date) {
+                setBookedSlots([]);
+                return;
+            }
+
+            setIsLoadingSlots(true);
+            try {
+                const activeApts = await fetchActiveAppointments(supabase, formData.barberId, formData.date);
+                const booked = computeBookedSlots(activeApts);
+                setBookedSlots(booked);
+            } catch (error) {
+                console.error("Error loading slots:", error);
+            } finally {
+                setIsLoadingSlots(false);
+            }
+        }
+        loadBookedSlots();
+    }, [formData.barberId, formData.date, supabase]);
+
+    // Limpiar hora si cambia el barbero o fecha en el formulario
+    useEffect(() => {
+        setFormData(prev => ({ ...prev, time: "" }));
+    }, [formData.barberId, formData.date]);
 
     // Actualizar estado de cita
     const updateStatus = async (id: string, newStatus: string) => {
@@ -135,6 +180,12 @@ export default function AdminCitasPage() {
     // Crear cita manual
     const handleCreateAppointment = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        if (!formData.clientName || !formData.serviceId || !formData.barberId || !formData.date || !formData.time) {
+            toast.error("Completá todos los campos obligatorios");
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
@@ -144,24 +195,76 @@ export default function AdminCitasPage() {
                 return;
             }
 
-            // Calcular hora de fin
-            const [hours, minutes] = formData.time.split(":").map(Number);
-            const endMinutes = hours * 60 + minutes + selectedService.duration_minutes;
-            const endHours = Math.floor(endMinutes / 60);
-            const endMins = endMinutes % 60;
-            const endTime = `${endHours.toString().padStart(2, "0")}:${endMins.toString().padStart(2, "0")}:00`;
+            const selectedBarber = barbers.find(b => b.id === formData.barberId);
+            if (!selectedBarber) {
+                toast.error("Selecciona un barbero");
+                return;
+            }
 
-            // Crear o buscar cliente (simplificado: usar nombre como referencia)
-            // En producción deberías buscar/crear el perfil correctamente
+            const formattedTime = formData.time.length === 5 ? formData.time + ":00" : formData.time;
+            const endTime = calculateEndTime(formattedTime.substring(0, 5), selectedService.duration_minutes);
+            const endTimeFormatted = endTime + ":00";
 
+            // 1. Validar solape
+            const activeApts = await fetchActiveAppointments(supabase, formData.barberId, formData.date);
+            const hasConflict = hasOverlap(formattedTime.substring(0, 5), endTime, activeApts);
+
+            if (hasConflict) {
+                toast.error(`El horario se superpone con otra cita de ${selectedBarber.name}`);
+                setIsSubmitting(false);
+                return;
+            }
+
+            // 2. Normalizar teléfono
+            const normalizedPhone = normalizeUyPhone(formData.clientPhone);
+            let clientId = null;
+
+            // 3. Buscar cliente existente por teléfono
+            if (formData.clientPhone) {
+                const searchPhone = normalizedPhone || formData.clientPhone;
+                const { data: existingClient } = await supabase
+                    .from("profiles")
+                    .select("id")
+                    .eq("phone", searchPhone)
+                    .limit(1)
+                    .maybeSingle();
+
+                if (existingClient) {
+                    clientId = existingClient.id;
+                }
+            }
+
+            // 4. Si no existe, crear perfil walk-in
+            if (!clientId) {
+                const { data: newProfile, error: profileError } = await supabase
+                    .from("profiles")
+                    .insert({
+                        full_name: formData.clientName,
+                        phone: normalizedPhone || formData.clientPhone || null,
+                        role: "cliente",
+                    })
+                    .select()
+                    .single();
+
+                if (profileError) {
+                    console.error("Error al crear perfil de cliente walk-in:", profileError);
+                    toast.error("Error al registrar cliente: " + profileError.message);
+                    setIsSubmitting(false);
+                    return;
+                }
+                clientId = newProfile.id;
+            }
+
+            // 5. Insertar la cita
             const { error } = await supabase.from("appointments").insert({
+                client_id: clientId,
                 barber_id: formData.barberId,
                 service_id: formData.serviceId,
                 appointment_date: formData.date,
-                start_time: formData.time + ":00",
-                end_time: endTime,
+                start_time: formattedTime,
+                end_time: endTimeFormatted,
                 status: "confirmed",
-                notes: `Cliente: ${formData.clientName} - Tel: ${formData.clientPhone}`,
+                notes: `Walk-in. Cliente: ${formData.clientName}${formData.clientPhone ? ` - Tel: ${formData.clientPhone}` : ''}`,
             });
 
             if (error) {
@@ -188,6 +291,9 @@ export default function AdminCitasPage() {
                     setAppointments(data || []);
                 }
             }
+        } catch (err: any) {
+            console.error("Error en handleCreateAppointment:", err);
+            toast.error("Ocurrió un error inesperado");
         } finally {
             setIsSubmitting(false);
         }
@@ -205,6 +311,34 @@ export default function AdminCitasPage() {
 
     // Generar fechas para selector rápido
     const quickDates = Array.from({ length: 7 }, (_, i) => addDays(startOfToday(), i));
+
+    const isSlotDisabled = (slot: string) => {
+        if (isLoadingSlots) return true;
+        const selectedService = services.find(s => s.id === formData.serviceId);
+        if (!selectedService) return false;
+
+        const slotsNeeded = Math.ceil(selectedService.duration_minutes / BUSINESS_CONFIG.timeSlotMinutes);
+        const slots = generateTimeSlots(); // local slots list
+        const startIdx = slots.indexOf(slot);
+
+        for (let i = 0; i < slotsNeeded; i++) {
+            const slotToCheck = slots[startIdx + i];
+            if (!slotToCheck || bookedSlots.includes(slotToCheck)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // Reset barber filter if not belongs to the chosen branch
+    useEffect(() => {
+        if (branchFilter !== "all" && barberFilter !== "all") {
+            const barber = barbers.find(b => b.id === barberFilter);
+            if (barber && barber.branch_id !== branchFilter) {
+                setBarberFilter("all");
+            }
+        }
+    }, [branchFilter, barberFilter, barbers]);
 
     return (
         <div className="space-y-6">
@@ -269,11 +403,14 @@ export default function AdminCitasPage() {
                                         <SelectValue placeholder="Seleccionar barbero" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {barbers.map((b) => (
-                                            <SelectItem key={b.id} value={b.id}>
-                                                {b.name}
-                                            </SelectItem>
-                                        ))}
+                                        {barbers.map((b) => {
+                                            const branchName = branches.find((br) => br.id === b.branch_id)?.name || "Sin sucursal";
+                                            return (
+                                                <SelectItem key={b.id} value={b.id}>
+                                                    {b.name} ({branchName})
+                                                </SelectItem>
+                                            );
+                                        })}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -289,13 +426,13 @@ export default function AdminCitasPage() {
                                 </div>
                                 <div>
                                     <label className="text-sm font-medium mb-2 block">Hora</label>
-                                    <Select value={formData.time} onValueChange={(v) => setFormData({ ...formData, time: v })}>
+                                    <Select value={formData.time} onValueChange={(v) => setFormData({ ...formData, time: v })} disabled={!formData.barberId || isLoadingSlots}>
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Hora" />
+                                            <SelectValue placeholder={isLoadingSlots ? "Cargando..." : "Hora"} />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {generateTimeSlots().map((slot) => (
-                                                <SelectItem key={slot} value={slot}>
+                                                <SelectItem key={slot} value={slot} disabled={isSlotDisabled(slot)}>
                                                     {slot}
                                                 </SelectItem>
                                             ))}
@@ -354,6 +491,40 @@ export default function AdminCitasPage() {
                         <SelectItem value="confirmed">Confirmadas</SelectItem>
                         <SelectItem value="completed">Completadas</SelectItem>
                         <SelectItem value="cancelled">Canceladas</SelectItem>
+                    </SelectContent>
+                </Select>
+
+                {/* Filtro de sucursal */}
+                <Select value={branchFilter} onValueChange={setBranchFilter}>
+                    <SelectTrigger className="w-full md:w-[180px]">
+                        <Filter className="h-4 w-4 mr-2" />
+                        <SelectValue placeholder="Sucursal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todas las sucursales</SelectItem>
+                        {branches.map((b) => (
+                            <SelectItem key={b.id} value={b.id}>
+                                {b.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                {/* Filtro de barbero */}
+                <Select value={barberFilter} onValueChange={setBarberFilter}>
+                    <SelectTrigger className="w-full md:w-[180px]">
+                        <Filter className="h-4 w-4 mr-2" />
+                        <SelectValue placeholder="Barbero" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todos los barberos</SelectItem>
+                        {barbers
+                            .filter((b) => branchFilter === "all" || b.branch_id === branchFilter)
+                            .map((b) => (
+                                <SelectItem key={b.id} value={b.id}>
+                                    {b.name}
+                                </SelectItem>
+                            ))}
                     </SelectContent>
                 </Select>
             </div>

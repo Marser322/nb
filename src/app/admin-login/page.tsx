@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Eye, EyeOff, Lock, ArrowRight, Loader2, Mail } from "lucide-react";
@@ -13,33 +13,52 @@ import { ROUTES } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 
 export default function AdminLoginPage() {
-    const [email, setEmail] = useState("admin@nbbarber.com"); // Default email
+    const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
     const supabase = createClient();
 
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("error") === "forbidden") {
+                toast.error("No tenés permisos de administrador");
+            }
+        }
+    }, []);
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
 
         try {
-            const { error } = await supabase.auth.signInWithPassword({
+            const { data: { user }, error } = await supabase.auth.signInWithPassword({
                 email,
                 password
             });
 
-            if (error) {
+            if (error || !user) {
                 toast.error("Credenciales inválidas");
                 setIsLoading(false);
                 return;
             }
 
-            // Optional: Check if user is actually admin
-            // For now, we rely on RLS policies to restrict data access
-            // But good UX is to redirect if not admin.
-            // We'll verify this in the dashboard page or assume success for now.
+            // Consultar el rol del perfil
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+                .limit(1)
+                .maybeSingle();
+
+            if (profile?.role !== 'admin') {
+                await supabase.auth.signOut();
+                toast.error("No tenés permisos de administrador");
+                setIsLoading(false);
+                return;
+            }
 
             toast.success("Bienvenido Administrador");
             router.push(ROUTES.ADMIN_DASHBOARD);
@@ -54,7 +73,7 @@ export default function AdminLoginPage() {
     return (
         <div className="min-h-screen w-full flex items-center justify-center bg-background relative overflow-hidden">
             {/* Background Effects */}
-            <div className="absolute inset-0 bg-[url('/images/hero/herramientas-barberia.png')] bg-cover bg-center opacity-10" />
+            <div className="absolute inset-0 bg-[url('/images/hero/herramientas-barberia.jpg')] bg-cover bg-center opacity-10" />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/95 to-background/50" />
 
             <Card className="w-full max-w-md mx-4 relative z-10 border-amber-500/20 bg-card/50 backdrop-blur-xl shadow-2xl">
