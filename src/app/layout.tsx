@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Oswald } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { TourOverlay } from "@/components/tour/TourOverlay";
 import { HelpFab } from "@/components/tour/HelpFab";
 import { AiAssistant } from "@/components/chat/AiAssistant";
+import { BUSINESS_CONFIG } from "@/lib/constants";
 import "./globals.css";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://nbbarber.vercel.app";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -12,19 +15,65 @@ const inter = Inter({
   display: "swap",
 });
 
+const oswald = Oswald({
+  variable: "--font-display",
+  subsets: ["latin"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "New Brothers | Salón de Estética Masculina",
-  description: "New Brothers: Tu espacio de estética masculina. Reservá tu turno para corte de cabello, barba y cuidado personal.",
-  keywords: ["barbería", "new brothers", "corte de pelo", "barba", "Uruguay", "estética masculina"],
+  metadataBase: new URL(SITE_URL),
+  title: "New Brothers | Barbería Premium en Uruguay",
+  description: "New Brothers: barbería premium en Uruguay. Reservá tu turno online para corte de cabello, barba y cuidado personal masculino.",
+  keywords: ["barbería", "new brothers", "corte de pelo", "barba", "Uruguay", "estética masculina", "reserva de turnos"],
   icons: {
     icon: "/icon.png",
   },
   openGraph: {
-    title: "New Brothers | Estética Masculina",
+    title: "New Brothers | Barbería Premium en Uruguay",
     description: "La evolución de la barbería clásica. Reservá tu experiencia online.",
     type: "website",
-    images: ["/logo.png"],
+    locale: "es_UY",
+    siteName: "New Brothers",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "New Brothers | Barbería Premium en Uruguay",
+      },
+    ],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "New Brothers | Barbería Premium en Uruguay",
+    description: "Reservá tu experiencia premium de barbería online.",
+    images: ["/og-image.png"],
+  },
+};
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Barbershop",
+  name: BUSINESS_CONFIG.name,
+  description: "New Brothers: barbería premium en Uruguay. Reservá tu turno online para corte de cabello, barba y cuidado personal masculino.",
+  image: `${SITE_URL}/og-image.png`,
+  telephone: BUSINESS_CONFIG.phone,
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "Av. Principal 1234",
+    addressLocality: "Centro",
+    addressCountry: "UY",
+  },
+  openingHoursSpecification: {
+    "@type": "OpeningHoursSpecification",
+    dayOfWeek: BUSINESS_CONFIG.workingDays.map(
+      (d) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d]
+    ),
+    opens: `${String(BUSINESS_CONFIG.workingHours.start).padStart(2, "0")}:00`,
+    closes: `${String(BUSINESS_CONFIG.workingHours.end).padStart(2, "0")}:00`,
+  },
+  sameAs: ["https://instagram.com/nbbarber"],
 };
 
 export default function RootLayout({
@@ -34,8 +83,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className="dark">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body
-        className={`${inter.variable} font-sans antialiased`}
+        className={`${inter.variable} ${oswald.variable} font-sans antialiased`}
       >
         {children}
         <TourOverlay />
