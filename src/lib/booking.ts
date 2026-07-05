@@ -1,13 +1,14 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { generateTimeSlots } from "@/lib/utils";
 import { BUSINESS_CONFIG } from "@/lib/constants";
+import { Database } from "@/types/database.types";
 
 /**
  * Citas que bloquean la agenda (pendientes o confirmadas) de un barbero en una fecha.
  * Primero intenta con RPC 'get_booked_slots', si falla, realiza una consulta directa.
  */
 export async function fetchActiveAppointments(
-    supabase: SupabaseClient<any>,
+    supabase: SupabaseClient<Database>,
     barberId: string,
     dateStr: string
 ): Promise<{ start_time: string; end_time: string }[]> {
@@ -68,7 +69,7 @@ export function hasOverlap(
  * Invoca el RPC 'book_appointment' y traduce los errores a mensajes legibles en español (es-UY).
  */
 export async function bookAppointment(
-    supabase: SupabaseClient<any>,
+    supabase: SupabaseClient<Database>,
     params: {
         barberId: string;
         serviceId: string;
