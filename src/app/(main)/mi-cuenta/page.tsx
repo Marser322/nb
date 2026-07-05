@@ -1,0 +1,295 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { format, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
+import { Calendar, Clock, History, Loader2, Repeat, Scissors, User } from "lucide-react";
+import { Header, Footer } from "@/components/layout";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/client";
+import { APPOINTMENT_STATUS_COLORS, APPOINTMENT_STATUS_LABELS, ROUTES } from "@/lib/constants";
+import { formatPrice } from "@/lib/utils";
+import { getBarberAvatarUrl } from "@/lib/static-data";
+import type { Appointment, Barber, HaircutHistory, Profile, Service } from "@/types/database.types";
+
+type AppointmentWithRelations = Appointment & {
+    service?: Service | null;
+    barber?: Barber | null;
+};
+
+type HaircutHistoryWithRelations = HaircutHistory & {
+    service?: Service | null;
+    barber?: Barber | null;
+};
+
+export default function MiCuentaPage() {
+    const router = useRouter();
+    const supabase = useMemo(() => createClient(), []);
+    const [isLoading, setIsLoading] = useState(true);
+    const [profile, setProfile] = useState<Profile | null>(null);
+    const [upcomingAppointments, setUpcomingAppointments] = useState<AppointmentWithRelations[]>([]);
+    const [recentAppointments, setRecentAppointments] = useState<AppointmentWithRelations[]>([]);
+    const [history, setHistory] = useState<HaircutHistoryWithRelations[]>([]);
+
+    useEffect(() => {
+        async function loadAccount() {
+            setIsLoading(true);
+            const { data: { user } } = await supabase.auth.getUser();
+
+            if (!user) {
+                router.push(`${ROUTES.LOGIN}?next=${ROUTES.MI_CUENTA}`);
+                return;
+            }
+
+            const { data: profileData } = await supabase
+                .from("profiles")
+                .select("*")
+                .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+                .limit(1)
+                .maybeSingle();
+
+            if (!profileData) {
+                setIsLoading(false);
+                return;
+            }
+
+            const today = new Date().toISOString().slice(0, 10);
+            const [upcomingRes, recentRes, historyRes] = await Promise.all([
+                supabase
+                    .from("appointments")
+                    .select("*, service:services(*), barber:barbers(*)")
+                    .eq("client_id", profileData.id)
+                    .gte("appointment_date", today)
+                    .in("status", ["pending", "confirmed"])
+                    .order("appointment_date", { ascending: true })
+                    .order("start_time", { ascending: true })
+                    .limit(5),
+                supabase
+                    .from("appointments")
+                    .select("*, service:services(*), barber:barbers(*)")
+                    .eq("client_id", profileData.id)
+                    .lt("appointment_date", today)
+                    .order("appointment_date", { ascending: false })
+                    .order("start_time", { ascending: false })
+                    .limit(5),
+                supabase
+                    .from("haircut_history")
+                    .select("*, service:services(*), barber:barbers(*)")
+                    .eq("client_id", profileData.id)
+                    .order("created_at", { ascending: false })
+                    .limit(5),
+            ]);
+
+            setProfile(profileData);
+            setUpcomingAppointments(upcomingRes.data || []);
+            setRecentAppointments(recentRes.data || []);
+            setHistory(historyRes.data || []);
+            setIsLoading(false);
+        }
+
+        loadAccount();
+    }, [router, supabase]);
+
+    const lastExperience = useMemo(() => {
+        if (history[0]) return history[0];
+        const lastAppointment = recentAppointments[0];
+        if (!lastAppointment) return null;
+
+        return {
+            id: lastAppointment.id,
+            client_id: lastAppointment.client_id,
+            barber_id: lastAppointment.barber_id,
+            service_id: lastAppointment.service_id,
+            appointment_id: lastAppointment.id,
+            notes: lastAppointment.style_reference || lastAppointment.notes,
+            photo_urls: [],
+            created_at: lastAppointment.appointment_date,
+            service: lastAppointment.service,
+            barber: lastAppointment.barber,
+        } satisfies HaircutHistoryWithRelations;
+    }, [history, recentAppointments]);
+
+    const repeatHref = lastExperience
+        ? `${ROUTES.RESERVAR}?serviceId=${lastExperience.service_id}&barberId=${lastExperience.barber_id}`
+        : ROUTES.RESERVAR;
+
+    return (
+        <div className="min-h-screen bg-background">
+            <Header />
+
+            <main className="container mx-auto px-4 pt-28 pb-20">
+                {isLoading ? (
+                    <div className="min-h-[55vh] flex items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                ) : (
+                    <div className="space-y-10">
+                        <section className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6 items-stretch">
+                            <div className="relative overflow-hidden rounded-lg border border-white/10 bg-zinc-950 p-8 md:p-10">
+                                <div className="absolute inset-0">
+                                    <Image
+                                        src="/images/hero/detalle-corte.png"
+                                        alt="Detalle de corte"
+                                        fill
+                                        className="object-cover opacity-20"
+                                        priority
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-black/35" />
+                                </div>
+                                <div className="relative z-10 max-w-2xl">
+                                    <p className="font-display text-sm uppercase tracking-[0.25em] text-primary mb-4">
+                                        Mi cuenta
+                                    </p>
+                                    <h1 className="font-display text-5xl md:text-7xl font-bold uppercase leading-none text-white">
+                                        Tu estilo, sin empezar de cero.
+                                    </h1>
+                                    <p className="mt-6 text-zinc-300 leading-relaxed">
+                                        Guardamos tus reservas y referencias para que tu próxima visita sea más rápida.
+                                    </p>
+                                    <Button asChild size="lg" className="mt-8 h-12 rounded-full px-8 font-bold">
+                                        <Link href={repeatHref}>
+                                            <Repeat className="mr-2 h-5 w-5" />
+                                            {lastExperience ? "Reservar lo mismo" : "Reservar turno"}
+                                        </Link>
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <Card className="border-white/10 bg-card/70">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <User className="h-5 w-5 text-primary" />
+                                        Perfil
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-5">
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Nombre</p>
+                                        <p className="text-xl font-bold text-white">{profile?.full_name || "Cliente NB"}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Teléfono</p>
+                                        <p className="text-white">{profile?.phone || "Sin teléfono cargado"}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Próximas reservas</p>
+                                        <p className="text-3xl font-bold text-primary">{upcomingAppointments.length}</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </section>
+
+                        <section className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-6">
+                            <Card className="border-white/10 bg-card/70">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Scissors className="h-5 w-5 text-primary" />
+                                        Última experiencia
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    {lastExperience ? (
+                                        <div className="space-y-5">
+                                            <div className="flex items-center gap-4">
+                                                <div className="relative h-16 w-16 overflow-hidden rounded-full bg-primary/10">
+                                                    {lastExperience.barber && getBarberAvatarUrl(lastExperience.barber) ? (
+                                                        <Image
+                                                            src={getBarberAvatarUrl(lastExperience.barber)!}
+                                                            alt={lastExperience.barber.name}
+                                                            fill
+                                                            sizes="64px"
+                                                            className="object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="h-full w-full flex items-center justify-center">
+                                                            <Scissors className="h-7 w-7 text-primary" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-white">{lastExperience.service?.name || "Servicio NB"}</p>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {lastExperience.barber?.name || "Barbero NB"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {lastExperience.notes && (
+                                                <p className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
+                                                    {lastExperience.notes}
+                                                </p>
+                                            )}
+                                            <Button asChild className="w-full rounded-full">
+                                                <Link href={repeatHref}>Reservar lo mismo</Link>
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="py-10 text-center">
+                                            <History className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
+                                            <p className="font-semibold text-white">Todavía no hay historial</p>
+                                            <p className="text-sm text-muted-foreground mt-2">
+                                                Cuando completes una visita, la vas a ver acá.
+                                            </p>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-white/10 bg-card/70">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Calendar className="h-5 w-5 text-primary" />
+                                        Próximas reservas
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    {upcomingAppointments.length === 0 ? (
+                                        <div className="py-10 text-center">
+                                            <Calendar className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
+                                            <p className="font-semibold text-white">No tenés reservas próximas</p>
+                                            <Button asChild className="mt-5 rounded-full">
+                                                <Link href={ROUTES.RESERVAR}>Reservar turno</Link>
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {upcomingAppointments.map((appointment) => (
+                                                <div key={appointment.id} className="rounded-lg border border-white/10 bg-black/30 p-4">
+                                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                                        <div>
+                                                            <p className="font-bold text-white">{appointment.service?.name}</p>
+                                                            <p className="text-sm text-muted-foreground">
+                                                                {format(parseISO(appointment.appointment_date), "EEEE d 'de' MMMM", { locale: es })}
+                                                            </p>
+                                                        </div>
+                                                        <Badge variant="outline" className={APPOINTMENT_STATUS_COLORS[appointment.status]}>
+                                                            {APPOINTMENT_STATUS_LABELS[appointment.status]}
+                                                        </Badge>
+                                                    </div>
+                                                    <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                                                        <span className="inline-flex items-center gap-2">
+                                                            <Clock className="h-4 w-4 text-primary" />
+                                                            {appointment.start_time.slice(0, 5)} - {appointment.end_time.slice(0, 5)}
+                                                        </span>
+                                                        <span>{appointment.barber?.name}</span>
+                                                        {appointment.service && <span className="text-primary">{formatPrice(appointment.service.price)}</span>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </section>
+                    </div>
+                )}
+            </main>
+
+            <Footer />
+        </div>
+    );
+}
