@@ -41,3 +41,11 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# AppleDouble files
+._*
+**/._*
+
+# local scratch files
+lint_log*.txt
+redeploy.txt
