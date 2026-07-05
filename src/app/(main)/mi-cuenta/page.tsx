@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { APPOINTMENT_STATUS_COLORS, APPOINTMENT_STATUS_LABELS, ROUTES } from "@/lib/constants";
 import { toast } from "sonner";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, canCancelAppointment } from "@/lib/utils";
 import { getBarberAvatarUrl, STATIC_SERVICES, STATIC_BARBERS } from "@/lib/static-data";
 import type { Appointment, Barber, HaircutHistory, Profile, Service, Subscription } from "@/types/database.types";
 
@@ -229,6 +229,64 @@ export default function MiCuentaPage() {
         }
     };
 
+    const handleCancelAppointment = async (appointmentId: string) => {
+        if (!window.confirm("¿Estás seguro de que deseas cancelar este turno?")) {
+            return;
+        }
+
+        const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
+
+        if (isDummy) {
+            const localApps = JSON.parse(localStorage.getItem("nb-appointments") || "[]") as Appointment[];
+            const app = localApps.find(a => a.id === appointmentId);
+            if (!app) {
+                toast.error("Cita no encontrada");
+                return;
+            }
+
+            if (!canCancelAppointment(app.appointment_date, app.start_time)) {
+                toast.error("Solo podés cancelar hasta 2 horas antes del turno");
+                return;
+            }
+
+            const updatedApps = localApps.map(a => {
+                if (a.id === appointmentId) {
+                    return { ...a, status: "cancelled" as const };
+                }
+                return a;
+            });
+            localStorage.setItem("nb-appointments", JSON.stringify(updatedApps));
+
+            setUpcomingAppointments(prev => prev.filter(a => a.id !== appointmentId));
+            toast.success("Reserva cancelada correctamente");
+            return;
+        }
+
+        try {
+            const { error } = await supabase.rpc("cancel_appointment", {
+                p_appointment_id: appointmentId,
+            });
+
+            if (error) {
+                console.error("RPC cancel_appointment error:", error);
+                if (error.message && error.message.includes("FUERA_DE_VENTANA")) {
+                    toast.error("Solo podés cancelar hasta 2 horas antes del turno");
+                } else if (error.message && error.message.includes("NO_CANCELABLE")) {
+                    toast.error("Este turno no se puede cancelar");
+                } else {
+                    toast.error("No se pudo cancelar el turno. Intentá de nuevo.");
+                }
+                return;
+            }
+
+            setUpcomingAppointments(prev => prev.filter(a => a.id !== appointmentId));
+            toast.success("Reserva cancelada correctamente");
+        } catch (err) {
+            console.error("Error cancelling appointment:", err);
+            toast.error("Ocurrió un error al intentar cancelar la reserva.");
+        }
+    };
+
     const repeatHref = lastExperience
         ? `${ROUTES.RESERVAR}?serviceId=${lastExperience.service_id}&barberId=${lastExperience.barber_id}`
         : ROUTES.RESERVAR;
@@ -385,13 +443,31 @@ export default function MiCuentaPage() {
                                                             {APPOINTMENT_STATUS_LABELS[appointment.status]}
                                                         </Badge>
                                                     </div>
-                                                    <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                                                        <span className="inline-flex items-center gap-2">
-                                                            <Clock className="h-4 w-4 text-primary" />
-                                                            {appointment.start_time.slice(0, 5)} - {appointment.end_time.slice(0, 5)}
-                                                        </span>
-                                                        <span>{appointment.barber?.name}</span>
-                                                        {appointment.service && <span className="text-primary">{formatPrice(appointment.service.price)}</span>}
+                                                    <div className="mt-3 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
+                                                        <div className="flex flex-wrap items-center gap-4">
+                                                            <span className="inline-flex items-center gap-2">
+                                                                <Clock className="h-4 w-4 text-primary" />
+                                                                {appointment.start_time.slice(0, 5)} - {appointment.end_time.slice(0, 5)}
+                                                            </span>
+                                                            <span>{appointment.barber?.name}</span>
+                                                            {appointment.service && <span className="text-primary">{formatPrice(appointment.service.price)}</span>}
+                                                        </div>
+                                                        <div>
+                                                            {canCancelAppointment(appointment.appointment_date, appointment.start_time) ? (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => handleCancelAppointment(appointment.id)}
+                                                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs px-3 rounded-full h-8"
+                                                                >
+                                                                    Cancelar
+                                                                </Button>
+                                                            ) : (
+                                                                <span className="text-xs text-zinc-500 font-light">
+                                                                    No se puede cancelar (menos de 2 h)
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}
