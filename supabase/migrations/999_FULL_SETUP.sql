@@ -1,6 +1,11 @@
 -- =====================================================
 -- NB BARBER - SCRIPT MAESTRO DE INSTALACIÓN
 -- Copia todo este contenido y pégalo en Supabase > SQL Editor
+-- Equivale a correr 001 → 010 sobre una DB fresca (incluye las
+-- tablas branches/cash_movements/reminders_config/communication_logs
+-- que antes solo vivían en src/lib/supabase_schema.sql).
+-- pg_cron (PARTE final) requiere habilitar la extensión primero en
+-- Dashboard > Database > Extensions.
 -- =====================================================
 
 -- =====================================================
@@ -283,6 +288,323 @@ INSERT INTO lookbook (title, image_url, tags, is_featured, instagram_url) VALUES
     ('Corte a Tijera', '/lookbook/scissor-cut.jpg', ARRAY['corte', 'tijera', 'clásico'], false, NULL),
     ('Ambiente Industrial', '/lookbook/barber-chair.jpg', ARRAY['local', 'ambiente'], false, NULL),
     ('Lavado Premium', '/lookbook/hair-wash.jpg', ARRAY['servicio', 'relax'], false, NULL);
+
+-- =====================================================
+-- PARTE 4: SUCURSALES, CAJA Y COMUNICACIONES
+-- (tablas que antes solo existían en src/lib/supabase_schema.sql)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS branches (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    address TEXT,
+    phone TEXT,
+    active BOOLEAN DEFAULT true, -- NOTA: la migración 011 (F8) lo renombra a is_active
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS cash_movements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
+    category TEXT NOT NULL CHECK (category IN ('service', 'product', 'tip', 'adjustment', 'supply', 'salary', 'rent', 'other')),
+    amount DECIMAL(10, 2) NOT NULL,
+    payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'card', 'transfer', 'other')),
+    description TEXT,
+    reference_id UUID, -- ID de la cita o venta si corresponde
+    branch_id UUID REFERENCES branches(id),
+    created_by UUID REFERENCES auth.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS reminders_config (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    days_since_last_visit INTEGER NOT NULL DEFAULT 30,
+    message_template TEXT NOT NULL DEFAULT 'Hola {nombre}, hace tiempo no te vemos por NB Barber. ¡Reserva hoy y renueva tu estilo!',
+    is_active BOOLEAN DEFAULT false,
+    channel TEXT DEFAULT 'whatsapp',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS communication_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_name TEXT, -- Guardamos nombre por si el usuario no está registrado
+    client_phone TEXT,
+    message_sent TEXT,
+    status TEXT CHECK (status IN ('sent', 'failed', 'delivered')),
+    sent_at TIMESTAMPTZ DEFAULT NOW(),
+    metadata JSONB
+);
+
+ALTER TABLE branches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cash_movements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reminders_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE communication_logs ENABLE ROW LEVEL SECURITY;
+-- (las policies de estas tablas se crean en la PARTE 7, ya endurecidas)
+
+-- Seed mínimo
+INSERT INTO branches (name, address, active)
+SELECT 'Casa Central', 'Av. Principal 1234', true
+WHERE NOT EXISTS (SELECT 1 FROM branches);
+
+INSERT INTO reminders_config (days_since_last_visit, message_template, is_active)
+SELECT 25, '¡Hola! Hace 25 días de tu último corte en NB Barber. ¿Listo para volver? Reserva aquí: https://nbbarber.com', true
+WHERE NOT EXISTS (SELECT 1 FROM reminders_config);
+
+
+-- =====================================================
+-- PARTE 5: CHECKOUT (004 + 005)
+-- =====================================================
+
+DO $$ BEGIN
+    CREATE POLICY "Clients can insert order items"
+      ON order_items
+      FOR INSERT
+      WITH CHECK (
+        order_id IN (
+          SELECT id FROM orders
+          WHERE client_id IN (
+            SELECT id FROM profiles WHERE auth_user_id = auth.uid()
+          )
+        )
+      );
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Función segura para descontar stock (SECURITY DEFINER salta RLS en products)
+CREATE OR REPLACE FUNCTION decrement_stock(p_product_id UUID, p_quantity INT)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE products
+  SET stock = stock - p_quantity
+  WHERE id = p_product_id
+  AND stock >= p_quantity;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Stock insuficiente para el producto %', p_product_id;
+  END IF;
+END;
+$$;
+
+-- Crea la orden, sus items y descuenta el stock en UNA sola transacción.
+-- Los precios se leen de products: no se confía en los montos del cliente.
+CREATE OR REPLACE FUNCTION create_order_with_items(
+  p_payment_method payment_method,
+  p_items JSONB -- [{"product_id": "...", "quantity": 1}, ...]
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_client_id UUID;
+  v_order_id UUID;
+  v_item RECORD;
+  v_product RECORD;
+  v_subtotal NUMERIC(10,2) := 0;
+BEGIN
+  SELECT id INTO v_client_id
+  FROM profiles
+  WHERE auth_user_id = auth.uid() OR id = auth.uid()
+  LIMIT 1;
+
+  IF v_client_id IS NULL THEN
+    RAISE EXCEPTION 'PERFIL_NO_ENCONTRADO';
+  END IF;
+
+  IF p_items IS NULL OR jsonb_array_length(p_items) = 0 THEN
+    RAISE EXCEPTION 'CARRITO_VACIO';
+  END IF;
+
+  -- Validar stock con lock de fila (FOR UPDATE) y calcular subtotal con precios reales
+  FOR v_item IN
+    SELECT (e->>'product_id')::UUID AS product_id, (e->>'quantity')::INT AS quantity
+    FROM jsonb_array_elements(p_items) e
+  LOOP
+    IF v_item.quantity IS NULL OR v_item.quantity <= 0 THEN
+      RAISE EXCEPTION 'CANTIDAD_INVALIDA';
+    END IF;
+
+    SELECT id, name, price, stock INTO v_product
+    FROM products
+    WHERE id = v_item.product_id AND is_active = TRUE
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'PRODUCTO_NO_DISPONIBLE';
+    END IF;
+
+    IF v_product.stock < v_item.quantity THEN
+      RAISE EXCEPTION 'STOCK_INSUFICIENTE:%', v_product.name;
+    END IF;
+
+    v_subtotal := v_subtotal + (v_product.price * v_item.quantity);
+  END LOOP;
+
+  INSERT INTO orders (client_id, subtotal, total, status, payment_method)
+  VALUES (v_client_id, v_subtotal, v_subtotal, 'pending', p_payment_method)
+  RETURNING id INTO v_order_id;
+
+  FOR v_item IN
+    SELECT (e->>'product_id')::UUID AS product_id, (e->>'quantity')::INT AS quantity
+    FROM jsonb_array_elements(p_items) e
+  LOOP
+    INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+    SELECT v_order_id, p.id, v_item.quantity, p.price
+    FROM products p
+    WHERE p.id = v_item.product_id;
+
+    UPDATE products
+    SET stock = stock - v_item.quantity
+    WHERE id = v_item.product_id;
+  END LOOP;
+
+  RETURN v_order_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION create_order_with_items(payment_method, JSONB) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION create_order_with_items(payment_method, JSONB) TO authenticated;
+
+
+-- =====================================================
+-- PARTE 6: FUNCIONES HELPER DE ROLES (006)
+-- =====================================================
+
+-- ¿El usuario actual es admin? (tolera profiles.id == auth.uid() o auth_user_id)
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE (auth_user_id = auth.uid() OR id = auth.uid())
+      AND role = 'admin'
+  );
+$$;
+
+-- Barbero vinculado al usuario actual (NULL si no es barbero)
+CREATE OR REPLACE FUNCTION current_barber_id()
+RETURNS UUID
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT b.id FROM barbers b
+  JOIN profiles p ON b.profile_id = p.id
+  WHERE (p.auth_user_id = auth.uid() OR p.id = auth.uid())
+    AND b.is_active = true
+  LIMIT 1;
+$$;
+
+
+-- =====================================================
+-- PARTE 7: RLS ENDURECIDO PARA PRODUCCIÓN (006)
+-- =====================================================
+
+-- Sucursales: lectura pública, escritura solo admin
+DROP POLICY IF EXISTS "Anyone can view active branches" ON branches;
+CREATE POLICY "Anyone can view active branches" ON branches
+  FOR SELECT USING (active = true OR is_admin());
+
+DROP POLICY IF EXISTS "Admins manage branches" ON branches;
+CREATE POLICY "Admins manage branches" ON branches
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+-- Caja y comunicaciones: solo admin
+DROP POLICY IF EXISTS "Admins manage cash movements" ON cash_movements;
+CREATE POLICY "Admins manage cash movements" ON cash_movements
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage reminders config" ON reminders_config;
+CREATE POLICY "Admins manage reminders config" ON reminders_config
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage communication logs" ON communication_logs;
+CREATE POLICY "Admins manage communication logs" ON communication_logs
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage cash register" ON cash_register;
+CREATE POLICY "Admins manage cash register" ON cash_register
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+-- Catálogo: lectura pública de activos, escritura solo admin
+DROP POLICY IF EXISTS "Admins manage services" ON services;
+CREATE POLICY "Admins manage services" ON services
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage products" ON products;
+CREATE POLICY "Admins manage products" ON products
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage barbers" ON barbers;
+CREATE POLICY "Admins manage barbers" ON barbers
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage lookbook" ON lookbook;
+CREATE POLICY "Admins manage lookbook" ON lookbook
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+-- Citas: barbero ve y actualiza las asignadas a él, admin todo
+DROP POLICY IF EXISTS "Barbers view own appointments" ON appointments;
+CREATE POLICY "Barbers view own appointments" ON appointments
+  FOR SELECT USING (barber_id = current_barber_id());
+
+DROP POLICY IF EXISTS "Barbers update own appointments" ON appointments;
+CREATE POLICY "Barbers update own appointments" ON appointments
+  FOR UPDATE USING (barber_id = current_barber_id())
+  WITH CHECK (barber_id = current_barber_id());
+
+DROP POLICY IF EXISTS "Admins manage appointments" ON appointments;
+CREATE POLICY "Admins manage appointments" ON appointments
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+-- Disponibilidad de agenda sin exponer citas de otros clientes
+CREATE OR REPLACE FUNCTION get_booked_slots(p_barber_id UUID, p_date DATE)
+RETURNS TABLE (start_time TIME, end_time TIME)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT a.start_time, a.end_time
+  FROM appointments a
+  WHERE a.barber_id = p_barber_id
+    AND a.appointment_date = p_date
+    AND a.status IN ('pending', 'confirmed');
+$$;
+
+GRANT EXECUTE ON FUNCTION get_booked_slots(UUID, DATE) TO anon, authenticated;
+
+-- Órdenes / items / historial: admin gestiona todo
+DROP POLICY IF EXISTS "Admins manage orders" ON orders;
+CREATE POLICY "Admins manage orders" ON orders
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage order items" ON order_items;
+CREATE POLICY "Admins manage order items" ON order_items
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage haircut history" ON haircut_history;
+CREATE POLICY "Admins manage haircut history" ON haircut_history
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Barbers manage own haircut history" ON haircut_history;
+CREATE POLICY "Barbers manage own haircut history" ON haircut_history
+  FOR ALL USING (barber_id = current_barber_id())
+  WITH CHECK (barber_id = current_barber_id());
+
+-- Perfiles: admin y barberos pueden ver perfiles de clientes
+DROP POLICY IF EXISTS "Staff can view profiles" ON profiles;
+CREATE POLICY "Staff can view profiles" ON profiles
+  FOR SELECT USING (is_admin() OR current_barber_id() IS NOT NULL);
+
+DROP POLICY IF EXISTS "Admins update profiles" ON profiles;
+CREATE POLICY "Admins update profiles" ON profiles
+  FOR UPDATE USING (is_admin()) WITH CHECK (is_admin());
+
 
 -- =============================================================
 -- 007 — CRM: notas de cliente, logs vinculados, multi-sucursal,

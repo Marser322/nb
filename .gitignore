@@ -46,6 +46,9 @@ next-env.d.ts
 ._*
 **/._*
 
+# supabase CLI
+supabase/.temp/
+
 # local scratch files
 lint_log*.txt
 redeploy.txt
