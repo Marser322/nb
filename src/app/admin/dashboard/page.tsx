@@ -112,6 +112,7 @@ export default function AdminDashboardPage() {
         if (branchFilter !== "all" && barberFilter !== "all") {
             const barber = barbers.find((b) => b.id === barberFilter);
             if (barber && barber.branch_id !== branchFilter) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setBarberFilter("all");
             }
         }

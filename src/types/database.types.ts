@@ -161,7 +161,7 @@ export interface CommunicationLog {
   message_sent: string | null
   status: 'sent' | 'failed' | 'delivered'
   sent_at: string
-  metadata: any
+  metadata: unknown
 }
 
 export interface RemindersConfig {
