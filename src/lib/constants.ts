@@ -4,9 +4,9 @@
 export const BUSINESS_CONFIG = {
     name: "New Brothers",
     location: "Uruguay",
-    phone: "+598 XX XXX XXX", // Actualizar con el número real
+    phone: "+598 99 123 456",
     email: "contacto@nbbarber.com",
-    instagram: "@nbbarber",
+    instagram: "@newbrothers.uy",
 
     // Horarios de atención (24h format)
     workingHours: {
@@ -81,13 +81,49 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
 
 // Categorías de productos
 export const PRODUCT_CATEGORIES = [
-    'Ceras',
-    'Aceites',
-    'Shampoo',
-    'Acondicionador',
+    'Styling',
     'Barba',
+    'Cabello',
+    'Afeitado',
     'Accesorios',
 ] as const
+
+// Sucursales de la barbería
+export type Branch = {
+    id: number
+    name: string
+    address: string
+    image: string
+    phone: string
+    tone: string
+}
+
+export const BRANCHES: Branch[] = [
+    {
+        id: 1,
+        name: "New Brothers Central",
+        address: "Av. Principal 1234, Centro",
+        image: "/images/branches/sucursal-central.png",
+        phone: "099 123 456",
+        tone: "Urbana, precisa, cerca de todo.",
+    },
+    {
+        id: 2,
+        name: "New Brothers Norte",
+        address: "Shopping Norte, Local 5",
+        image: "/images/branches/sucursal-norte.png",
+        phone: "098 765 432",
+        tone: "Moderna, ágil, ideal para pasar sin desvíos.",
+    },
+    {
+        id: 3,
+        name: "New Brothers Beach",
+        address: "Rambla Costanera 500",
+        image: "/images/branches/sucursal-beach.png",
+        phone: "091 112 233",
+        tone: "Relajada, costera, con la misma precisión NB.",
+    },
+]
 
 // Rutas de la aplicación
 export const ROUTES = {
@@ -95,6 +131,7 @@ export const ROUTES = {
     RESERVAR: '/reservar',
     TIENDA: '/tienda',
     LOOKBOOK: '/lookbook',
+    CONTACTO: '/contacto',
     LOGIN: '/login',
     REGISTER: '/register',
     MI_CUENTA: '/mi-cuenta',

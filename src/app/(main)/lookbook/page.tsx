@@ -1,115 +1,20 @@
 "use client";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Camera, Instagram, Hash, Star, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Header, Footer } from "@/components/layout";
-import { createClient } from "@/lib/supabase/client";
 import type { Lookbook } from "@/types/database.types";
 import Link from "next/link";
 import Image from "next/image";
 import { ROUTES } from "@/lib/constants";
+import { STATIC_STYLES, getServiceIdForStyle } from "@/lib/static-data";
 
 export default function LookbookPage() {
-    // Static Premium Styles for UI Demo
-    const STATIC_STYLES: Lookbook[] = [
-        {
-            id: "1",
-            title: "Fade Degradado Alto",
-            image_url: "/lookbook/fade-cut.png",
-            tags: ["Corte", "Fade", "Moderno"],
-            is_featured: true,
-            instagram_url: "#",
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "2",
-            title: "Perfilado de Barba",
-            image_url: "/lookbook/beard-trim.png",
-            tags: ["Barba", "Grooming", "Tijera"],
-            is_featured: true,
-            instagram_url: "#",
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "3",
-            title: "Afeitado Hot Towel",
-            image_url: "/lookbook/hot-towel.png",
-            tags: ["Afeitado", "Spa", "Clásico"],
-            is_featured: true,
-            instagram_url: "#",
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "4",
-            title: "Styling Texturizado",
-            image_url: "/lookbook/styling-pomade.png",
-            tags: ["Styling", "Producto", "Textura"],
-            is_featured: false,
-            instagram_url: "#",
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "5",
-            title: "Instrumentos de Precisión",
-            image_url: "/lookbook/clipper-detail.png",
-            tags: ["Herramientas", "Calidad"],
-            is_featured: false,
-            instagram_url: "#",
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "6",
-            title: "Corte a Tijera",
-            image_url: "/lookbook/scissor-cut.png",
-            tags: ["Corte", "Tijera", "Clásico"],
-            is_featured: false,
-            instagram_url: "#",
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "7",
-            title: "Ambiente Industrial",
-            image_url: "/lookbook/barber-chair.png",
-            tags: ["Local", "Ambiente"],
-            is_featured: false,
-            instagram_url: "#",
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "8",
-            title: "Lavado Premium",
-            image_url: "/lookbook/hair-wash.png",
-            tags: ["Servicio", "Relax"],
-            is_featured: false,
-            instagram_url: "#",
-            created_at: new Date().toISOString()
-        }
-    ];
-
-    const [styles, setStyles] = useState<Lookbook[]>(STATIC_STYLES);
+    const styles: Lookbook[] = STATIC_STYLES;
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false); // No loading for static data
-    const supabase = createClient();
-
-    // Fetching Logic Commented Out for UI Demo
-    /*
-    useEffect(() => {
-        async function loadStyles() {
-            setIsLoading(true);
-            const { data } = await supabase
-                .from("lookbook")
-                .select("*")
-                .order("is_featured", { ascending: false })
-                .order("created_at", { ascending: false });
-
-            setStyles(data || []);
-            setIsLoading(false);
-        }
-        loadStyles();
-    }, []);
-    */
+    const isLoading = false;
 
     // Obtener todos los tags únicos
     const allTags = [...new Set(styles.flatMap((s) => s.tags || []))];
@@ -118,12 +23,6 @@ export default function LookbookPage() {
     const filteredStyles = selectedTag
         ? styles.filter((s) => s.tags?.includes(selectedTag))
         : styles;
-
-    const getServiceIdForStyle = (styleId: string) => {
-        if (["1", "4", "6", "8"].includes(styleId)) return "1"; // Corte Clásico
-        if (["2", "3"].includes(styleId)) return "3"; // Diseño de Barba
-        return null;
-    };
 
     return (
         <div className="min-h-screen bg-background">
@@ -309,7 +208,7 @@ export default function LookbookPage() {
                     {/* CTA Footer */}
                     <div className="relative rounded-3xl overflow-hidden border border-white/10 p-8 md:p-16 text-center">
                         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent -z-10" />
-                        <div className="absolute right-0 top-0 w-64 h-64 bg-primary/20 blur-[100px] rounded-full -z-10" />
+                        <div className="absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent -z-10" />
 
                         <h2 className="text-3xl md:text-4xl font-bold mb-4">
                             ¿Listo para renovar tu imagen?

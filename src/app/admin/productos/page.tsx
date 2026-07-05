@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,9 @@ export default function AdminProductsPage() {
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const supabase = createClient();
+
+    const canRenderProductImage = (url: string | null) =>
+        !!url && (url.startsWith("/") || url.includes(".supabase.co"));
 
     // Cargar productos
     useEffect(() => {
@@ -354,9 +358,15 @@ export default function AdminProductsPage() {
                                 <TableRow key={product.id}>
                                     <TableCell>
                                         <div className="flex items-center gap-3">
-                                            <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-                                                {product.image_url ? (
-                                                    <img src={product.image_url} alt="" className="h-full w-full object-cover" />
+                                            <div className="relative h-10 w-10 rounded-md bg-muted flex items-center justify-center overflow-hidden">
+                                                {canRenderProductImage(product.image_url) ? (
+                                                    <Image
+                                                        src={product.image_url!}
+                                                        alt={product.name}
+                                                        fill
+                                                        sizes="40px"
+                                                        className="object-cover"
+                                                    />
                                                 ) : (
                                                     <Package className="h-5 w-5 text-muted-foreground" />
                                                 )}

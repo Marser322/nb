@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,9 @@ export default function AdminBarberosPage() {
         avatar_url: "",
     });
     const supabase = useMemo(() => createClient(), []);
+
+    const canRenderAvatar = (url: string | null) =>
+        !!url && (url.startsWith("/") || url.includes(".supabase.co"));
 
     const loadBarbers = useCallback(async (showLoading = true) => {
         if (showLoading) setIsLoading(true);
@@ -215,9 +219,15 @@ export default function AdminBarberosPage() {
                                 <TableRow key={barber.id}>
                                     <TableCell>
                                         <div className="flex items-center gap-3">
-                                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                                                {barber.avatar_url ? (
-                                                    <img src={barber.avatar_url} alt="" className="h-full w-full object-cover" />
+                                            <div className="relative h-10 w-10 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                                                {canRenderAvatar(barber.avatar_url) ? (
+                                                    <Image
+                                                        src={barber.avatar_url!}
+                                                        alt={barber.name}
+                                                        fill
+                                                        sizes="40px"
+                                                        className="object-cover"
+                                                    />
                                                 ) : (
                                                     <Users className="h-5 w-5 text-muted-foreground" />
                                                 )}

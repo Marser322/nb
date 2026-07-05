@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Image from "next/image";
 import { ArrowRight, Calendar, Clock, Star, Scissors, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,141 +47,76 @@ export default function HomePage() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden py-20">
-        {/* Background Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/95 via-black/80 to-background z-0" />
-        <div className="absolute inset-0 bg-noise opacity-30 mix-blend-overlay z-0" />
-
-        {/* Floating Images Composition - Symmetrical & Clean */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-
-          {/* Left Column - Tools & Details */}
-          <div className="absolute top-0 left-0 bottom-0 w-[15%] md:w-[25%] flex flex-col justify-between py-20 pl-4 md:pl-10">
-            <motion.div
-              animate={{ y: [0, -15, 0] }}
-              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-              className="relative w-24 h-24 md:w-40 md:h-40 opacity-30"
-            >
-              <Image src="/images/hero/ambiente-barberia.png" alt="Atmosphere" fill className="object-cover rounded-2xl grayscale border border-white/10" />
-            </motion.div>
-
-            <motion.div
-              animate={{ y: [0, 20, 0] }}
-              transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-              className="relative w-32 h-32 md:w-56 md:h-56 opacity-20 ml-8 md:ml-12"
-            >
-              <Image src="/images/hero/herramientas-barberia.png" alt="Tools" fill className="object-cover rounded-full grayscale blur-[1px]" />
-            </motion.div>
-
-            <motion.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-              className="relative w-28 h-28 md:w-48 md:h-48 opacity-30"
-            >
-              <Image src="/images/hero/detalle-corte.png" alt="Cut Detail" fill className="object-cover rounded-[30px]" />
-            </motion.div>
-          </div>
-
-          {/* Right Column - Styles & Cuts */}
-          <div className="absolute top-0 right-0 bottom-0 w-[15%] md:w-[25%] flex flex-col justify-between py-20 pr-4 md:pr-10 items-end">
-            <motion.div
-              animate={{ y: [0, 15, 0] }}
-              transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-              className="relative w-28 h-28 md:w-48 md:h-48 opacity-30"
-            >
-              <Image src="/images/hero/estilo-moderno.png" alt="Style" fill className="object-cover rounded-2xl border border-white/10" />
-            </motion.div>
-
-            <motion.div
-              animate={{ y: [0, -20, 0] }}
-              transition={{ duration: 9, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
-              className="relative w-32 h-32 md:w-56 md:h-56 opacity-20 mr-8 md:mr-12"
-            >
-              <Image src="/images/hero/maquina-clippers.png" alt="Machine" fill className="object-cover rounded-full grayscale blur-[1px]" />
-            </motion.div>
-
-            <motion.div
-              animate={{ y: [0, 10, 0] }}
-              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
-              className="relative w-24 h-24 md:w-44 md:h-44 opacity-30"
-            >
-              <Image src="/images/hero/detalle-barba.png" alt="Beard" fill className="object-cover rounded-[30px]" />
-            </motion.div>
-          </div>
-
-          {/* Center Glow (Subtle) */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-4xl bg-background/60 blur-[100px] z-0 rounded-full" />
+      <section className="relative min-h-screen overflow-hidden pt-28 pb-16 flex items-center">
+        <div className="absolute inset-0">
+          <Image
+            src="/images/hero/ambiente-barberia.png"
+            alt="Interior premium de New Brothers"
+            fill
+            priority
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/78 to-black/30" />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-black/70" />
+          <div className="absolute inset-0 bg-noise opacity-25 mix-blend-overlay" />
         </div>
 
         <div className="container mx-auto px-4 relative z-10">
           <motion.div
-            className="max-w-4xl mx-auto text-center"
-            initial={{ opacity: 0, y: 30 }}
+            className="max-w-4xl"
+            initial={{ opacity: 0, y: 26 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1 }}
+            transition={{ duration: 0.9 }}
           >
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/30 bg-primary/10 text-primary text-sm mb-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/35 bg-black/35 px-4 py-2 text-sm text-primary backdrop-blur-md mb-8">
               <Scissors className="h-4 w-4" />
-              <span>New Brothers | Salón de Estética Masculina</span>
+              <span>New Brothers | Barbería premium en Uruguay</span>
             </div>
 
-            {/* Main Heading */}
-            <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-6 leading-[1.1]">
-              Tu Estilo,
-              <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-primary to-yellow-600">
-                Nuestra Pasión
-              </span>
+            <h1 className="font-display text-6xl md:text-8xl lg:text-9xl font-bold uppercase leading-none text-white">
+              New
+              <span className="block text-primary">Brothers</span>
             </h1>
 
-            {/* Subtitle */}
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-              Más que un corte, una experiencia de lujo diseñada para el caballero moderno.
-              Reservá tu turno online y descubrí la evolución de la barbería clásica.
+            <div className="luxury-rule my-7 max-w-lg" />
+
+            <p className="text-lg md:text-xl text-zinc-300 max-w-2xl leading-relaxed">
+              Corte, barba y styling con precisión de taller privado. Reservá online, elegí barbero y llegá directo a tu silla.
             </p>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button id="hero-cta" size="lg" asChild className="text-lg h-14 px-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl shadow-primary/20">
+            <div className="mt-9 flex flex-col sm:flex-row gap-4">
+              <Button id="hero-cta" size="lg" asChild className="text-base md:text-lg h-14 px-9 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl shadow-primary/20">
                 <Link href={ROUTES.RESERVAR}>
                   Reservar Turno
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
-              <Button size="lg" variant="outline" asChild className="text-lg h-14 px-10 rounded-full border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10">
-                <Link href={ROUTES.TIENDA}>Ver Productos</Link>
+              <Button size="lg" variant="outline" asChild className="text-base md:text-lg h-14 px-9 rounded-full border-white/15 bg-white/5 backdrop-blur-sm hover:bg-white/10 text-white">
+                <Link href={ROUTES.LOOKBOOK}>Ver estilos</Link>
               </Button>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-8 mt-20 max-w-xl mx-auto">
-              <div className="space-y-1">
-                <p className="text-3xl md:text-5xl font-bold text-white">5+</p>
-                <p className="text-xs md:text-sm text-muted-foreground uppercase tracking-wider">Años</p>
+            <div className="mt-16 grid grid-cols-3 gap-4 max-w-2xl">
+              <div className="border-l border-primary/50 pl-4">
+                <p className="font-display text-4xl md:text-5xl font-bold text-white">5+</p>
+                <p className="text-xs md:text-sm text-zinc-400 uppercase tracking-[0.18em]">Años</p>
               </div>
-              <div className="space-y-1">
-                <p className="text-3xl md:text-5xl font-bold text-white">1000+</p>
-                <p className="text-xs md:text-sm text-muted-foreground uppercase tracking-wider">Clientes</p>
+              <div className="border-l border-white/15 pl-4">
+                <p className="font-display text-4xl md:text-5xl font-bold text-white">1000+</p>
+                <p className="text-xs md:text-sm text-zinc-400 uppercase tracking-[0.18em]">Clientes</p>
               </div>
-              <div className="space-y-1 border-primary/20">
-                <p className="text-3xl md:text-5xl font-bold text-primary">4.9</p>
-                <p className="text-xs md:text-sm text-muted-foreground uppercase tracking-wider">Estrellas</p>
+              <div className="border-l border-white/15 pl-4">
+                <p className="font-display text-4xl md:text-5xl font-bold text-primary">4.9</p>
+                <p className="text-xs md:text-sm text-zinc-400 uppercase tracking-[0.18em]">Estrellas</p>
               </div>
             </div>
           </motion.div>
         </div>
 
-        {/* Scroll Indicator */}
-        <motion.div
-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
-          animate={{ y: [0, 10, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        >
-          <div className="w-6 h-10 border-2 border-muted-foreground/30 rounded-full flex items-start justify-center p-2 backdrop-blur-sm">
-            <div className="w-1.5 h-1.5 bg-primary rounded-full" />
-          </div>
-        </motion.div>
+        <div className="absolute bottom-8 right-6 hidden md:block text-right">
+          <p className="font-display text-xs uppercase tracking-[0.3em] text-primary">Sillón listo</p>
+          <p className="text-sm text-zinc-300">Reservas online · Lun a sáb</p>
+        </div>
       </section>
 
       {/* Services Section */}
@@ -190,7 +124,7 @@ export default function HomePage() {
       <section className="py-24 relative overflow-hidden">
         {/* Background Elements */}
         <div className="absolute inset-0 bg-noise opacity-5 pointer-events-none" />
-        <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[100px] -translate-y-1/2 -z-10" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
 
         <div className="container mx-auto px-4 relative z-10">
           <div className="text-center mb-16">

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
     LayoutDashboard,
@@ -65,9 +66,11 @@ function SidebarContent() {
             {/* Logo */}
             <div className="p-6 border-b border-border">
                 <Link href="/" className="flex items-center gap-3">
-                    <img
+                    <Image
                         src="/logo.png"
                         alt="NB Barber"
+                        width={40}
+                        height={40}
                         className="h-10 w-10 object-contain"
                     />
                     <div>

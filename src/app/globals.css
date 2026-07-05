@@ -172,4 +172,14 @@
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.05);
   }
+
+  .font-display {
+    font-family: var(--font-display), var(--font-sans), sans-serif;
+    letter-spacing: 0;
+  }
+
+  .luxury-rule {
+    background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.75), transparent);
+    height: 1px;
+  }
 }

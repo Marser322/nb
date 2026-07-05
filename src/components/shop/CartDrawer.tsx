@@ -2,6 +2,7 @@
 
 import { X, Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
@@ -50,12 +51,14 @@ export function CartDrawer() {
                                         className="flex gap-4 p-3 rounded-lg bg-card border border-border/50"
                                     >
                                         {/* Imagen */}
-                                        <div className="h-16 w-16 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                        <div className="relative h-16 w-16 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
                                             {item.product.image_url ? (
-                                                <img
+                                                <Image
                                                     src={item.product.image_url}
                                                     alt={item.product.name}
-                                                    className="h-full w-full object-cover rounded-md"
+                                                    fill
+                                                    sizes="64px"
+                                                    className="object-cover"
                                                 />
                                             ) : (
                                                 <ShoppingBag className="h-6 w-6 text-primary/50" />

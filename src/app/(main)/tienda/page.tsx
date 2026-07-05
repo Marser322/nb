@@ -16,121 +16,20 @@ import {
 import { Header, Footer } from "@/components/layout";
 import { CartDrawer } from "@/components/shop/CartDrawer";
 import { formatPrice } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import { useCartStore } from "@/stores/cartStore";
 import type { Product } from "@/types/database.types";
 import { toast } from "sonner";
 import Image from "next/image";
 import { FeaturedProductsCarousel } from "@/components/shop/feature-carousel";
+import { STATIC_PRODUCTS } from "@/lib/static-data";
 
 export default function TiendaPage() {
-    // Static Premium Products for UI Demo
-    const STATIC_PRODUCTS: Product[] = [
-        {
-            id: "1",
-            name: "NB Matte Clay",
-            description: "Cera de arcilla con fijación fuerte y acabado mate natural. Ideal para estilos texturizados que duran todo el día.",
-            price: 750,
-            image_url: "/products/matte-clay.png",
-            category: "Styling",
-            stock: 15,
-            low_stock_threshold: 5,
-            is_active: true,
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "2",
-            name: "Beard Elixir - Sandalwood",
-            description: "Aceite premium para barba con notas de sándalo y aceites esenciales. Hidrata, suaviza y elimina la picazón.",
-            price: 600,
-            image_url: "/products/beard-elixir.png",
-            category: "Cuidado de Barba",
-            stock: 8,
-            low_stock_threshold: 3,
-            is_active: true,
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "3",
-            name: "Classic Pomade",
-            description: "Pomada a base de agua con brillo medio y fijación flexible. Se lava fácilmente y mantiene el estilo clásico.",
-            price: 550,
-            image_url: "/products/classic-pomade.png",
-            category: "Styling",
-            stock: 20,
-            low_stock_threshold: 5,
-            is_active: true,
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "4",
-            name: "Carbon Daily Shampoo",
-            description: "Shampoo de limpieza profunda con carbón activado. Elimina residuos de productos sin resecar el cabello.",
-            price: 450,
-            image_url: "/products/shampoo.png",
-            category: "Cuidado Capilar",
-            stock: 12,
-            low_stock_threshold: 4,
-            is_active: true,
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "5",
-            name: "Texture Powder Volumizer",
-            description: "Polvo ligero para dar volumen y textura instantánea. Acabado invisible y máximo control.",
-            price: 650,
-            image_url: "/products/texture-powder.png",
-            category: "Styling",
-            stock: 5,
-            low_stock_threshold: 2,
-            is_active: true,
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "6",
-            name: "Handcrafted Wooden Comb",
-            description: "Peine de madera de sándalo anti-estática. Dientes anchos para desenredar sin tirar.",
-            price: 350,
-            image_url: "/products/wooden-comb.png",
-            category: "Accesorios",
-            stock: 30,
-            low_stock_threshold: 5,
-            is_active: true,
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "7",
-            name: "Precision Shave Gel",
-            description: "Gel de afeitado transparente que permite ver exactamente dónde pasas la navaja. Con Aloe Vera.",
-            price: 400,
-            image_url: "/products/shave-gel.png",
-            category: "Afeitado",
-            stock: 0,
-            low_stock_threshold: 5,
-            is_active: true,
-            created_at: new Date().toISOString()
-        },
-        {
-            id: "8",
-            name: "Post-Shave Cooling Balm",
-            description: "Bálsamo refrescante para después del afeitado. Calma la irritación y cierra los poros.",
-            price: 500,
-            image_url: "/products/cooling-balm.png",
-            category: "Afeitado",
-            stock: 10,
-            low_stock_threshold: 3,
-            is_active: true,
-            created_at: new Date().toISOString()
-        }
-    ];
-
     const [products, setProducts] = useState<Product[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState<string>("all");
     const [isLoading, setIsLoading] = useState(true);
 
     const addItem = useCartStore((state) => state.addItem);
-    const supabase = createClient();
 
     // Cargar productos
     useEffect(() => {
@@ -166,6 +65,11 @@ export default function TiendaPage() {
         toast.success(`${product.name} agregado al carrito`);
     };
 
+    const handleSelectCategory = (category: string) => {
+        setSelectedCategory(category);
+        document.getElementById("productos")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+
     // Obtener categorías únicas de los productos
     const availableCategories = [...new Set(products.map((p) => p.category))];
 
@@ -176,10 +80,14 @@ export default function TiendaPage() {
             <main className="pb-20">
                 {/* Hero Section */}
                 <div className="container mx-auto px-4 mt-8">
-                    <FeaturedProductsCarousel />
+                    <FeaturedProductsCarousel
+                        products={products.length > 0 ? products : STATIC_PRODUCTS}
+                        onAddToCart={handleAddToCart}
+                        onSelectCategory={handleSelectCategory}
+                    />
                 </div>
 
-                <div className="container mx-auto px-4 mt-16">
+                <div id="productos" className="container mx-auto px-4 mt-16 scroll-mt-24">
                     <div className="flex flex-col md:flex-row items-end justify-between mb-8 gap-4">
                         <div>
                             <h2 className="text-3xl font-bold mb-2">Nuestros Productos</h2>

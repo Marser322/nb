@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Menu, Scissors, ShoppingBag, User, LogOut, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ const navLinks = [
     { href: ROUTES.RESERVAR, label: "Reservar" },
     { href: ROUTES.TIENDA, label: "Tienda" },
     { href: ROUTES.LOOKBOOK, label: "Lookbook" },
+    { href: ROUTES.CONTACTO, label: "Contacto" },
 ];
 
 export function Header() {
@@ -90,8 +92,15 @@ export function Header() {
                 <nav className="flex items-center justify-between h-16 md:h-20">
                     {/* Logo */}
                     <Link href="/" className="flex items-center gap-3">
-                        <img src="/logo.png" alt="New Brothers Logo" className="h-10 w-10 md:h-12 md:w-12 rounded-full border border-white/10 object-cover" />
-                        <span className="text-xl md:text-2xl font-bold tracking-tight">
+                        <Image
+                            src="/logo.png"
+                            alt="New Brothers Logo"
+                            width={48}
+                            height={48}
+                            className="h-10 w-10 md:h-12 md:w-12 rounded-full border border-white/10 object-cover"
+                            priority
+                        />
+                        <span className="font-display text-xl md:text-2xl font-bold uppercase tracking-normal">
                             NEW <span className="text-primary">BROTHERS</span>
                         </span>
                     </Link>

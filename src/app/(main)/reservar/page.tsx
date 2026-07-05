@@ -12,10 +12,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Header, Footer } from "@/components/layout";
 import { cn, formatPrice, generateTimeSlots, calculateEndTime } from "@/lib/utils";
-import { BUSINESS_CONFIG } from "@/lib/constants";
+import { BUSINESS_CONFIG, BRANCHES } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { Service, Barber } from "@/types/database.types";
 import { toast } from "sonner";
+import { STATIC_STYLES, getBarberAvatarUrl } from "@/lib/static-data";
 
 interface Branch {
   id: number;
@@ -23,54 +24,17 @@ interface Branch {
   address: string;
   image: string;
   phone: string;
+  tone: string;
 }
 
 // Pasos del flujo de reserva
 const STEPS = ["Sucursal", "Servicio", "Referencia (Opcional)", "Barbero", "Fecha y Hora", "Confirmar"];
 
-const STATIC_STYLES = [
-  {
-    id: "1",
-    title: "Fade Degradado Alto",
-    image_url: "/lookbook/fade-cut.png",
-    serviceId: "1",
-  },
-  {
-    id: "2",
-    title: "Perfilado de Barba",
-    image_url: "/lookbook/beard-trim.png",
-    serviceId: "3",
-  },
-  {
-    id: "3",
-    title: "Afeitado Hot Towel",
-    image_url: "/lookbook/hot-towel.png",
-    serviceId: "3",
-  },
-  {
-    id: "4",
-    title: "Styling Texturizado",
-    image_url: "/lookbook/styling-pomade.png",
-    serviceId: "1",
-  },
-  {
-    id: "6",
-    title: "Corte a Tijera",
-    image_url: "/lookbook/scissor-cut.png",
-    serviceId: "1",
-  },
-  {
-    id: "8",
-    title: "Lavado Premium",
-    image_url: "/lookbook/hair-wash.png",
-    serviceId: "1",
-  }
-];
-
 function ReservarPageContent() {
   const searchParams = useSearchParams();
   const paramStyleId = searchParams.get("styleId");
   const paramServiceId = searchParams.get("serviceId");
+  const paramBarberId = searchParams.get("barberId");
 
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
@@ -80,31 +44,6 @@ function ReservarPageContent() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [hoveredService, setHoveredService] = useState<Service | null>(null);
-
-  // Static Branches
-  const STATIC_BRANCHES = [
-    {
-      id: 1,
-      name: "New Brothers Central",
-      address: "Av. Principal 1234, Centro",
-      image: "/images/branches/sucursal-central.png",
-      phone: "099 123 456"
-    },
-    {
-      id: 2,
-      name: "New Brothers Norte",
-      address: "Shopping Norte, Local 5",
-      image: "/images/branches/sucursal-norte.png",
-      phone: "098 765 432"
-    },
-    {
-      id: 3,
-      name: "New Brothers Beach",
-      address: "Rambla Costanera 500",
-      image: "/images/branches/sucursal-beach.png",
-      phone: "091 112 233"
-    }
-  ];
 
   const [services, setServices] = useState<Service[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
@@ -135,11 +74,12 @@ function ReservarPageContent() {
   // Procesar parámetros de URL (Lookbook/Asistente de IA)
   useEffect(() => {
     if (services.length > 0 && paramServiceId) {
-      const foundService = services.find((s) => s.id === paramServiceId);
+      const numericServiceId = Number(paramServiceId);
+      const foundService = services.find((s) => s.id === paramServiceId)
+        || services.find((s) => Number.isFinite(numericServiceId) && s.sort_order === numericServiceId);
+
       if (foundService) {
         setSelectedService(foundService);
-        // Saltamos directo al paso de seleccionar sucursal (o ya que tiene el servicio pre-elegido,
-        // el usuario puede elegir sucursal primero y luego ir directo)
       }
     }
   }, [services, paramServiceId]);
@@ -152,6 +92,13 @@ function ReservarPageContent() {
       }
     }
   }, [paramStyleId]);
+
+  useEffect(() => {
+    if (!paramBarberId || barbers.length === 0) return;
+
+    const foundBarber = barbers.find((barber) => barber.id === paramBarberId);
+    if (foundBarber) setSelectedBarber(foundBarber);
+  }, [barbers, paramBarberId]);
 
   // Citas que bloquean agenda (pendientes o confirmadas) de un barbero en una fecha.
   // Usa la RPC get_booked_slots (migración 006), que devuelve solo horarios sin
@@ -174,6 +121,13 @@ function ReservarPageContent() {
       .in("status", ["pending", "confirmed"]);
     return direct ?? [];
   };
+
+  // Generar slots de tiempo
+  const timeSlots = generateTimeSlots(
+    BUSINESS_CONFIG.workingHours.start,
+    BUSINESS_CONFIG.workingHours.end,
+    30
+  );
 
   // Un slot está ocupado si cae dentro del rango [inicio, fin) de alguna cita
   const computeBookedSlots = (
@@ -200,13 +154,6 @@ function ReservarPageContent() {
   // Generar próximos 14 días disponibles
   const availableDates = Array.from({ length: 14 }, (_, i) => addDays(startOfToday(), i)).filter(
     (date) => BUSINESS_CONFIG.workingDays.includes(date.getDay())
-  );
-
-  // Generar slots de tiempo
-  const timeSlots = generateTimeSlots(
-    BUSINESS_CONFIG.workingHours.start,
-    BUSINESS_CONFIG.workingHours.end,
-    30
   );
 
   // Verificar si un slot está disponible
@@ -448,7 +395,7 @@ function ReservarPageContent() {
                   ¿A cuál sucursal querés ir?
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {STATIC_BRANCHES.map((branch) => (
+                  {BRANCHES.map((branch) => (
                     <Card
                       key={branch.id}
                       className={cn(
@@ -473,6 +420,9 @@ function ReservarPageContent() {
                         <p className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
                           <MapPin className="h-4 w-4 text-primary" />
                           {branch.address}
+                        </p>
+                        <p className="text-xs text-zinc-400 mb-3">
+                          {branch.tone}
                         </p>
                         <p className="text-xs text-muted-foreground flex items-center gap-2">
                           <Check className="h-4 w-4 text-green-500" />
@@ -635,28 +585,53 @@ function ReservarPageContent() {
                   ¿Con qué barbero preferís?
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {barbers.map((barber) => (
-                    <Card
-                      key={barber.id}
-                      className={cn(
-                        "cursor-pointer transition-all hover:border-primary/50",
-                        selectedBarber?.id === barber.id && "border-primary bg-primary/5"
-                      )}
-                      onClick={() => setSelectedBarber(barber)}
-                    >
-                      <CardContent className="p-6 text-center">
-                        <div className="h-16 w-16 rounded-full bg-primary/10 mx-auto mb-4 flex items-center justify-center">
-                          <User className="h-8 w-8 text-primary" />
-                        </div>
-                        <h3 className="font-semibold text-sm">{barber.name}</h3>
-                        {barber.bio && (
-                          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-                            {barber.bio}
-                          </p>
+                  {barbers.map((barber) => {
+                    const avatarUrl = getBarberAvatarUrl(barber);
+                    const isSelected = selectedBarber?.id === barber.id;
+
+                    return (
+                      <Card
+                        key={barber.id}
+                        className={cn(
+                          "group cursor-pointer transition-all duration-300 hover:border-primary/50 overflow-hidden",
+                          isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card/50 hover:bg-card/80"
                         )}
-                      </CardContent>
-                    </Card>
-                  ))}
+                        onClick={() => setSelectedBarber(barber)}
+                      >
+                        <CardContent className="p-0">
+                          <div className="relative aspect-square overflow-hidden bg-zinc-950">
+                            {avatarUrl ? (
+                              <Image
+                                src={avatarUrl}
+                                alt={barber.name}
+                                fill
+                                sizes="(max-width: 768px) 100vw, 33vw"
+                                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                              />
+                            ) : (
+                              <div className="h-full w-full flex items-center justify-center">
+                                <User className="h-12 w-12 text-primary/40" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
+                            {isSelected && (
+                              <div className="absolute top-3 right-3 bg-primary text-primary-foreground h-8 w-8 rounded-full flex items-center justify-center shadow-lg">
+                                <Check className="h-5 w-5" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-5">
+                            <h3 className="font-semibold text-base text-white">{barber.name}</h3>
+                            {barber.bio && (
+                              <p className="text-xs text-muted-foreground mt-2 line-clamp-3">
+                                {barber.bio}
+                              </p>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                   {barbers.length === 0 && (
                     <div className="col-span-3 text-center py-12 text-muted-foreground text-sm">
                       No hay barberos disponibles

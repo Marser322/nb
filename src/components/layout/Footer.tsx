@@ -32,7 +32,7 @@ export function Footer() {
                     <div className="space-y-4">
                         <Link href="/" className="flex items-center gap-2">
                             <Scissors className="h-8 w-8 text-primary" />
-                            <span className="text-2xl font-bold tracking-tight">
+                            <span className="font-display text-2xl font-bold uppercase tracking-normal">
                                 NB <span className="text-primary">Barber</span>
                             </span>
                         </Link>
@@ -68,6 +68,14 @@ export function Footer() {
                                     className="text-muted-foreground hover:text-primary transition-colors text-sm"
                                 >
                                     Lookbook
+                                </Link>
+                            </li>
+                            <li>
+                                <Link
+                                    href={ROUTES.CONTACTO}
+                                    className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                                >
+                                    Contacto
                                 </Link>
                             </li>
                         </ul>
@@ -139,4 +147,3 @@ export function Footer() {
         </footer>
     );
 }
-

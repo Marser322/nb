@@ -71,8 +71,7 @@ export function WhyChooseUsContent() {
                 </div>
 
                 <div className="relative h-[500px] lg:h-[600px] flex items-center justify-center">
-                    {/* Decorative Background Blob */}
-                    <div className="absolute inset-0 bg-primary/20 blur-[100px] rounded-full transform rotate-12" />
+                    <div className="absolute inset-x-8 top-8 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 
                     {/* Main Image with AnimatePresence */}
                     <div className="relative w-full h-full max-w-md mx-auto">

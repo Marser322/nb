@@ -66,10 +66,10 @@ CREATE TABLE IF NOT EXISTS services (
 );
 
 -- INSERTAR SERVICIOS INICIALES
-INSERT INTO services (name, description, price, duration_minutes, sort_order) VALUES
-    ('Corte Clásico', 'Corte de precisión adaptado a tu estilo personal', 450, 30, 1),
-    ('Corte + Barba', 'El combo completo para el caballero moderno', 750, 60, 2),
-    ('Diseño de Barba', 'Perfilado y mantenimiento profesional', 350, 30, 3);
+INSERT INTO services (name, description, price, duration_minutes, image_url, sort_order) VALUES
+    ('Corte Clásico', 'Corte de precisión adaptado a tu estilo personal', 450, 30, '/images/hero/maquina-clippers.png', 1),
+    ('Corte + Barba', 'El combo completo para el caballero moderno', 750, 60, '/images/hero/detalle-corte.png', 2),
+    ('Diseño de Barba', 'Perfilado y mantenimiento profesional', 350, 30, '/images/hero/detalle-barba.png', 3);
 
 -- TABLA: APPOINTMENTS
 CREATE TABLE IF NOT EXISTS appointments (
@@ -255,17 +255,17 @@ CREATE TRIGGER on_auth_user_created
 -- PARTE 2: DATOS DE PRUEBA (BARBEROS Y PRODUCTOS)
 -- =====================================================
 
-INSERT INTO barbers (name, bio, is_active) VALUES
-    ('Carlos', 'Especialista en cortes clásicos y modernos', true),
-    ('Miguel', 'Experto en diseño de barba y estilos urbanos', true),
-    ('Diego', 'Barbero con 10 años de experiencia', true);
+INSERT INTO barbers (name, bio, avatar_url, is_active) VALUES
+    ('Carlos', 'Especialista en cortes clásicos y modernos', '/images/barbers/carlos.png', true),
+    ('Miguel', 'Experto en diseño de barba y estilos urbanos', '/images/barbers/miguel.png', true),
+    ('Diego', 'Barbero con 10 años de experiencia', '/images/barbers/diego.png', true);
 
-INSERT INTO products (name, description, price, stock, category, is_active) VALUES
-    ('Cera Mate Premium', 'Fijación fuerte, acabado mate natural', 450, 20, 'Ceras', true),
-    ('Aceite para Barba', 'Hidratación y brillo para tu barba', 380, 15, 'Aceites', true),
-    ('Pomada Clásica', 'Fijación media con brillo elegante', 420, 18, 'Ceras', true),
-    ('Shampoo Anticaspa', 'Limpieza profunda y control de caspa', 350, 25, 'Shampoo', true),
-    ('Bálsamo para Barba', 'Suavidad y control para barbas largas', 400, 12, 'Barba', true);
+INSERT INTO products (name, description, price, stock, category, image_url, is_active) VALUES
+    ('NB Matte Clay', 'Fijación fuerte, acabado mate natural', 750, 20, 'Styling', '/products/matte-clay.png', true),
+    ('Beard Elixir - Sandalwood', 'Hidratación y brillo para tu barba', 600, 15, 'Barba', '/products/beard-elixir.png', true),
+    ('Classic Pomade', 'Fijación media con brillo elegante', 550, 18, 'Styling', '/products/classic-pomade.png', true),
+    ('Carbon Daily Shampoo', 'Limpieza profunda sin resecar el cabello', 450, 25, 'Cabello', '/products/shampoo.png', true),
+    ('Post-Shave Cooling Balm', 'Suavidad y calma después del afeitado', 500, 12, 'Afeitado', '/products/cooling-balm.png', true);
 
 
 -- =====================================================
@@ -275,13 +275,13 @@ INSERT INTO products (name, description, price, stock, category, is_active) VALU
 DELETE FROM lookbook;
 
 INSERT INTO lookbook (title, image_url, tags, is_featured, instagram_url) VALUES
-    ('Fade Clásico', 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=600', ARRAY['fade', 'clásico', 'elegante'], true, 'https://instagram.com/nbbarber'),
-    ('Buzz Cut Moderno', 'https://images.unsplash.com/photo-1622286342621-4bd786c2447c?w=600', ARRAY['corto', 'moderno', 'militar'], true, NULL),
-    ('Pompadour Retro', 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=600', ARRAY['pompadour', 'volumen', 'retro'], true, 'https://instagram.com/nbbarber'),
-    ('Undercut Texturizado', 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=600', ARRAY['undercut', 'textura', 'moderno'], false, NULL),
-    ('Barba Perfecta', 'https://images.unsplash.com/photo-1621607505837-03c14c6dd51e?w=600', ARRAY['barba', 'perfilado', 'cuidado'], true, 'https://instagram.com/nbbarber'),
-    ('Corte Ejecutivo', 'https://images.unsplash.com/photo-1605497788044-5a32c7078486?w=600', ARRAY['ejecutivo', 'formal', 'clásico'], false, NULL),
-    ('Degradado Alto', 'https://images.unsplash.com/photo-1622287162716-f311baa1a2b8?w=600', ARRAY['degradado', 'fade', 'alto'], false, NULL),
-    ('Estilo Urbano', 'https://images.unsplash.com/photo-1534297635766-a262cdcb8ee4?w=600', ARRAY['urbano', 'moderno', 'juvenil'], true, 'https://instagram.com/nbbarber');
+    ('Fade Degradado Alto', '/lookbook/fade-cut.png', ARRAY['corte', 'fade', 'moderno'], true, 'https://instagram.com/newbrothers.uy'),
+    ('Perfilado de Barba', '/lookbook/beard-trim.png', ARRAY['barba', 'grooming', 'tijera'], true, 'https://instagram.com/newbrothers.uy'),
+    ('Afeitado Hot Towel', '/lookbook/hot-towel.png', ARRAY['afeitado', 'spa', 'clásico'], true, NULL),
+    ('Styling Texturizado', '/lookbook/styling-pomade.png', ARRAY['styling', 'producto', 'textura'], false, NULL),
+    ('Instrumentos de Precisión', '/lookbook/clipper-detail.png', ARRAY['herramientas', 'calidad'], false, NULL),
+    ('Corte a Tijera', '/lookbook/scissor-cut.png', ARRAY['corte', 'tijera', 'clásico'], false, NULL),
+    ('Ambiente Industrial', '/lookbook/barber-chair.png', ARRAY['local', 'ambiente'], false, NULL),
+    ('Lavado Premium', '/lookbook/hair-wash.png', ARRAY['servicio', 'relax'], false, NULL);
 
 -- ¡LISTO! Todo configurado.
