@@ -52,6 +52,15 @@ export default function AdminDashboardPage() {
     useEffect(() => {
         async function loadDashboard() {
             setIsLoading(true);
+
+            // Invocación oportunista del generador de turnos fijos (fire-and-forget)
+            const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
+            if (!isDummy) {
+                supabase.rpc("generate_subscription_appointments")
+                    .then(() => {})
+                    .catch((err) => console.error("Error generating subscription appointments:", err));
+            }
+
             const today = format(startOfToday(), "yyyy-MM-dd");
             const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
             const monthEnd = format(endOfMonth(new Date()), "yyyy-MM-dd");
