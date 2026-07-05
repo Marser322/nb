@@ -74,6 +74,7 @@ function ReservarPageContent() {
 
       const loadedServices = servicesRes?.data && servicesRes.data.length > 0 ? servicesRes.data : STATIC_SERVICES;
       const loadedBarbers = barbersRes?.data && barbersRes.data.length > 0 ? barbersRes.data : STATIC_BARBERS;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const loadedBranches = (branchesRes?.data || []).map((dbb: any) => {
         const staticB = BRANCHES.find((sb) => sb.name === dbb.name);
         return {
@@ -110,6 +111,7 @@ function ReservarPageContent() {
     loadData();
   }, [paramBarberId, paramServiceId, supabase]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   // Rehidratar borrador de sessionStorage
   useEffect(() => {
     if (isLoading || draftChecked) return;
@@ -163,6 +165,7 @@ function ReservarPageContent() {
 
     checkDraft();
   }, [isLoading, draftChecked, branches, services, barbers, supabase]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Filtrar barberos según la sucursal seleccionada (los barberos sin branch_id asignado se muestran en todas)
   const filteredBarbers = useMemo(() => {

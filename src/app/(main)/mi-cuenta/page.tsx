@@ -491,7 +491,7 @@ export default function MiCuentaPage() {
                                         <Repeat className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
                                         <p className="font-semibold text-white">No tenés suscripciones de turnos fijos activas</p>
                                         <p className="text-xs text-muted-foreground mt-2 max-w-md mx-auto">
-                                            Al agendar un turno, podés activar la opción "¿Querés reservar este turno de forma fija semanal?" para asegurar tu espacio de forma recurrente todas las semanas.
+                                            Al agendar un turno, podés activar la opción &quot;¿Querés reservar este turno de forma fija semanal?&quot; para asegurar tu espacio de forma recurrente todas las semanas.
                                         </p>
                                     </div>
                                 ) : (
