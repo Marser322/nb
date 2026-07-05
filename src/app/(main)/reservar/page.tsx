@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { format, addDays, isBefore, startOfToday, isToday } from "date-fns";
 import { es } from "date-fns/locale";
@@ -39,7 +39,9 @@ function ReservarPageContent() {
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedStyle, setSelectedStyle] = useState<typeof STATIC_STYLES[0] | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState<typeof STATIC_STYLES[0] | null>(
+    () => STATIC_STYLES.find((style) => style.id === paramStyleId) ?? null
+  );
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
@@ -51,7 +53,7 @@ function ReservarPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   // Cargar servicios y barberos
   useEffect(() => {
@@ -63,42 +65,29 @@ function ReservarPageContent() {
         supabase.from("barbers").select("*").eq("is_active", true),
       ]);
 
-      if (servicesRes.data) setServices(servicesRes.data);
-      if (barbersRes.data) setBarbers(barbersRes.data);
+      const loadedServices = servicesRes.data || [];
+      const loadedBarbers = barbersRes.data || [];
+
+      setServices(loadedServices);
+      setBarbers(loadedBarbers);
+
+      if (paramServiceId) {
+        const numericServiceId = Number(paramServiceId);
+        const foundService = loadedServices.find((service) => service.id === paramServiceId)
+          || loadedServices.find((service) => Number.isFinite(numericServiceId) && service.sort_order === numericServiceId);
+
+        if (foundService) setSelectedService(foundService);
+      }
+
+      if (paramBarberId) {
+        const foundBarber = loadedBarbers.find((barber) => barber.id === paramBarberId);
+        if (foundBarber) setSelectedBarber(foundBarber);
+      }
 
       setIsLoading(false);
     }
     loadData();
-  }, []);
-
-  // Procesar parámetros de URL (Lookbook/Asistente de IA)
-  useEffect(() => {
-    if (services.length > 0 && paramServiceId) {
-      const numericServiceId = Number(paramServiceId);
-      const foundService = services.find((s) => s.id === paramServiceId)
-        || services.find((s) => Number.isFinite(numericServiceId) && s.sort_order === numericServiceId);
-
-      if (foundService) {
-        setSelectedService(foundService);
-      }
-    }
-  }, [services, paramServiceId]);
-
-  useEffect(() => {
-    if (paramStyleId) {
-      const foundStyle = STATIC_STYLES.find((s) => s.id === paramStyleId);
-      if (foundStyle) {
-        setSelectedStyle(foundStyle);
-      }
-    }
-  }, [paramStyleId]);
-
-  useEffect(() => {
-    if (!paramBarberId || barbers.length === 0) return;
-
-    const foundBarber = barbers.find((barber) => barber.id === paramBarberId);
-    if (foundBarber) setSelectedBarber(foundBarber);
-  }, [barbers, paramBarberId]);
+  }, [paramBarberId, paramServiceId, supabase]);
 
   // Citas que bloquean agenda (pendientes o confirmadas) de un barbero en una fecha.
   // Usa la RPC get_booked_slots (migración 006), que devuelve solo horarios sin
