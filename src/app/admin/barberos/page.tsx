@@ -70,7 +70,9 @@ export default function AdminBarberosPage() {
     }, [supabase]);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadBarbers(true);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadBranches();
     }, [loadBarbers, loadBranches]);
 

@@ -291,7 +291,7 @@ export default function AdminCitasPage() {
                     setAppointments(data || []);
                 }
             }
-        } catch (err: any) {
+        } catch (err) {
             console.error("Error en handleCreateAppointment:", err);
             toast.error("Ocurrió un error inesperado");
         } finally {
