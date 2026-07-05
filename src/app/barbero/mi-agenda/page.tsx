@@ -32,6 +32,8 @@ type AppointmentWithRelations = Appointment & {
 export default function BarberoAgendaPage() {
     const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [barberName, setBarberName] = useState<string | null>(null);
+    const [accessError, setAccessError] = useState<string | null>(null);
     const supabase = createClient();
     const today = format(startOfToday(), "yyyy-MM-dd");
 
@@ -39,10 +41,46 @@ export default function BarberoAgendaPage() {
         async function loadAgenda() {
             setIsLoading(true);
 
-            // TODO: Filtrar por barbero logueado cuando se implemente auth completo
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                setAccessError("Iniciá sesión para ver tu agenda.");
+                setIsLoading(false);
+                return;
+            }
+
+            // Resolver el barbero vinculado al usuario logueado:
+            // auth user → profiles → barbers.profile_id
+            const { data: profile } = await supabase
+                .from("profiles")
+                .select("id")
+                .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+                .limit(1)
+                .maybeSingle();
+
+            const { data: barber } = profile
+                ? await supabase
+                    .from("barbers")
+                    .select("id, name")
+                    .eq("profile_id", profile.id)
+                    .eq("is_active", true)
+                    .limit(1)
+                    .maybeSingle()
+                : { data: null };
+
+            if (!barber) {
+                setAccessError(
+                    "Tu usuario no está vinculado a un perfil de barbero. Pedile al administrador que te vincule desde el panel de Barberos."
+                );
+                setIsLoading(false);
+                return;
+            }
+
+            setBarberName(barber.name);
+
             const { data } = await supabase
                 .from("appointments")
                 .select("*, service:services(*), client:profiles(*)")
+                .eq("barber_id", barber.id)
                 .eq("appointment_date", today)
                 .not("status", "eq", "cancelled")
                 .order("start_time");
@@ -85,11 +123,27 @@ export default function BarberoAgendaPage() {
         .filter((a) => a.status !== "cancelled")
         .reduce((sum, a) => sum + (a.service?.price || 0), 0);
 
+    if (!isLoading && accessError) {
+        return (
+            <div className="flex items-center justify-center min-h-[50vh]">
+                <Card className="border-border/50 max-w-md">
+                    <CardContent className="p-8 text-center">
+                        <User className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
+                        <h2 className="font-semibold text-lg mb-2">Sin acceso a la agenda</h2>
+                        <p className="text-sm text-muted-foreground">{accessError}</p>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl md:text-3xl font-bold">Mi Agenda</h1>
+                <h1 className="text-2xl md:text-3xl font-bold">
+                    Mi Agenda{barberName ? ` · ${barberName}` : ""}
+                </h1>
                 <p className="text-muted-foreground">
                     {format(new Date(), "EEEE, d 'de' MMMM yyyy", { locale: es })}
                 </p>
@@ -224,14 +278,25 @@ export default function BarberoAgendaPage() {
                                         )}
 
                                         {cita.status === "confirmed" && (
-                                            <Button
-                                                size="sm"
-                                                className="bg-green-500 hover:bg-green-600"
-                                                onClick={() => updateStatus(cita.id, "completed")}
-                                            >
-                                                <CheckCircle className="h-4 w-4 mr-1" />
-                                                Completar
-                                            </Button>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    className="bg-green-500 hover:bg-green-600"
+                                                    onClick={() => updateStatus(cita.id, "completed")}
+                                                >
+                                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                                    Completar
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="text-gray-400 border-gray-400/30"
+                                                    onClick={() => updateStatus(cita.id, "no_show")}
+                                                >
+                                                    <XCircle className="h-4 w-4 mr-1" />
+                                                    No vino
+                                                </Button>
+                                            </div>
                                         )}
 
                                         {cita.status === "completed" && (
