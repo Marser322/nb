@@ -60,65 +60,121 @@ export default function CheckoutPage() {
         }
     }, [isLoading, items, router]);
 
+    // Flujo previo a la migración 005: secuencia de escrituras desde el cliente.
+    // Se mantiene como respaldo hasta que create_order_with_items exista en la DB.
+    const legacyCheckout = async () => {
+        if (!user) throw new Error("Sesión expirada");
+
+        const { data: profileData } = await supabase
+            .from('profiles')
+            .select('id')
+            .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+            .limit(1)
+            .maybeSingle();
+
+        if (!profileData) throw new Error("Error al obtener perfil de usuario");
+
+        // Validar stock actual antes de crear la orden
+        const productIds = items.map((item: CartItem) => item.product.id);
+        const { data: stocks, error: stockReadError } = await supabase
+            .from('products')
+            .select('id, name, stock')
+            .in('id', productIds);
+
+        if (stockReadError || !stocks) throw new Error("No se pudo verificar el stock");
+
+        for (const item of items as CartItem[]) {
+            const current = stocks.find((s) => s.id === item.product.id);
+            if (!current || current.stock < item.quantity) {
+                throw new Error(`No hay stock suficiente de ${item.product.name}`);
+            }
+        }
+
+        const total = getTotalPrice();
+
+        const { data: orderData, error: orderError } = await supabase
+            .from('orders')
+            .insert({
+                client_id: profileData.id,
+                subtotal: total,
+                total: total,
+                status: 'pending',
+                payment_method: paymentMethod
+            })
+            .select()
+            .single();
+
+        if (orderError) throw orderError;
+
+        const orderItems = items.map((item: CartItem) => ({
+            order_id: orderData.id,
+            product_id: item.product.id,
+            quantity: item.quantity,
+            unit_price: item.product.price
+        }));
+
+        const { error: itemsError } = await supabase
+            .from('order_items')
+            .insert(orderItems);
+
+        if (itemsError) {
+            await supabase.from('orders').delete().eq('id', orderData.id);
+            throw itemsError;
+        }
+
+        // Descontar stock: si un producto falla, reponer lo ya descontado y abortar
+        const decremented: CartItem[] = [];
+        for (const item of items as CartItem[]) {
+            const { error: stockError } = await supabase.rpc('decrement_stock', {
+                p_product_id: item.product.id,
+                p_quantity: item.quantity
+            });
+
+            if (stockError) {
+                for (const done of decremented) {
+                    // cantidad negativa repone stock (la guarda stock >= p_quantity siempre pasa)
+                    await supabase.rpc('decrement_stock', {
+                        p_product_id: done.product.id,
+                        p_quantity: -done.quantity
+                    });
+                }
+                await supabase.from('orders').delete().eq('id', orderData.id);
+                throw new Error(`No hay stock suficiente de ${item.product.name}`);
+            }
+            decremented.push(item);
+        }
+    };
+
     const handleCheckout = async () => {
         if (!user) return;
         setIsProcessing(true);
 
         try {
-            const total = getTotalPrice();
+            // Orden + items + descuento de stock en una sola transacción (migración 005)
+            const { error: rpcError } = await supabase.rpc('create_order_with_items', {
+                p_payment_method: paymentMethod,
+                p_items: items.map((item: CartItem) => ({
+                    product_id: item.product.id,
+                    quantity: item.quantity
+                }))
+            });
 
-            // 1. Crear Orden
-            // Obtenemos el profile_id basado en el auth_user_id
-            const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('id')
-                .eq('id', user.id)
-                .single();
-
-            if (profileError || !profileData) throw new Error("Error al obtener perfil de usuario");
-
-            const { data: orderData, error: orderError } = await supabase
-                .from('orders')
-                .insert({
-                    client_id: profileData.id,
-                    subtotal: total,
-                    total: total,
-                    status: 'pending',
-                    payment_method: paymentMethod
-                })
-                .select()
-                .single();
-
-            if (orderError) throw orderError;
-
-            // 2. Crear Items de Orden
-            const orderItems = items.map((item: CartItem) => ({
-                order_id: orderData.id,
-                product_id: item.product.id,
-                quantity: item.quantity,
-                unit_price: item.product.price
-            }));
-
-            const { error: itemsError } = await supabase
-                .from('order_items')
-                .insert(orderItems);
-
-            if (itemsError) throw itemsError;
-
-            // 3. Descontar Stock (llamando a la RPC creada en migracion 004)
-            for (const item of items) {
-                const { error: stockError } = await supabase.rpc('decrement_stock', {
-                    p_product_id: item.product.id,
-                    p_quantity: item.quantity
-                });
-
-                if (stockError) {
-                    console.error("Error al descontar stock:", stockError);
-                    // No detenemos el flujo, pero idealmente manejaríamos esto mejor
+            if (rpcError) {
+                if (rpcError.code === 'PGRST202') {
+                    // La función todavía no fue migrada en esta DB
+                    await legacyCheckout();
+                } else if (rpcError.message?.includes('STOCK_INSUFICIENTE')) {
+                    const productName = rpcError.message.split('STOCK_INSUFICIENTE:')[1]?.trim();
+                    throw new Error(`No hay stock suficiente de ${productName || 'un producto del carrito'}`);
+                } else if (rpcError.message?.includes('PERFIL_NO_ENCONTRADO')) {
+                    throw new Error("No encontramos tu perfil. Cerrá sesión y volvé a ingresar.");
+                } else if (rpcError.message?.includes('PRODUCTO_NO_DISPONIBLE')) {
+                    throw new Error("Un producto del carrito ya no está disponible.");
+                } else {
+                    throw rpcError;
                 }
             }
 
-            // 4. Éxito
             clearCart();
             toast.success("¡Pedido confirmado!");
             router.push("/checkout/success");
