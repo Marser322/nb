@@ -44,9 +44,13 @@ export default function BarberoAgendaPage() {
             // Invocación oportunista del generador de turnos fijos (fire-and-forget)
             const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
             if (!isDummy) {
-                supabase.rpc("generate_subscription_appointments")
-                    .then(() => {})
-                    .catch((err) => console.error("Error generating subscription appointments:", err));
+                (async () => {
+                    try {
+                        await supabase.rpc("generate_subscription_appointments");
+                    } catch (err) {
+                        console.error("Error generating subscription appointments:", err);
+                    }
+                })();
             }
 
             const { data: { user } } = await supabase.auth.getUser();
