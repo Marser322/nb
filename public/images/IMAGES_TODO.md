@@ -1,10 +1,10 @@
-# Manifiesto de imágenes pendientes — NB Barber
+# Manifiesto de imágenes — NB Barber
 
-Este documento lista todas las imágenes que deben generarse/fotografiarse para reemplazar los
-placeholders temporales actualmente usados en `public/images/`. Todos los placeholders son copias
-de PNGs locales ya existentes (`public/lookbook/*.png`, `public/images/before-makeover.png`) y deben
-sustituirse por la definitiva en la MISMA ruta (mismo nombre de archivo) para que el código no
-requiera cambios.
+Este documento lista las imágenes críticas de `public/images/`. Los placeholders duplicados ya fueron
+reemplazados por assets generados con IA para demo. Para una sesión fotográfica real, sustituir cada
+archivo en la MISMA ruta para que el código no requiera cambios.
+
+Ver también `public/images/ASSET_PRODUCTION_BRIEF.md` para prompts, brief fotográfico y criterios QA.
 
 ## Estética global (aplicar a todas las imágenes salvo que se indique lo contrario)
 
@@ -34,7 +34,7 @@ requiera cambios.
 | `public/images/branches/sucursal-norte.png` | 800×600 (4:3) | Reservar, paso "Sucursal" — card "New Brothers Norte" | Interior de la sucursal Norte (shopping): moderno, luminoso pero manteniendo paleta oscura/dorada en el mobiliario. |
 | `public/images/branches/sucursal-beach.png` | 800×600 (4:3) | Reservar, paso "Sucursal" — card "New Brothers Beach" | Interior de la sucursal Beach (rambla costanera): toque relajado/costero sin perder la estética premium. |
 
-## Pendiente adicional (no requiere cambios de código, pero debe generarse)
+## Assets adicionales
 
 | Ruta exacta | Dimensiones | Dónde se usa | Descripción del contenido |
 |---|---|---|---|
