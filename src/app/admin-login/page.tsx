@@ -54,7 +54,7 @@ export default function AdminLoginPage() {
     return (
         <div className="min-h-screen w-full flex items-center justify-center bg-background relative overflow-hidden">
             {/* Background Effects */}
-            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=2070')] bg-cover bg-center opacity-10" />
+            <div className="absolute inset-0 bg-[url('/images/hero/herramientas-barberia.png')] bg-cover bg-center opacity-10" />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/95 to-background/50" />
 
             <Card className="w-full max-w-md mx-4 relative z-10 border-amber-500/20 bg-card/50 backdrop-blur-xl shadow-2xl">

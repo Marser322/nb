@@ -21,7 +21,7 @@ const services = [
     price: 450,
     duration: 30,
     icon: Scissors,
-    image: "https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=500&q=80",
+    image: "/images/hero/maquina-clippers.png",
   },
   {
     id: "2",
@@ -30,7 +30,7 @@ const services = [
     price: 750,
     duration: 60,
     icon: Sparkles,
-    image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=500&q=80",
+    image: "/images/hero/detalle-corte.png",
   },
   {
     id: "3",
@@ -39,7 +39,7 @@ const services = [
     price: 350,
     duration: 30,
     icon: Star,
-    image: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=500&q=80",
+    image: "/images/hero/herramientas-barberia.png",
   },
 ];
 
@@ -63,7 +63,7 @@ export default function HomePage() {
               transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
               className="relative w-24 h-24 md:w-40 md:h-40 opacity-30"
             >
-              <Image src="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=400&q=80" alt="Atmosphere" fill className="object-cover rounded-2xl grayscale border border-white/10" />
+              <Image src="/images/hero/ambiente-barberia.png" alt="Atmosphere" fill className="object-cover rounded-2xl grayscale border border-white/10" />
             </motion.div>
 
             <motion.div
@@ -71,7 +71,7 @@ export default function HomePage() {
               transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1 }}
               className="relative w-32 h-32 md:w-56 md:h-56 opacity-20 ml-8 md:ml-12"
             >
-              <Image src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=400&q=80" alt="Tools" fill className="object-cover rounded-full grayscale blur-[1px]" />
+              <Image src="/images/hero/herramientas-barberia.png" alt="Tools" fill className="object-cover rounded-full grayscale blur-[1px]" />
             </motion.div>
 
             <motion.div
@@ -79,7 +79,7 @@ export default function HomePage() {
               transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
               className="relative w-28 h-28 md:w-48 md:h-48 opacity-30"
             >
-              <Image src="https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=400&q=80" alt="Cut Detail" fill className="object-cover rounded-[30px]" />
+              <Image src="/images/hero/detalle-corte.png" alt="Cut Detail" fill className="object-cover rounded-[30px]" />
             </motion.div>
           </div>
 
@@ -90,7 +90,7 @@ export default function HomePage() {
               transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
               className="relative w-28 h-28 md:w-48 md:h-48 opacity-30"
             >
-              <Image src="https://images.unsplash.com/photo-1622286342621-4bd786c2447c?w=400&q=80" alt="Style" fill className="object-cover rounded-2xl border border-white/10" />
+              <Image src="/images/hero/estilo-moderno.png" alt="Style" fill className="object-cover rounded-2xl border border-white/10" />
             </motion.div>
 
             <motion.div
@@ -98,7 +98,7 @@ export default function HomePage() {
               transition={{ duration: 9, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
               className="relative w-32 h-32 md:w-56 md:h-56 opacity-20 mr-8 md:mr-12"
             >
-              <Image src="https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=400&q=80" alt="Machine" fill className="object-cover rounded-full grayscale blur-[1px]" />
+              <Image src="/images/hero/maquina-clippers.png" alt="Machine" fill className="object-cover rounded-full grayscale blur-[1px]" />
             </motion.div>
 
             <motion.div
@@ -106,7 +106,7 @@ export default function HomePage() {
               transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
               className="relative w-24 h-24 md:w-44 md:h-44 opacity-30"
             >
-              <Image src="https://images.unsplash.com/photo-1534297635766-a262cdcb8ee4?w=400&q=80" alt="Beard" fill className="object-cover rounded-[30px]" />
+              <Image src="/images/hero/detalle-barba.png" alt="Beard" fill className="object-cover rounded-[30px]" />
             </motion.div>
           </div>
 
@@ -298,7 +298,7 @@ export default function HomePage() {
               {/* Slider 1: Beard & Hair Transformation */}
               <BeforeAfterSlider
                 beforeImage="/images/before-makeover.png"
-                afterImage="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80"
+                afterImage="/images/after-makeover.png"
               />
               <div className="text-center">
                 <h3 className="text-xl font-bold text-white">Full Makeover</h3>
@@ -308,8 +308,8 @@ export default function HomePage() {
             <div className="space-y-4">
               {/* Slider 2: Sharp Fade Transformation */}
               <BeforeAfterSlider
-                beforeImage="https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=800&q=80"
-                afterImage="https://images.unsplash.com/photo-1622286342621-4bd786c2447c?w=800&q=80"
+                beforeImage="/images/hero/maquina-clippers.png"
+                afterImage="/images/hero/estilo-moderno.png"
               />
               <div className="text-center">
                 <h3 className="text-xl font-bold text-white">Classic Fade</h3>
@@ -329,7 +329,7 @@ export default function HomePage() {
       <section className="py-24 relative overflow-hidden">
         <div className="absolute inset-0">
           <Image
-            src="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?q=80&w=2074"
+            src="/images/hero/ambiente-barberia.png"
             alt="Background"
             fill
             className="object-cover opacity-20"

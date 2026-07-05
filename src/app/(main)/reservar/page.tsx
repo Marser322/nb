@@ -87,21 +87,21 @@ function ReservarPageContent() {
       id: 1,
       name: "New Brothers Central",
       address: "Av. Principal 1234, Centro",
-      image: "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800&q=80",
+      image: "/images/branches/sucursal-central.png",
       phone: "099 123 456"
     },
     {
       id: 2,
       name: "New Brothers Norte",
       address: "Shopping Norte, Local 5",
-      image: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80",
+      image: "/images/branches/sucursal-norte.png",
       phone: "098 765 432"
     },
     {
       id: 3,
       name: "New Brothers Beach",
       address: "Rambla Costanera 500",
-      image: "https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=800&q=80",
+      image: "/images/branches/sucursal-beach.png",
       phone: "091 112 233"
     }
   ];
@@ -369,7 +369,7 @@ function ReservarPageContent() {
                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
                 className="relative w-20 h-20 md:w-32 md:h-32 opacity-20"
               >
-                <Image src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=400&q=80" alt="Scissor" fill className="object-cover rounded-2xl grayscale border border-white/10" />
+                <Image src="/images/hero/herramientas-barberia.png" alt="Scissor" fill className="object-cover rounded-2xl grayscale border border-white/10" />
               </motion.div>
             </div>
 
@@ -379,7 +379,7 @@ function ReservarPageContent() {
                 transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1 }}
                 className="relative w-24 h-24 md:w-40 md:h-40 opacity-20"
               >
-                <Image src="https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=400&q=80" alt="Clippers" fill className="object-cover rounded-full grayscale blur-[1px]" />
+                <Image src="/images/hero/maquina-clippers.png" alt="Clippers" fill className="object-cover rounded-full grayscale blur-[1px]" />
               </motion.div>
             </div>
           </div>
@@ -540,7 +540,7 @@ function ReservarPageContent() {
                       className="absolute inset-0"
                     >
                       <Image
-                        src={hoveredService?.image_url || selectedService?.image_url || "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800&q=80"}
+                        src={hoveredService?.image_url || selectedService?.image_url || "/images/hero/ambiente-barberia.png"}
                         alt="Service Preview"
                         fill
                         className="object-cover opacity-60"
