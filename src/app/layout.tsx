@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { TourOverlay } from "@/components/tour/TourOverlay";
 import { HelpFab } from "@/components/tour/HelpFab";
+import { AiAssistant } from "@/components/chat/AiAssistant";
 import "./globals.css";
 
 const inter = Inter({
@@ -39,6 +40,7 @@ export default function RootLayout({
         {children}
         <TourOverlay />
         <HelpFab />
+        <AiAssistant />
         <Toaster position="top-right" richColors />
       </body>
     </html>
