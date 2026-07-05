@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 
+type ChatMessage = {
+  role: "user" | "assistant" | "system";
+  content: string;
+};
+
 // Base de conocimiento estática de NewBrothers
 const KNOWLEDGE_BASE = {
   salonName: "New Brothers | Salón de Estética Masculina",
@@ -36,9 +41,16 @@ const KNOWLEDGE_BASE = {
   ]
 };
 
+type AssistantData =
+  | { type: "services"; items: typeof KNOWLEDGE_BASE.services }
+  | { type: "branches"; items: typeof KNOWLEDGE_BASE.branches }
+  | { type: "styles"; items: typeof KNOWLEDGE_BASE.styles }
+  | { type: "products"; items: typeof KNOWLEDGE_BASE.products }
+  | { type: "action"; label: string; url: string };
+
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
+    const { messages } = (await req.json()) as { messages: ChatMessage[] };
     const lastMessage = messages[messages.length - 1];
     const userQuery = lastMessage.content.toLowerCase();
 
@@ -124,7 +136,7 @@ Pregunta del cliente: "${lastMessage.content}"`
     // FALLBACK INTELIGENTE (Motor de Reglas Semántico Local)
     // ==========================================
     let reply = "";
-    let data: any = null; // Para retornar información estructurada a la UI
+    let data: AssistantData | null = null; // Para retornar información estructurada a la UI
 
     // 1. Saludos
     if (userQuery.includes("hola") || userQuery.includes("buenas") || userQuery.includes("buen dia") || userQuery.includes("buena tarde")) {
@@ -201,7 +213,7 @@ Pregunta del cliente: "${lastMessage.content}"`
       content: reply,
       data
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in chat API handler:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },

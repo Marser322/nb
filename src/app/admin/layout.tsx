@@ -8,7 +8,6 @@ import {
     Calendar,
     Package,
     Wallet,
-    Scissors,
     LogOut,
     Menu,
     Building2,

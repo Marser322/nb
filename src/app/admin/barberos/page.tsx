@@ -52,8 +52,11 @@ export default function AdminBarberosPage() {
     }, [supabase]);
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        loadBarbers(false);
+        const timer = window.setTimeout(() => {
+            loadBarbers(false);
+        }, 0);
+
+        return () => window.clearTimeout(timer);
     }, [loadBarbers]);
 
     const handleSubmit = async (e: React.FormEvent) => {

@@ -2,23 +2,56 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, X, Send, Scissors, Sparkles, Calendar, MapPin, DollarSign, ArrowRight, User } from "lucide-react";
+import { MessageSquare, X, Send, Scissors, Sparkles, Calendar, MapPin, DollarSign, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import Image from "next/image";
+
+type ServiceItem = {
+  id: string;
+  name: string;
+  price: number;
+  duration: number;
+  desc: string;
+};
+
+type BranchItem = {
+  id: number;
+  name: string;
+  address: string;
+  phone: string;
+  hours: string;
+};
+
+type StyleItem = {
+  id: string;
+  name: string;
+  serviceId: string;
+  tags: string[];
+};
+
+type ProductItem = {
+  name: string;
+  price: number;
+  desc: string;
+};
+
+type MessageData =
+  | { type: "services"; items?: ServiceItem[] }
+  | { type: "branches"; items?: BranchItem[] }
+  | { type: "styles"; items?: StyleItem[] }
+  | { type: "products"; items?: ProductItem[] }
+  | { type: "action"; label?: string; url?: string };
+
+type ChatResponse = {
+  content: string;
+  data?: MessageData;
+};
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  data?: {
-    type: "services" | "branches" | "styles" | "products" | "action";
-    items?: any[];
-    label?: string;
-    url?: string;
-  };
+  data?: MessageData;
 }
 
 const QUICK_ACTIONS = [
@@ -68,7 +101,7 @@ export function AiAssistant() {
 
       if (!response.ok) throw new Error("Failed to fetch");
 
-      const data = await response.json();
+      const data = (await response.json()) as ChatResponse;
       setMessages((prev) => [
         ...prev,
         {
@@ -181,7 +214,7 @@ export function AiAssistant() {
                         {/* Services List Card */}
                         {msg.data.type === "services" && msg.data.items && (
                           <div className="space-y-1.5">
-                            {msg.data.items.map((service: any) => (
+                            {msg.data.items.map((service) => (
                               <Link
                                 key={service.id}
                                 href={`/reservar?serviceId=${service.id}`}
@@ -203,7 +236,7 @@ export function AiAssistant() {
                         {/* Styles Lookbook Suggestions Card */}
                         {msg.data.type === "styles" && msg.data.items && (
                           <div className="grid grid-cols-2 gap-2">
-                            {msg.data.items.map((style: any) => (
+                            {msg.data.items.map((style) => (
                               <Link
                                 key={style.id}
                                 href={`/reservar?styleId=${style.id}&serviceId=${style.serviceId}`}
@@ -221,7 +254,7 @@ export function AiAssistant() {
                         {/* Products Card */}
                         {msg.data.type === "products" && msg.data.items && (
                           <div className="space-y-1.5">
-                            {msg.data.items.map((prod: any, idx: number) => (
+                            {msg.data.items.map((prod, idx) => (
                               <div
                                 key={idx}
                                 className="flex justify-between items-center bg-white/5 p-2 rounded-lg border border-white/5 text-xs"

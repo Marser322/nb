@@ -438,7 +438,13 @@ function ReservarPageContent() {
                     ¿Qué servicio necesitás?
                   </h2>
                   <div className="space-y-3">
-                    {services.map((service) => (
+                    {isLoading ? (
+                      <Card className="bg-card/50 border-white/10">
+                        <CardContent className="p-6 text-sm text-muted-foreground">
+                          Cargando servicios...
+                        </CardContent>
+                      </Card>
+                    ) : services.map((service) => (
                       <Card
                         key={service.id}
                         className={cn(
