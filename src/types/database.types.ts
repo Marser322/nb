@@ -203,3 +203,43 @@ export interface Subscription {
 
 
 
+// Schema mínimo para tipar SupabaseClient (no es el tipo generado por la CLI;
+// cubre lo que consume src/lib/booking.ts — ampliar a medida que haga falta).
+// Los Row usan mapped types porque las interfaces no satisfacen Record<string, unknown>.
+export interface Database {
+  public: {
+    Tables: {
+      appointments: {
+        Row: { [K in keyof Appointment]: Appointment[K] }
+        Insert: { [K in keyof Appointment]?: Appointment[K] }
+        Update: { [K in keyof Appointment]?: Appointment[K] }
+        Relationships: []
+      }
+    }
+    Views: Record<string, never>
+    Functions: {
+      get_booked_slots: {
+        Args: { p_barber_id: string; p_date: string }
+        Returns: { start_time: string; end_time: string }[]
+      }
+      book_appointment: {
+        Args: {
+          p_barber_id: string
+          p_service_id: string
+          p_date: string
+          p_start_time: string
+          p_recurring?: boolean
+          p_style_reference?: string | null
+          p_notes?: string | null
+        }
+        Returns: { appointment_id: string; subscription_id: string | null }
+      }
+      cancel_appointment: {
+        Args: { p_appointment_id: string }
+        Returns: undefined
+      }
+    }
+    Enums: Record<string, never>
+    CompositeTypes: Record<string, never>
+  }
+}
