@@ -153,35 +153,46 @@ function ReservarPageContent() {
     }
   }, [paramStyleId]);
 
+  // Citas que bloquean agenda (pendientes o confirmadas) de un barbero en una fecha.
+  // Usa la RPC get_booked_slots (migración 006), que devuelve solo horarios sin
+  // exponer datos de otros clientes; si aún no está migrada, consulta directa.
+  const fetchActiveAppointments = async (
+    barberId: string,
+    dateStr: string
+  ): Promise<{ start_time: string; end_time: string }[]> => {
+    const { data, error } = await supabase.rpc("get_booked_slots", {
+      p_barber_id: barberId,
+      p_date: dateStr,
+    });
+    if (!error) return data ?? [];
+
+    const { data: direct } = await supabase
+      .from("appointments")
+      .select("start_time, end_time")
+      .eq("barber_id", barberId)
+      .eq("appointment_date", dateStr)
+      .in("status", ["pending", "confirmed"]);
+    return direct ?? [];
+  };
+
+  // Un slot está ocupado si cae dentro del rango [inicio, fin) de alguna cita
+  const computeBookedSlots = (
+    appointments: { start_time: string; end_time: string }[]
+  ): string[] =>
+    timeSlots.filter((slot) =>
+      appointments.some(
+        (apt) => slot >= apt.start_time.slice(0, 5) && slot < apt.end_time.slice(0, 5)
+      )
+    );
+
   // Cargar slots ocupados cuando cambia barbero o fecha
   useEffect(() => {
     async function loadBookedSlots() {
       if (!selectedBarber || !selectedDate) return;
 
       const dateStr = format(selectedDate, "yyyy-MM-dd");
-      const { data } = await supabase
-        .from("appointments")
-        .select("start_time, end_time")
-        .eq("barber_id", selectedBarber.id)
-        .eq("appointment_date", dateStr)
-        .not("status", "in", '("cancelled")');
-
-      if (data) {
-        const booked: string[] = [];
-        data.forEach((apt) => {
-          const slots = generateTimeSlots(
-            BUSINESS_CONFIG.workingHours.start,
-            BUSINESS_CONFIG.workingHours.end,
-            BUSINESS_CONFIG.timeSlotMinutes || 30
-          );
-          const startIdx = slots.indexOf(apt.start_time.slice(0, 5));
-          const endIdx = slots.indexOf(apt.end_time.slice(0, 5));
-          for (let i = startIdx; i < endIdx; i++) {
-            if (slots[i]) booked.push(slots[i]);
-          }
-        });
-        setBookedSlots(booked);
-      }
+      const appointments = await fetchActiveAppointments(selectedBarber.id, dateStr);
+      setBookedSlots(computeBookedSlots(appointments));
     }
     loadBookedSlots();
   }, [selectedBarber, selectedDate]);
@@ -268,12 +279,14 @@ function ReservarPageContent() {
       return;
     }
 
-    // Obtener profile_id
+    // Obtener profile_id (tolera schemas donde profiles.id == auth.uid()
+    // o donde el trigger de signup usa auth_user_id)
     const { data: profile } = await supabase
       .from("profiles")
       .select("id")
-      .eq("id", user.id)
-      .single();
+      .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+      .limit(1)
+      .maybeSingle();
 
     if (!profile) {
       toast.error("Error al obtener tu perfil");
@@ -282,12 +295,30 @@ function ReservarPageContent() {
     }
 
     const endTime = calculateEndTime(selectedTime, selectedService.duration_minutes);
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+
+    // Revalidar disponibilidad justo antes de insertar: otro cliente pudo reservar
+    // un horario solapado mientras este usuario completaba el wizard (el índice
+    // único de la DB solo cubre coincidencia exacta de start_time, no solapes)
+    const existing = await fetchActiveAppointments(selectedBarber.id, dateStr);
+    const hasConflict = existing.some(
+      (apt) => selectedTime < apt.end_time.slice(0, 5) && apt.start_time.slice(0, 5) < endTime
+    );
+
+    if (hasConflict) {
+      toast.error("Ese horario acaba de ser reservado por otro cliente. Por favor elegí otro.");
+      setBookedSlots(computeBookedSlots(existing));
+      setSelectedTime(null);
+      setCurrentStep(4);
+      setIsSubmitting(false);
+      return;
+    }
 
     const { error } = await supabase.from("appointments").insert({
       client_id: profile.id,
       barber_id: selectedBarber.id,
       service_id: selectedService.id,
-      appointment_date: format(selectedDate, "yyyy-MM-dd"),
+      appointment_date: dateStr,
       start_time: selectedTime,
       end_time: endTime,
       status: "pending",
@@ -297,6 +328,10 @@ function ReservarPageContent() {
     if (error) {
       if (error.code === "23505") {
         toast.error("Ese horario ya fue reservado. Por favor elegí otro.");
+        const refreshed = await fetchActiveAppointments(selectedBarber.id, dateStr);
+        setBookedSlots(computeBookedSlots(refreshed));
+        setSelectedTime(null);
+        setCurrentStep(4);
       } else {
         toast.error("Error al crear la reserva. Intentá de nuevo.");
       }
