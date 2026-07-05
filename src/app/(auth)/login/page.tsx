@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Scissors, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,11 +12,13 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
 
-export default function LoginPage() {
+function LoginPageContent() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const nextParam = searchParams.get("next");
     const supabase = createClient();
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -45,7 +47,11 @@ export default function LoginPage() {
         }
 
         toast.success("¡Bienvenido de nuevo!");
-        router.push(ROUTES.HOME);
+        
+        // Validar que el parámetro next empiece con '/' para evitar open redirect
+        const redirectTo = nextParam && nextParam.startsWith("/") ? nextParam : ROUTES.HOME;
+        
+        router.push(redirectTo);
         router.refresh();
     };
 
@@ -130,3 +136,19 @@ export default function LoginPage() {
         </Card>
     );
 }
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={
+            <Card className="border-border/50 bg-card/50 backdrop-blur">
+                <CardContent className="p-8 flex items-center justify-center text-white">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
+                    Cargando...
+                </CardContent>
+            </Card>
+        }>
+            <LoginPageContent />
+        </Suspense>
+    );
+}
+
