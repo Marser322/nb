@@ -53,9 +53,9 @@ CREATE TABLE services (
 
 -- Insertar servicios iniciales
 INSERT INTO services (name, description, price, duration_minutes, image_url, sort_order) VALUES
-    ('Corte Clásico', 'Corte de precisión adaptado a tu estilo personal', 450, 30, '/images/hero/maquina-clippers.png', 1),
-    ('Corte + Barba', 'El combo completo para el caballero moderno', 750, 60, '/images/hero/detalle-corte.png', 2),
-    ('Diseño de Barba', 'Perfilado y mantenimiento profesional', 350, 30, '/images/hero/detalle-barba.png', 3);
+    ('Corte Clásico', 'Corte de precisión adaptado a tu estilo personal', 450, 30, '/images/hero/maquina-clippers.jpg', 1),
+    ('Corte + Barba', 'El combo completo para el caballero moderno', 750, 60, '/images/hero/detalle-corte.jpg', 2),
+    ('Diseño de Barba', 'Perfilado y mantenimiento profesional', 350, 30, '/images/hero/detalle-barba.jpg', 3);
 
 -- 5. TABLA: APPOINTMENTS (Citas)
 -- =====================================================

@@ -634,20 +634,39 @@ function ReservarPageContent() {
                           setCurrentStep(2);
                         }}
                         onMouseEnter={() => setHoveredService(service)}
+                        onMouseLeave={() => setHoveredService(null)}
                       >
                         <CardContent className="p-6 relative z-10">
-                          <div className="flex justify-between items-start mb-2 opacity-90 group-hover:opacity-100 transition-opacity">
-                            <h3 className="font-bold text-lg">{service.name}</h3>
-                            <Badge variant="secondary" className="bg-muted border-border group-hover:border-primary/30 transition-colors">
-                              {service.duration_minutes} min
-                            </Badge>
+                          <div className="flex items-start gap-4">
+                            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border bg-muted lg:hidden">
+                              {service.image_url ? (
+                                <Image
+                                  src={service.image_url}
+                                  alt={service.name}
+                                  fill
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <Scissors className="h-6 w-6 text-muted-foreground" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex justify-between items-start mb-2 opacity-90 group-hover:opacity-100 transition-opacity">
+                                <h3 className="font-bold text-lg">{service.name}</h3>
+                                <Badge variant="secondary" className="bg-muted border-border group-hover:border-primary/30 transition-colors">
+                                  {service.duration_minutes} min
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mb-4 group-hover:text-foreground transition-colors">
+                                {service.description}
+                              </p>
+                              <p className="text-xl font-bold text-primary">
+                                {formatPrice(service.price)}
+                              </p>
+                            </div>
                           </div>
-                          <p className="text-xs text-muted-foreground mb-4 group-hover:text-foreground transition-colors">
-                            {service.description}
-                          </p>
-                          <p className="text-xl font-bold text-primary">
-                            {formatPrice(service.price)}
-                          </p>
                         </CardContent>
                         <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/5 to-primary/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
                       </Card>
