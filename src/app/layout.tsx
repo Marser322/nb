@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TourOverlay } from "@/components/tour/TourOverlay";
 import { HelpFab } from "@/components/tour/HelpFab";
 import { AiAssistant } from "@/components/chat/AiAssistant";
+import { ThemeProvider } from "@/components/theme-provider";
 import { BUSINESS_CONFIG } from "@/lib/constants";
 import "./globals.css";
 
@@ -82,7 +83,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="dark">
+    <html lang="es" suppressHydrationWarning>
       <head>
         <script
           type="application/ld+json"
@@ -92,11 +93,18 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${oswald.variable} font-sans antialiased`}
       >
-        {children}
-        <TourOverlay />
-        <HelpFab />
-        <AiAssistant />
-        <Toaster position="top-right" richColors />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          {children}
+          <TourOverlay />
+          <HelpFab />
+          <AiAssistant />
+          <Toaster position="top-right" richColors />
+        </ThemeProvider>
       </body>
     </html>
   );
