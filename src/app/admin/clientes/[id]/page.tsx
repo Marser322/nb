@@ -370,13 +370,13 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                                     <TableCell className="font-semibold text-foreground pl-6 py-4">
                                                         {apt.service?.name || "Servicio eliminado"}
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 text-sm">
+                                                    <TableCell className="text-muted-foreground text-sm">
                                                         {format(parseISO(apt.appointment_date), "d 'de' MMMM, yyyy", { locale: es })}
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 font-mono text-sm">
+                                                    <TableCell className="text-muted-foreground font-mono text-sm">
                                                         {apt.start_time.slice(0, 5)} - {apt.end_time.slice(0, 5)}
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 text-sm">
+                                                    <TableCell className="text-muted-foreground text-sm">
                                                         {apt.barber?.name || "Sin asignar"}
                                                     </TableCell>
                                                     <TableCell>
@@ -438,7 +438,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                             </span>
                                         </div>
                                         {haircut.notes && (
-                                            <p className="text-sm text-zinc-300 border-l border-primary/30 pl-3 italic">
+                                            <p className="text-sm text-muted-foreground border-l border-primary/30 pl-3 italic">
                                                 &quot;{haircut.notes}&quot;
                                             </p>
                                         )}
@@ -498,10 +498,10 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                                     <TableCell className="font-mono text-xs font-semibold text-foreground pl-6 py-4">
                                                         {order.id.slice(0, 8).toUpperCase()}
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 text-sm">
+                                                    <TableCell className="text-muted-foreground text-sm">
                                                         {format(parseISO(order.created_at), "dd/MM/yyyy HH:mm")}
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 text-sm max-w-[200px]">
+                                                    <TableCell className="text-muted-foreground text-sm max-w-[200px]">
                                                         <div className="flex flex-col gap-1">
                                                             {order.items?.map((item) => (
                                                                 <span key={item.id} className="text-xs line-clamp-1">
@@ -510,7 +510,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                                             ))}
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 text-xs font-medium">
+                                                    <TableCell className="text-muted-foreground text-xs font-medium">
                                                         {order.payment_method ? (paymentMethodLabels[order.payment_method] || order.payment_method) : "—"}
                                                     </TableCell>
                                                     <TableCell>
@@ -566,13 +566,13 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
 
                                             return (
                                                 <TableRow key={msg.id} className="border-b border-border/30">
-                                                    <TableCell className="text-zinc-300 text-sm pl-6 py-4">
+                                                    <TableCell className="text-muted-foreground text-sm pl-6 py-4">
                                                         {format(parseISO(msg.sent_at), "dd/MM/yyyy HH:mm")}
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 text-sm font-mono">
+                                                    <TableCell className="text-muted-foreground text-sm font-mono">
                                                         {msg.client_phone || "—"}
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 text-xs max-w-md break-words leading-normal">
+                                                    <TableCell className="text-muted-foreground text-xs max-w-md break-words leading-normal">
                                                         {msg.message_sent}
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">

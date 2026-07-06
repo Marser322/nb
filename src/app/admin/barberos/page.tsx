@@ -462,7 +462,7 @@ export default function AdminBarberosPage() {
                                         }}
                                         className="data-[state=checked]:bg-primary"
                                     />
-                                    <label htmlFor="use-custom-hours" className="text-sm font-medium text-white cursor-pointer select-none">
+                                    <label htmlFor="use-custom-hours" className="text-sm font-medium text-foreground cursor-pointer select-none">
                                         Horario personalizado
                                     </label>
                                 </div>

@@ -36,7 +36,23 @@ where auth_user_id = (
    - Site URL: dominio final, por ejemplo `https://newbrothers.uy`.
    - Redirect URLs: agregar `https://newbrothers.uy/actualizar-password`.
 
-## 2. Variables de entorno
+## 2. Configuración de Storage (Bucket 'media')
+
+La plataforma requiere un bucket de Supabase Storage llamado `media` para alojar las imágenes de productos y cortes subidas desde el panel de administración.
+
+1. **Crear el bucket**:
+   - Ingresar a **Storage** en el menú lateral de Supabase.
+   - Hacer clic en **New Bucket** y asignarle el nombre `media`.
+   - Marcar el bucket como **Public** para habilitar la lectura directa de las imágenes.
+2. **Políticas de Seguridad (RLS)**:
+   - Las políticas se crean automáticamente mediante la migración `016_storage_setup.sql` (o en `999_FULL_SETUP.sql`).
+   - En caso de configurarlas manualmente desde la interfaz de Supabase (si el SQL Editor de tu usuario tiene restricciones sobre la tabla `storage.objects`), agregar las siguientes políticas para el bucket `media`:
+     - **Lectura Pública**: Comando `SELECT` permitido para rol `public` si `bucket_id = 'media'`.
+     - **Inserción Admin**: Comando `INSERT` para rol `authenticated` con control `bucket_id = 'media' AND public.is_admin()`.
+     - **Edición Admin**: Comando `UPDATE` para rol `authenticated` con control `bucket_id = 'media' AND public.is_admin()`.
+     - **Borrado Admin**: Comando `DELETE` para rol `authenticated` con control `bucket_id = 'media' AND public.is_admin()`.
+
+## 3. Variables de entorno
 
 Usar `.env.example` como referencia.
 
@@ -61,7 +77,7 @@ No cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel ni en variables publicas del fro
 supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-## 3. Backup diario desde el VPS
+## 4. Backup diario desde el VPS
 
 El free tier de Supabase no incluye backups automaticos. El script del repo esta en `scripts/backup-supabase.sh` y esta pensado para copiarse al VPS.
 
@@ -117,7 +133,7 @@ createdb nbbarber_restore_test
 pg_restore -d nbbarber_restore_test /var/backups/nbbarber/nbbarber-YYYY-MM-DD.dump
 ```
 
-## 4. Deploy del front
+## 5. Deploy del front
 
 Opcion recomendada: Vercel.
 
@@ -147,7 +163,7 @@ npm run start
 
 Vercel conviene para este proyecto porque Next 16 queda con previews por PR y cero configuracion de runtime. VPS tiene sentido si Mario quiere controlar toda la infraestructura desde el inicio.
 
-## 5. Verificaciones de produccion
+## 6. Verificaciones de produccion
 
 1. App publica:
    - home carga con imagenes locales.
@@ -176,7 +192,7 @@ Un anonimo no debe poder leer datos sensibles de `profiles` ni `communication_lo
    - el cron genero un dump.
    - el dump restaura en una DB local de prueba.
 
-## 6. Migracion futura
+## 7. Migracion futura
 
 Cuando el negocio lo justifique:
 

@@ -578,7 +578,7 @@ function ReservarPageContent() {
                           <MapPin className="h-4 w-4 text-primary" />
                           {branch.address}
                         </p>
-                        <p className="text-xs text-zinc-400 mb-3">
+                        <p className="text-xs text-muted-foreground mb-3">
                           {branch.tone}
                         </p>
                         <p className="text-xs text-muted-foreground flex items-center gap-2">
@@ -642,7 +642,7 @@ function ReservarPageContent() {
                               {service.duration_minutes} min
                             </Badge>
                           </div>
-                          <p className="text-xs text-muted-foreground mb-4 group-hover:text-gray-300 transition-colors">
+                          <p className="text-xs text-muted-foreground mb-4 group-hover:text-foreground transition-colors">
                             {service.description}
                           </p>
                           <p className="text-xl font-bold text-primary">

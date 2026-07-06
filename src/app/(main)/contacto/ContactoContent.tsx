@@ -99,7 +99,7 @@ export function ContactoContent() {
                                 whileInView={{ opacity: 1, x: 0 }}
                                 viewport={{ once: true }}
                                 transition={{ duration: 0.7 }}
-                                className="relative aspect-[4/5] rounded-3xl overflow-hidden border border-white/10 shadow-2xl"
+                                className="relative aspect-[4/5] rounded-3xl overflow-hidden border border-border shadow-2xl"
                             >
                                 <Image
                                     src="/images/hero/ambiente-barberia.jpg"
@@ -120,10 +120,10 @@ export function ContactoContent() {
                                 <p className="font-display text-sm uppercase tracking-[0.25em] text-primary mb-4">
                                     Nuestra Historia
                                 </p>
-                                <h2 className="text-3xl md:text-5xl font-bold mb-8 leading-tight text-white">
+                                <h2 className="text-3xl md:text-5xl font-bold mb-8 leading-tight text-foreground">
                                     Más de 5 años afilando el oficio
                                 </h2>
-                                <div className="space-y-5 text-zinc-300 leading-relaxed">
+                                <div className="space-y-5 text-muted-foreground leading-relaxed">
                                     <p>
                                         New Brothers nació de una idea simple: un corte de pelo es una decisión, no un
                                         trámite. Empezamos como un sillón y una tijera en el centro de Montevideo, con
