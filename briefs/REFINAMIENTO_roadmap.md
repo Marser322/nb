@@ -36,6 +36,16 @@ Prioridad sugerida (cada una = un brief cuando se active):
 7. **Mercado Pago** (pagos online en checkout + webhook) — diferido; retomar cuando se decida.
 8. **Recordatorios automáticos con proveedor real** (email Resend o WhatsApp Cloud API) — hoy es manual; la Edge Function `send-reminders` quedó en solo-lectura.
 
+## Puerta de deploy (checklist antes de ir a producción)
+Repo conectado a GitHub (`github.com/Marser322/nb`) con integración Vercel: **push = deploy** (push a rama → preview; merge a `main` → producción). No hace falta el token de Vercel para esto.
+Antes de mergear a `main`:
+1. [ ] FASE 13 cerrada y verificada en navegador (modo claro sin parches, imágenes < 400 KB, upload funcionando).
+2. [ ] Migraciones **014, 015, 016** aplicadas a la Supabase de producción (+ verificación: haircut_history se puebla, flags existen, bucket `media` operativo).
+3. [ ] Env vars en Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL` (dominio real). Opcional IA: `GEMINI_API_KEY`/`OPENAI_API_KEY`.
+4. [ ] `npm run build` verde + smoke test en URL de **preview** (push de la rama) antes del merge.
+5. [ ] Merge `fix/crm-flujos-funcionales` → `main` → deploy de producción.
+**Seguridad:** revocar/rotar el token de Vercel que se compartió en chat. No se guarda en el repo ni en memoria.
+
 ## Convenciones para todos los briefs
 - Estética "lujo minimalista" (negro + dorado `#D4AF37`), español en todo lo visible, shadcn/ui + framer-motion.
 - **Regla de oro (aprendida)**: cualquier guard `if (!isLoaded || !features.X) return <loader/>` va **después de todos los hooks**, nunca entre `useState`.
