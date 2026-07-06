@@ -8,6 +8,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { TourStep, useTourStore } from '@/lib/store/tour-store';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, CheckCircle2, Sparkles, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function TourOverlay() {
     const { isOpen, currentTourKey, steps, currentStepIndex, nextStep, prevStep, closeTour } = useTourStore();
@@ -25,10 +26,21 @@ export function TourOverlay() {
     useEffect(() => {
         if (!isOpen || !currentStep) return;
 
+        // Todas las actualizaciones de estado quedan dentro de un rAF: el efecto solo
+        // suscribe listeners y programa el primer tick, nunca llama setState de forma
+        // síncrona en su cuerpo (evita cascading renders / lint set-state-in-effect).
+        let rafId = 0;
+        let cancelled = false;
+
         // Paso tipo modal centrado (sin target concreto)
         if (currentStep.target === 'body') {
-            setTargetRect(null);
-            return;
+            rafId = requestAnimationFrame(() => {
+                if (!cancelled) setTargetRect(null);
+            });
+            return () => {
+                cancelled = true;
+                cancelAnimationFrame(rafId);
+            };
         }
 
         const element = document.querySelector(currentStep.target);
@@ -38,10 +50,16 @@ export function TourOverlay() {
         const rect0 = element?.getBoundingClientRect();
         const notVisible = !element || !rect0 || (rect0.width === 0 && rect0.height === 0);
         if (notVisible) {
-            if (skipDirection.current >= 0 && currentStepIndex < steps.length - 1) { nextStep(); return; }
-            if (skipDirection.current < 0 && currentStepIndex > 0) { prevStep(); return; }
-            setTargetRect(null); // sin paso vecino disponible → centrado sin spotlight
-            return;
+            rafId = requestAnimationFrame(() => {
+                if (cancelled) return;
+                if (skipDirection.current >= 0 && currentStepIndex < steps.length - 1) { nextStep(); return; }
+                if (skipDirection.current < 0 && currentStepIndex > 0) { prevStep(); return; }
+                setTargetRect(null); // sin paso vecino disponible → centrado sin spotlight
+            });
+            return () => {
+                cancelled = true;
+                cancelAnimationFrame(rafId);
+            };
         }
 
         const el = element;
@@ -51,14 +69,13 @@ export function TourOverlay() {
             setTargetRect(rect.width === 0 && rect.height === 0 ? null : rect);
         };
 
-        // Llevar el elemento al centro y leer su posición al instante
+        // Llevar el elemento al centro y leer su posición en el próximo frame
         el.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
-        update();
 
         // Acompañar el scroll suave por ~900ms para que el recuadro termine alineado
-        let rafId = 0;
         let elapsed = 0;
         const tick = () => {
+            if (cancelled) return;
             update();
             elapsed += 16;
             if (elapsed < 900) rafId = requestAnimationFrame(tick);
@@ -70,6 +87,7 @@ export function TourOverlay() {
         window.addEventListener('resize', update);
 
         return () => {
+            cancelled = true;
             cancelAnimationFrame(rafId);
             window.removeEventListener('scroll', update, { capture: true } as EventListenerOptions);
             window.removeEventListener('resize', update);
@@ -100,7 +118,14 @@ export function TourOverlay() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.28, ease: [0.16, 1, 0.3, 1] }}
-                className="pointer-events-auto absolute inset-0 bg-background/70 backdrop-blur-[3px] transition-colors duration-500"
+                className={cn(
+                    "pointer-events-auto absolute inset-0 transition-colors duration-500",
+                    // Con target: el padre queda transparente y el oscurecido exterior lo hace
+                    // SOLO el box-shadow del spotlight hijo, así el interior del recorte queda
+                    // 100% nítido (sin velo ni blur encima del elemento enfocado).
+                    // Sin target (pasos centrados tipo modal): se mantiene el velo + blur completos.
+                    targetRect ? "bg-transparent" : "bg-background/70 backdrop-blur-[3px]"
+                )}
             >
                 {targetRect && (
                     <motion.div
@@ -114,7 +139,7 @@ export function TourOverlay() {
                             width: targetRect.width + 20,
                             height: targetRect.height + 20,
                             borderRadius: '16px',
-                            boxShadow: '0 0 0 9999px color-mix(in oklab, var(--background) 78%, transparent), 0 0 44px color-mix(in oklab, var(--primary) 45%, transparent)',
+                            boxShadow: '0 0 0 9999px color-mix(in oklab, var(--background) 85%, transparent), 0 0 44px color-mix(in oklab, var(--primary) 45%, transparent), inset 0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent)',
                             border: '1px solid color-mix(in oklab, var(--primary) 62%, transparent)',
                             zIndex: 10
                         }}
