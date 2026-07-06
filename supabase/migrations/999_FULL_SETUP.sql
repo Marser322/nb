@@ -1179,7 +1179,8 @@ BEGIN
     RAISE EXCEPTION 'METODO_INVALIDO';
   END IF;
 
-  SELECT a.id, a.status, a.barber_id, b.branch_id AS barber_branch_id
+  SELECT a.id, a.status, a.barber_id, a.client_id, a.service_id,
+         b.branch_id AS barber_branch_id
   INTO v_apt
   FROM appointments a
   JOIN barbers b ON b.id = a.barber_id
@@ -1212,6 +1213,12 @@ BEGIN
     VALUES ('income', 'tip', p_tip_amount, p_payment_method,
       'Propina', v_apt.barber_id, p_appointment_id,
       v_apt.barber_branch_id, auth.uid());
+  END IF;
+
+  -- Registrar en el historial de cortes (fidelización). Solo clientes con perfil.
+  IF v_apt.client_id IS NOT NULL THEN
+    INSERT INTO haircut_history (client_id, barber_id, service_id, appointment_id)
+    VALUES (v_apt.client_id, v_apt.barber_id, v_apt.service_id, p_appointment_id);
   END IF;
 END; $$;
 

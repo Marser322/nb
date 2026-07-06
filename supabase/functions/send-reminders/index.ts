@@ -101,41 +101,30 @@ Deno.serve(async (req) => {
             }
         }
 
-        // 4. Enviar Mensajes (Simulación) y Loguear
-        const logs = []
-
-        for (const client of clientsToRemind) {
-            // Verificar si ya se le envió mensaje recientemente (ej: en los últimos 7 días)
-            // Para evitar spam diario.
-            // (Omitido por simplicidad en esta versión v1, pero recomendable)
-
-            const message = config.message_template.replace('{nombre}', client.name || 'Cliente')
-
-            // AQUÍ IRÍA LA LLAMADA A WHATSAPP API (Twilio/Meta)
-            // await sendWhatsApp(client.phone, message)
-
-            // Loguear intento
-            const { error: logError } = await supabaseClient
-                .from('communication_logs')
-                .insert({
-                    client_name: client.name,
-                    client_phone: client.phone,
-                    message_sent: message,
-                    status: 'sent', // Simulado
-                    metadata: { days_inactive: client.daysSince }
-                })
-
-            if (!logError) {
-                logs.push({ phone: client.phone, status: 'sent' })
-            }
-        }
+        // 4. Devolver la lista de candidatos (SOLO LECTURA).
+        //
+        // Decisión de producto: el envío de recordatorios es MANUAL (wa.me) desde
+        // el panel admin — ver /admin/clientes?filtro=inactivos y SendWhatsappDialog,
+        // que abre WhatsApp y registra el envío real en communication_logs.
+        //
+        // Por eso esta función NO envía mensajes ni escribe en communication_logs:
+        // hacerlo fabricaría logs con status 'sent' para mensajes que nunca se
+        // enviaron. Sirve como endpoint de diagnóstico para inspeccionar a quién
+        // habría que recordar según reminders_config.days_since_last_visit.
+        const candidates = clientsToRemind.map((client) => ({
+            name: client.name,
+            phone: client.phone,
+            message_preview: config.message_template.replace('{nombre}', client.name || 'Cliente'),
+            days_inactive: client.daysSince,
+        }))
 
         return new Response(
             JSON.stringify({
                 success: true,
-                candidates_found: clientsToRemind.length,
-                messages_sent: logs.length,
-                processed_clients: logs
+                mode: 'read-only',
+                days_limit: DAYS_LIMIT,
+                candidates_found: candidates.length,
+                candidates,
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
