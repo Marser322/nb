@@ -20,16 +20,18 @@ import { useCartStore } from "@/stores/cartStore";
 import { createClient } from "@/lib/supabase/client";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { useFeatures } from "@/lib/features";
 
 const navLinks = [
     { href: ROUTES.HOME, label: "Inicio" },
     { href: ROUTES.RESERVAR, label: "Reservar" },
-    { href: ROUTES.TIENDA, label: "Tienda" },
+    { href: ROUTES.TIENDA, label: "Tienda", feature: "tienda" },
     { href: ROUTES.LOOKBOOK, label: "Lookbook" },
     { href: ROUTES.CONTACTO, label: "Contacto" },
 ];
 
 export function Header() {
+    const { features } = useFeatures();
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -37,6 +39,10 @@ export function Header() {
     const openCart = useCartStore((state) => state.openCart);
     const supabase = createClient();
     const router = useRouter();
+
+    const filteredNavLinks = navLinks.filter(
+        (link) => !("feature" in link) || features[link.feature as keyof typeof features]
+    );
 
     useEffect(() => {
         const handleScroll = () => {
@@ -107,7 +113,7 @@ export function Header() {
 
                     {/* Desktop Navigation */}
                     <div className="hidden md:flex items-center gap-8">
-                        {navLinks.map((link) => (
+                        {filteredNavLinks.map((link) => (
                             <Link
                                 key={link.href}
                                 href={link.href}
@@ -129,19 +135,21 @@ export function Header() {
                         </Button>
 
                         {/* Cart */}
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="relative"
-                            onClick={openCart}
-                        >
-                            <ShoppingBag className="h-5 w-5" />
-                            {totalItems > 0 && (
-                                <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-[10px] font-bold flex items-center justify-center text-primary-foreground">
-                                    {totalItems}
-                                </span>
-                            )}
-                        </Button>
+                        {features.tienda && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="relative"
+                                onClick={openCart}
+                            >
+                                <ShoppingBag className="h-5 w-5" />
+                                {totalItems > 0 && (
+                                    <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-[10px] font-bold flex items-center justify-center text-primary-foreground">
+                                        {totalItems}
+                                    </span>
+                                )}
+                            </Button>
+                        )}
 
                         {/* User Menu */}
                         {user ? (
@@ -218,7 +226,7 @@ export function Header() {
                                         </div>
                                     )}
 
-                                    {navLinks.map((link) => (
+                                    {filteredNavLinks.map((link) => (
                                         <Link
                                             key={link.href}
                                             href={link.href}

@@ -23,8 +23,10 @@ import type { ClientOverview } from "@/types/database.types";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
+import { useFeatures } from "@/lib/features";
 
 function ClientesList() {
+    const { features } = useFeatures();
     const [clients, setClients] = useState<ClientOverview[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -215,15 +217,17 @@ function ClientesList() {
                                                     {formatPrice(Number(client.total_spent))}
                                                 </TableCell>
                                                 <TableCell className="text-right pr-6">
-                                                    <Button
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        onClick={(e) => handleOpenWa(e, client)}
-                                                        className="text-primary hover:text-primary hover:bg-primary/10"
-                                                        title="Enviar WhatsApp"
-                                                    >
-                                                        <MessageCircle className="h-4 w-4" />
-                                                    </Button>
+                                                    {features.mensajes_crm && (
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            onClick={(e) => handleOpenWa(e, client)}
+                                                            className="text-primary hover:text-primary hover:bg-primary/10"
+                                                            title="Enviar WhatsApp"
+                                                        >
+                                                            <MessageCircle className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         );

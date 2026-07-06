@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
+import { useFeatures } from "@/lib/features";
 import { formatPrice } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -63,6 +64,7 @@ interface ExtendedHaircutHistory extends Omit<HaircutHistory, 'barber'> {
 }
 
 export default function AdminClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
+    const { features } = useFeatures();
     const { id: clientId } = use(params);
     const router = useRouter();
     const supabase = createClient();
@@ -244,7 +246,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                         <span className="text-white font-mono">{profile.phone || "No especificado"}</span>
                                     </div>
                                 </div>
-                                {profile.phone && (
+                                {profile.phone && features.mensajes_crm && (
                                     <Button
                                         size="sm"
                                         variant="outline"

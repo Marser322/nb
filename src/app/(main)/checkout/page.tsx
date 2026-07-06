@@ -15,6 +15,7 @@ import { formatPrice } from "@/lib/utils";
 import { Loader2, ShieldCheck, Wallet, Landmark } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
+import { useFeatures } from "@/lib/features";
 
 type PaymentMethod = "efectivo" | "transferencia";
 
@@ -30,6 +31,7 @@ interface CartItem {
 }
 
 export default function CheckoutPage() {
+    const { features, isLoaded: isFeaturesLoaded } = useFeatures();
     const router = useRouter();
     const { items, getTotalPrice, clearCart } = useCartStore();
     const [isLoading, setIsLoading] = useState(true);
@@ -37,6 +39,13 @@ export default function CheckoutPage() {
     const [user, setUser] = useState<User | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("efectivo");
     const supabase = createClient();
+
+    useEffect(() => {
+        if (isFeaturesLoaded && !features.tienda) {
+            toast.error("La tienda no está disponible");
+            router.replace("/");
+        }
+    }, [isFeaturesLoaded, features.tienda, router]);
 
     // 1. Verificar Autenticación
     useEffect(() => {
@@ -188,7 +197,7 @@ export default function CheckoutPage() {
         }
     };
 
-    if (isLoading) {
+    if (isLoading || !isFeaturesLoaded || !features.tienda) {
         return (
             <div className="min-h-screen bg-background pt-24 pb-12">
                 <div className="container mx-auto px-4 max-w-4xl">

@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { formatPrice, canCancelAppointment } from "@/lib/utils";
 import { getBarberAvatarUrl, STATIC_SERVICES, STATIC_BARBERS } from "@/lib/static-data";
 import type { Appointment, Barber, HaircutHistory, Profile, Service, Subscription } from "@/types/database.types";
+import { useFeatures } from "@/lib/features";
 
 type AppointmentWithRelations = Appointment & {
     service?: Service | null;
@@ -29,6 +30,7 @@ type HaircutHistoryWithRelations = HaircutHistory & {
 };
 
 export default function MiCuentaPage() {
+    const { features } = useFeatures();
     const router = useRouter();
     const supabase = useMemo(() => createClient(), []);
     const [isLoading, setIsLoading] = useState(true);
@@ -478,7 +480,8 @@ export default function MiCuentaPage() {
                         </section>
 
                         {/* Sección de Suscripciones (Turnos Fijos) */}
-                        <Card className="border-white/10 bg-card/70">
+                        {features.suscripciones && (
+                            <Card className="border-white/10 bg-card/70">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <Repeat className="h-5 w-5 text-primary animate-pulse" />
@@ -538,6 +541,7 @@ export default function MiCuentaPage() {
                                 )}
                             </CardContent>
                         </Card>
+                        )}
                     </div>
                 )}
             </main>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShoppingBag, Plus, Search, Filter } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ShoppingBag, Plus, Search, Filter, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,8 +23,19 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { FeaturedProductsCarousel } from "@/components/shop/feature-carousel";
 import { STATIC_PRODUCTS } from "@/lib/static-data";
+import { useFeatures } from "@/lib/features";
 
 export default function TiendaPage() {
+    const { features, isLoaded } = useFeatures();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (isLoaded && !features.tienda) {
+            toast.error("La tienda no está disponible");
+            router.replace("/");
+        }
+    }, [isLoaded, features.tienda, router]);
+
     const [products, setProducts] = useState<Product[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -45,6 +57,14 @@ export default function TiendaPage() {
         }
         loadProducts();
     }, []);
+
+    if (!isLoaded || !features.tienda) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-zinc-950 text-white">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     // Filter logic derived directly from state (no separate state needed)
     const filteredProducts = products.filter(p => {

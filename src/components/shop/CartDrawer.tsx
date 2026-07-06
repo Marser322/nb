@@ -9,8 +9,16 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCartStore } from "@/stores/cartStore";
 import { formatPrice } from "@/lib/utils";
+import { useFeatures } from "@/lib/features";
 
 export function CartDrawer() {
+    const { features } = useFeatures();
+    const cartStore = useCartStore();
+
+    if (!features.tienda) {
+        return null;
+    }
+
     const {
         items,
         isOpen,
@@ -19,7 +27,7 @@ export function CartDrawer() {
         updateQuantity,
         getTotalPrice,
         clearCart,
-    } = useCartStore();
+    } = cartStore;
 
     const totalPrice = getTotalPrice();
 

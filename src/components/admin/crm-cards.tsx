@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
 import { formatPrice } from "@/lib/utils";
 import type { ClientOverview } from "@/types/database.types";
+import { useFeatures } from "@/lib/features";
 
 export interface RankingItem {
     name: string;
@@ -31,6 +32,7 @@ export function CrmCards({
     isLoading,
     onLogAdded,
 }: CrmCardsProps) {
+    const { features } = useFeatures();
     const [selectedClient, setSelectedClient] = useState<ClientOverview | null>(null);
     const [isWaOpen, setIsWaOpen] = useState(false);
 
@@ -84,15 +86,17 @@ export function CrmCards({
                                                 {formatLastVisitGap(client.last_visit)} · {formatPrice(Number(client.total_spent))}
                                             </p>
                                         </div>
-                                        <Button
-                                            size="icon-sm"
-                                            variant="ghost"
-                                            onClick={() => openWhatsapp(client)}
-                                            className="text-primary hover:bg-primary/10 hover:text-primary"
-                                            title="Enviar WhatsApp"
-                                        >
-                                            <MessageCircle className="h-4 w-4" />
-                                        </Button>
+                                        {features.mensajes_crm && (
+                                            <Button
+                                                size="icon-sm"
+                                                variant="ghost"
+                                                onClick={() => openWhatsapp(client)}
+                                                className="text-primary hover:bg-primary/10 hover:text-primary"
+                                                title="Enviar WhatsApp"
+                                            >
+                                                <MessageCircle className="h-4 w-4" />
+                                            </Button>
+                                        )}
                                     </div>
                                 ))}
                             </div>

@@ -15,7 +15,9 @@ import {
     Building2,
     Users,
     Sparkles,
+    Settings,
 } from "lucide-react";
+import { useFeatures } from "@/lib/features";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -54,6 +56,11 @@ const sidebarLinks = [
         icon: Wallet,
     },
     {
+        href: ROUTES.ADMIN_LIQUIDACIONES,
+        label: "Liquidaciones",
+        icon: Wallet,
+    },
+    {
         href: ROUTES.ADMIN_SUCURSALES,
         label: "Sucursales",
         icon: Building2,
@@ -68,10 +75,16 @@ const sidebarLinks = [
         label: "Servicios",
         icon: Sparkles,
     },
+    {
+        href: ROUTES.ADMIN_CONFIGURACION || "/admin/configuracion",
+        label: "Configuración",
+        icon: Settings,
+    },
 ];
 
 function SidebarContent() {
     const pathname = usePathname();
+    const { features } = useFeatures();
 
     const handleLogout = async () => {
         try {
@@ -80,6 +93,14 @@ function SidebarContent() {
             console.error("Error al cerrar sesión:", error);
         }
     };
+
+    const filteredLinks = sidebarLinks.filter((link) => {
+        if (link.href === ROUTES.ADMIN_CAJA && !features.contabilidad) return false;
+        if (link.href === ROUTES.ADMIN_LIQUIDACIONES && !features.contabilidad) return false;
+        if (link.href === ROUTES.ADMIN_MENSAJES && !features.mensajes_crm) return false;
+        if (link.href === ROUTES.ADMIN_PRODUCTOS && !features.tienda) return false;
+        return true;
+    });
 
     return (
         <div className="flex flex-col h-full">
@@ -102,7 +123,7 @@ function SidebarContent() {
 
             {/* Navigation */}
             <nav className="flex-1 p-4 space-y-2">
-                {sidebarLinks.map((link) => (
+                {filteredLinks.map((link) => (
                     <Link
                         key={link.href}
                         href={link.href}
