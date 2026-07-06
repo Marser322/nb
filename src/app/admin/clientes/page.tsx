@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -30,9 +30,17 @@ function ClientesList() {
     const [clients, setClients] = useState<ClientOverview[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
     const searchParams = useSearchParams();
+    const filterParam = searchParams.get("filtro");
     const router = useRouter();
     const supabase = createClient();
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, filterParam]);
+
+
 
     const [selectedClient, setSelectedClient] = useState<{
         id: string;
@@ -40,8 +48,6 @@ function ClientesList() {
         phone: string | null;
     } | null>(null);
     const [isWaOpen, setIsWaOpen] = useState(false);
-
-    const filterParam = searchParams.get("filtro");
 
     const loadClients = async () => {
         setIsLoading(true);
@@ -89,6 +95,11 @@ function ClientesList() {
         return nameMatches || phoneMatches;
     });
 
+    const paginatedClients = useMemo(() => {
+        const startIndex = (currentPage - 1) * 20;
+        return filteredClients.slice(startIndex, startIndex + 20);
+    }, [filteredClients, currentPage]);
+
     const handleOpenWa = (e: React.MouseEvent, client: ClientOverview) => {
         e.stopPropagation();
         setSelectedClient({
@@ -104,7 +115,7 @@ function ClientesList() {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-2">
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
                         <Contact className="h-8 w-8 text-primary" />
                         Gestión de Clientes
                     </h1>
@@ -119,7 +130,7 @@ function ClientesList() {
                         variant="outline"
                         size="sm"
                         onClick={() => router.push("/admin/clientes")}
-                        className="self-start md:self-auto border-white/10"
+                        className="self-start md:self-auto border-border"
                     >
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Ver Todos
@@ -159,82 +170,124 @@ function ClientesList() {
                     ) : filteredClients.length === 0 ? (
                         <div className="text-center py-16 text-muted-foreground">
                             <User className="h-12 w-12 mx-auto mb-3 text-muted-foreground/20" />
-                            <p className="font-semibold text-lg text-white/80">No se encontraron clientes</p>
-                            <p className="text-sm mt-1">Intentá ajustando el término de búsqueda</p>
+                            <p className="font-semibold text-lg text-foreground/80">
+                                {searchQuery ? "No se encontraron clientes" : "No hay clientes registrados"}
+                            </p>
+                            <p className="text-sm mt-1 mb-4">
+                                {searchQuery ? "Intentá ajustando el término de búsqueda." : "Los clientes aparecerán aquí una vez que se registren."}
+                            </p>
+                            {searchQuery && (
+                                <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
+                                    Limpiar búsqueda
+                                </Button>
+                            )}
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader className="bg-muted/10 border-b border-border/30">
-                                    <TableRow className="hover:bg-transparent">
-                                        <TableHead className="w-[28%]">Cliente</TableHead>
-                                        <TableHead className="w-[18%]">Teléfono</TableHead>
-                                        <TableHead className="w-[22%]">Última Visita</TableHead>
-                                        <TableHead className="w-[10%] text-center">Citas</TableHead>
-                                        <TableHead className="w-[12%] text-right">Total Gastado</TableHead>
-                                        <TableHead className="w-[10%] text-right pr-6">Acciones</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredClients.map((client) => {
-                                        const inactive = isInactive(client.last_visit);
-                                        return (
-                                            <TableRow
-                                                key={client.id}
-                                                onClick={() => router.push(`/admin/clientes/${client.id}`)}
-                                                className="cursor-pointer hover:bg-muted/10 transition-colors border-b border-border/30"
-                                            >
-                                                <TableCell className="font-medium py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-                                                            {client.full_name ? client.full_name.charAt(0).toUpperCase() : "?"}
+                        <>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader className="bg-muted/10 border-b border-border/30">
+                                        <TableRow className="hover:bg-transparent">
+                                            <TableHead className="w-[28%]">Cliente</TableHead>
+                                            <TableHead className="w-[18%]">Teléfono</TableHead>
+                                            <TableHead className="w-[22%]">Última Visita</TableHead>
+                                            <TableHead className="w-[10%] text-center">Citas</TableHead>
+                                            <TableHead className="w-[12%] text-right">Total Gastado</TableHead>
+                                            <TableHead className="w-[10%] text-right pr-6">Acciones</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {paginatedClients.map((client) => {
+                                            const inactive = isInactive(client.last_visit);
+                                            return (
+                                                <TableRow
+                                                    key={client.id}
+                                                    onClick={() => router.push(`/admin/clientes/${client.id}`)}
+                                                    className="cursor-pointer hover:bg-muted/10 transition-colors border-b border-border/30"
+                                                >
+                                                    <TableCell className="font-medium py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                                                                {client.full_name ? client.full_name.charAt(0).toUpperCase() : "?"}
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-foreground font-semibold flex items-center gap-2">
+                                                                    {client.full_name || "Sin nombre"}
+                                                                    {inactive && (
+                                                                        <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] font-normal px-2 py-0">
+                                                                            Inactivo
+                                                                        </Badge>
+                                                                    )}
+                                                                </span>
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    Registrado: {format(parseISO(client.created_at), "dd/MM/yyyy")}
+                                                                </span>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-white font-semibold flex items-center gap-2">
-                                                                {client.full_name || "Sin nombre"}
-                                                                {inactive && (
-                                                                    <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] font-normal px-2 py-0">
-                                                                        Inactivo
-                                                                    </Badge>
-                                                                )}
-                                                            </span>
-                                                            <span className="text-xs text-muted-foreground">
-                                                                Registrado: {format(parseISO(client.created_at), "dd/MM/yyyy")}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-zinc-300 font-mono text-sm">
-                                                    {client.phone || "—"}
-                                                </TableCell>
-                                                <TableCell className="text-zinc-300 text-sm">
-                                                    {formatLastVisit(client.last_visit)}
-                                                </TableCell>
-                                                <TableCell className="text-center font-semibold text-white">
-                                                    {client.total_appointments}
-                                                </TableCell>
-                                                <TableCell className="text-right text-primary font-bold">
-                                                    {formatPrice(Number(client.total_spent))}
-                                                </TableCell>
-                                                <TableCell className="text-right pr-6">
-                                                    {features.mensajes_crm && (
-                                                        <Button
-                                                            size="icon"
-                                                            variant="ghost"
-                                                            onClick={(e) => handleOpenWa(e, client)}
-                                                            className="text-primary hover:text-primary hover:bg-primary/10"
-                                                            title="Enviar WhatsApp"
-                                                        >
-                                                            <MessageCircle className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
-                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-zinc-300 font-mono text-sm">
+                                                        {client.phone || "—"}
+                                                    </TableCell>
+                                                    <TableCell className="text-zinc-300 text-sm">
+                                                        {formatLastVisit(client.last_visit)}
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-semibold text-foreground">
+                                                        {client.total_appointments}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-primary font-bold">
+                                                        {formatPrice(Number(client.total_spent))}
+                                                    </TableCell>
+                                                    <TableCell className="text-right pr-6">
+                                                        {features.mensajes_crm && (
+                                                            <Button
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                onClick={(e) => handleOpenWa(e, client)}
+                                                                className="text-primary hover:text-primary hover:bg-primary/10"
+                                                                title="Enviar WhatsApp"
+                                                            >
+                                                                <MessageCircle className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                            {filteredClients.length > 20 && (
+                                <div className="flex items-center justify-between px-6 py-4 border-t border-border/30 bg-muted/5">
+                                    <div className="text-xs text-muted-foreground">
+                                        Mostrando <span className="font-semibold text-foreground">{Math.min(filteredClients.length, (currentPage - 1) * 20 + 1)}-{Math.min(filteredClients.length, currentPage * 20)}</span> de{" "}
+                                        <span className="font-semibold text-foreground">{filteredClients.length}</span> clientes
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                            disabled={currentPage === 1}
+                                            className="h-8 border-border/50 hover:bg-muted text-xs"
+                                        >
+                                            Anterior
+                                        </Button>
+                                        <span className="text-xs text-muted-foreground px-2">
+                                            Página {currentPage} de {Math.ceil(filteredClients.length / 20)}
+                                        </span>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filteredClients.length / 20), prev + 1))}
+                                            disabled={currentPage === Math.ceil(filteredClients.length / 20)}
+                                            className="h-8 border-border/50 hover:bg-muted text-xs"
+                                        >
+                                            Siguiente
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     )}
                 </CardContent>
             </Card>

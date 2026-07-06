@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useFeatures } from "@/lib/features";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -77,6 +79,16 @@ interface Transaction {
 }
 
 export default function AdminCajaPage() {
+    const { features, isLoaded } = useFeatures();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (isLoaded && !features.contabilidad) {
+            toast.error("El módulo contable no está activo");
+            router.replace("/admin/dashboard");
+        }
+    }, [isLoaded, features.contabilidad, router]);
+
     const [date, setDate] = useState<DateRange | undefined>({
         from: new Date(),
         to: new Date(),
@@ -325,6 +337,13 @@ export default function AdminCajaPage() {
         setMovementForm({ amount: "", description: "", payment_method: "cash", category: "other", barber_id: "" });
         setIsMovementDialogOpen(true);
     };
+    if (!isLoaded || !features.contabilidad) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8">
@@ -355,7 +374,7 @@ export default function AdminCajaPage() {
             </div>
 
             {/* Acciones rápidas */}
-            <div className="flex gap-2 flex-wrap">
+            <div id="admin-btn-register-movement" className="flex gap-2 flex-wrap">
                 <Button onClick={() => openMovementDialog('income')} className="bg-green-600 hover:bg-green-700">
                     <ArrowDownCircle className="h-4 w-4 mr-2" />
                     Registrar Ingreso
@@ -445,7 +464,8 @@ export default function AdminCajaPage() {
                         Ingresos por Barbero
                     </h3>
                 </div>
-                <Table>
+                <div className="overflow-x-auto">
+                    <Table>
                     <TableHeader>
                         <TableRow>
                             <TableHead>Barbero</TableHead>
@@ -473,7 +493,7 @@ export default function AdminCajaPage() {
                         ) : (
                             barbersIncome.map((b) => (
                                 <TableRow key={b.id}>
-                                    <TableCell className="font-medium text-white">{b.name}</TableCell>
+                                    <TableCell className="font-medium text-foreground">{b.name}</TableCell>
                                     <TableCell className="text-right">{formatPrice(b.services)}</TableCell>
                                     <TableCell className="text-right text-amber-400">{formatPrice(b.tips)}</TableCell>
                                     <TableCell className="text-right font-bold text-primary">{formatPrice(b.total)}</TableCell>
@@ -482,6 +502,7 @@ export default function AdminCajaPage() {
                         )}
                     </TableBody>
                 </Table>
+                </div>
             </div>
 
             {/* Tabla de Movimientos */}
@@ -492,7 +513,8 @@ export default function AdminCajaPage() {
                         Movimientos del Periodo
                     </h3>
                 </div>
-                <Table>
+                <div className="overflow-x-auto">
+                    <Table>
                     <TableHeader>
                         <TableRow>
                             <TableHead>Hora/Fecha</TableHead>
@@ -545,6 +567,7 @@ export default function AdminCajaPage() {
                         )}
                     </TableBody>
                 </Table>
+                </div>
             </div>
 
             {/* Dialog para movimientos */}

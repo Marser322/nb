@@ -6,9 +6,9 @@ export default function AuthLayout({
     children: React.ReactNode;
 }) {
     return (
-        <div className="min-h-screen w-full flex bg-zinc-950 text-foreground">
+        <div className="min-h-screen w-full flex bg-background text-foreground">
             {/* Sector Imagen (Desktop) - Izquierda */}
-            <div className="hidden lg:relative lg:block lg:w-1/2 overflow-hidden bg-zinc-900 border-r border-white/5">
+            <div className="hidden lg:relative lg:block lg:w-1/2 overflow-hidden bg-card border-r border-border">
                 {/* Imagen de fondo */}
                 <Image
                     src="/images/hero/detalle-corte.jpg"

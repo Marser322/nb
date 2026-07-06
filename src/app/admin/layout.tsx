@@ -23,6 +23,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import { logoutAdmin } from "./actions";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const sidebarLinks = [
     {
@@ -82,7 +83,7 @@ const sidebarLinks = [
     },
 ];
 
-function SidebarContent() {
+function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
     const pathname = usePathname();
     const { features } = useFeatures();
 
@@ -127,7 +128,7 @@ function SidebarContent() {
                     <Link
                         key={link.href}
                         href={link.href}
-                        id={`sidebar-${link.label.toLowerCase()}`}
+                        id={!isMobile ? `sidebar-${link.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}` : undefined}
                         className={cn(
                             "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
                             pathname === link.href
@@ -168,28 +169,33 @@ export default function AdminLayout({
 }) {
     return (
         <div className="min-h-screen bg-background">
-            {/* Mobile Header */}
-            <header className="md:hidden fixed top-0 left-0 right-0 z-50 bg-background border-b border-border h-16 flex items-center px-4">
-                <Sheet>
-                    <SheetTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                            <Menu className="h-5 w-5" />
-                        </Button>
-                    </SheetTrigger>
-                    <SheetContent side="left" className="p-0 w-64">
-                        <SidebarContent />
-                    </SheetContent>
-                </Sheet>
-                <span className="ml-4 font-semibold">NB Barber Admin</span>
+            {/* Topbar / Header */}
+            <header className="fixed top-0 right-0 left-0 md:left-64 z-40 bg-background/80 backdrop-blur-md border-b border-border h-16 flex items-center justify-between px-4 md:px-6">
+                <div className="flex items-center gap-3">
+                    <Sheet>
+                        <SheetTrigger asChild className="md:hidden">
+                            <Button variant="ghost" size="icon">
+                                <Menu className="h-5 w-5" />
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="left" className="p-0 w-64">
+                            <SidebarContent isMobile={true} />
+                        </SheetContent>
+                    </Sheet>
+                    <span className="font-semibold text-foreground">NB Barber Admin</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <ThemeToggle />
+                </div>
             </header>
 
             {/* Desktop Sidebar */}
-            <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 border-r border-border bg-card flex-col">
+            <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 border-r border-border bg-card flex-col z-50">
                 <SidebarContent />
             </aside>
 
             {/* Main Content */}
-            <main className="md:ml-64 pt-16 md:pt-0 min-h-screen">
+            <main className="md:ml-64 pt-16 min-h-screen">
                 <div className="p-6 md:p-8">{children}</div>
             </main>
         </div>

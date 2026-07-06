@@ -414,10 +414,10 @@ export default function AdminSucursalesPage() {
                                     {blocks.map((block) => (
                                         <div
                                             key={block.id}
-                                            className="flex items-center justify-between p-3 rounded-lg border border-white/5 bg-zinc-900/50 text-xs"
+                                            className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/40 text-xs"
                                         >
                                             <div className="space-y-1">
-                                                <div className="font-semibold text-white">
+                                                <div className="font-semibold text-foreground">
                                                     {block.reason || "Sin motivo especificado"}
                                                 </div>
                                                 <div className="text-muted-foreground flex items-center gap-3">
@@ -450,7 +450,7 @@ export default function AdminSucursalesPage() {
                         </div>
 
                         {/* Formulario de alta */}
-                        <form onSubmit={handleCreateBlock} className="space-y-4 border-t border-white/5 pt-4">
+                        <form onSubmit={handleCreateBlock} className="space-y-4 border-t border-border pt-4">
                             <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">
                                 Nuevo Bloqueo (Feriado, Reforma, etc.)
                             </h3>
@@ -488,7 +488,7 @@ export default function AdminSucursalesPage() {
                                     onCheckedChange={(checked) => setBlockForm({ ...blockForm, isFullDay: checked })}
                                     className="data-[state=checked]:bg-primary"
                                 />
-                                <label htmlFor="branch-is-fullday" className="text-xs font-medium text-white cursor-pointer select-none">
+                                <label htmlFor="branch-is-fullday" className="text-xs font-medium text-foreground cursor-pointer select-none">
                                     Bloquear todo el día
                                 </label>
                             </div>

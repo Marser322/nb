@@ -21,12 +21,13 @@ import { createClient } from "@/lib/supabase/client";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { useFeatures } from "@/lib/features";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const navLinks = [
     { href: ROUTES.HOME, label: "Inicio" },
-    { href: ROUTES.RESERVAR, label: "Reservar" },
+    { href: ROUTES.RESERVAR, label: "Reservar", feature: "reservas_online" },
     { href: ROUTES.TIENDA, label: "Tienda", feature: "tienda" },
-    { href: ROUTES.LOOKBOOK, label: "Lookbook" },
+    { href: ROUTES.LOOKBOOK, label: "Lookbook", feature: "lookbook" },
     { href: ROUTES.CONTACTO, label: "Contacto" },
 ];
 
@@ -103,7 +104,7 @@ export function Header() {
                             alt="New Brothers Logo"
                             width={48}
                             height={48}
-                            className="h-10 w-10 md:h-12 md:w-12 rounded-full border border-white/10 object-cover"
+                            className="h-10 w-10 md:h-12 md:w-12 rounded-full border border-border object-cover"
                             priority
                         />
                         <span className="font-display text-xl md:text-2xl font-bold uppercase tracking-normal">
@@ -127,6 +128,7 @@ export function Header() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 md:gap-4">
+                        <ThemeToggle />
                         {/* Admin Access (Desktop) */}
                         <Button variant="ghost" size="icon" className="hidden md:inline-flex text-muted-foreground hover:text-amber-500" asChild>
                             <Link href={ROUTES.ADMIN_LOGIN} title="Acceso Admin">
@@ -140,6 +142,7 @@ export function Header() {
                                 variant="ghost"
                                 size="icon"
                                 className="relative"
+                                id="cart-trigger"
                                 onClick={openCart}
                             >
                                 <ShoppingBag className="h-5 w-5" />
@@ -195,9 +198,11 @@ export function Header() {
                         )}
 
                         {/* CTA Desktop */}
-                        <Button asChild className="hidden md:inline-flex">
-                            <Link href={ROUTES.RESERVAR}>Reservar Turno</Link>
-                        </Button>
+                        {features.reservas_online && (
+                            <Button asChild className="hidden md:inline-flex">
+                                <Link href={ROUTES.RESERVAR}>Reservar Turno</Link>
+                            </Button>
+                        )}
 
                         {/* Mobile Menu */}
                         <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
@@ -207,7 +212,13 @@ export function Header() {
                                 </Button>
                             </SheetTrigger>
                             <SheetContent side="right" className="w-[300px] bg-background">
-                                <div className="flex flex-col gap-6 mt-8">
+                                <div className="flex items-center justify-between mt-4 pb-4 border-b border-border">
+                                    <span className="font-display font-bold uppercase tracking-normal">
+                                        NEW <span className="text-primary">BROTHERS</span>
+                                    </span>
+                                    <ThemeToggle />
+                                </div>
+                                <div className="flex flex-col gap-6 mt-6">
                                     {user && (
                                         <div className="flex items-center gap-3 pb-4 border-b border-border">
                                             <Avatar className="h-10 w-10">
@@ -237,9 +248,11 @@ export function Header() {
                                         </Link>
                                     ))}
 
-                                    <Button asChild className="mt-4">
-                                        <Link href={ROUTES.RESERVAR}>Reservar Turno</Link>
-                                    </Button>
+                                    {features.reservas_online && (
+                                        <Button asChild className="mt-4">
+                                            <Link href={ROUTES.RESERVAR}>Reservar Turno</Link>
+                                        </Button>
+                                    )}
 
                                     {user ? (
                                         <Button

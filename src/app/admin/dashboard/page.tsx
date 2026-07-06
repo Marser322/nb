@@ -68,16 +68,13 @@ export default function AdminDashboardPage() {
         setIsLoading(true);
 
         // Invocación oportunista del generador de turnos fijos (fire-and-forget)
-        const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
-        if (!isDummy) {
-            (async () => {
-                try {
-                    await supabase.rpc("generate_subscription_appointments");
-                } catch (err) {
-                    console.error("Error generating subscription appointments:", err);
-                }
-            })();
-        }
+        (async () => {
+            try {
+                await supabase.rpc("generate_subscription_appointments");
+            } catch (err) {
+                console.error("Error generating subscription appointments:", err);
+            }
+        })();
 
         const now = new Date();
         const today = format(startOfToday(), "yyyy-MM-dd");

@@ -199,7 +199,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
         return (
             <div className="text-center py-20">
                 <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-                <h1 className="text-2xl font-bold text-white">Cliente no encontrado</h1>
+                <h1 className="text-2xl font-bold text-foreground">Cliente no encontrado</h1>
                 <p className="text-muted-foreground mt-2">El cliente solicitado no existe o no tenés permisos para verlo.</p>
                 <Button onClick={() => router.push("/admin/clientes")} className="mt-6">
                     Volver al listado
@@ -217,12 +217,12 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                         variant="outline"
                         size="icon"
                         onClick={() => router.push("/admin/clientes")}
-                        className="border-white/10"
+                        className="border-border"
                     >
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
                     <div>
-                        <h1 className="text-3xl font-bold text-white tracking-tight">{profile.full_name}</h1>
+                        <h1 className="text-3xl font-bold text-foreground tracking-tight">{profile.full_name}</h1>
                         <p className="text-muted-foreground text-sm flex items-center gap-2 mt-1">
                             <span>Cliente registrado desde el {format(parseISO(profile.created_at), "dd/MM/yyyy")}</span>
                         </p>
@@ -243,7 +243,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                     </div>
                                     <div className="flex flex-col">
                                         <span className="text-xs text-muted-foreground">Celular / Teléfono</span>
-                                        <span className="text-white font-mono">{profile.phone || "No especificado"}</span>
+                                        <span className="text-foreground font-mono">{profile.phone || "No especificado"}</span>
                                     </div>
                                 </div>
                                 {profile.phone && features.mensajes_crm && (
@@ -264,7 +264,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-xs text-muted-foreground">Rol de Usuario</span>
-                                    <span className="text-white capitalize">{profile.role}</span>
+                                    <span className="text-foreground capitalize">{profile.role}</span>
                                 </div>
                             </div>
                         </CardContent>
@@ -333,7 +333,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                             {appointments.length === 0 ? (
                                 <div className="text-center py-16 text-muted-foreground">
                                     <CalendarIcon className="h-10 w-10 mx-auto mb-3 opacity-25" />
-                                    <p className="font-semibold text-white/80">Sin citas agendadas</p>
+                                    <p className="font-semibold text-foreground/80">Sin citas agendadas</p>
                                     <p className="text-sm mt-1">Este cliente no registra turnos en el sistema.</p>
                                 </div>
                             ) : (
@@ -367,7 +367,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
 
                                             return (
                                                 <TableRow key={apt.id} className="border-b border-border/30">
-                                                    <TableCell className="font-semibold text-white pl-6 py-4">
+                                                    <TableCell className="font-semibold text-foreground pl-6 py-4">
                                                         {apt.service?.name || "Servicio eliminado"}
                                                     </TableCell>
                                                     <TableCell className="text-zinc-300 text-sm">
@@ -403,7 +403,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                         <Card className="bg-card/50 border-border/50">
                             <CardContent className="text-center py-16 text-muted-foreground">
                                 <Scissors className="h-10 w-10 mx-auto mb-3 opacity-25" />
-                                <p className="font-semibold text-white/80">Sin fotos en el historial</p>
+                                <p className="font-semibold text-foreground/80">Sin fotos en el historial</p>
                                 <p className="text-sm mt-1">No hay fotos guardadas del historial de cortes de este cliente.</p>
                             </CardContent>
                         </Card>
@@ -412,7 +412,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                             {haircuts.map((haircut) => (
                                 <Card key={haircut.id} className="bg-card/50 border-border/50 overflow-hidden flex flex-col">
                                     {/* Grid de Fotos */}
-                                    <div className="relative aspect-[4/3] w-full bg-zinc-900">
+                                    <div className="relative aspect-[4/3] w-full bg-muted">
                                         {haircut.photo_urls && haircut.photo_urls.length > 0 ? (
                                             <Image
                                                 src={haircut.photo_urls[0]}
@@ -426,7 +426,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                                 <Scissors className="h-12 w-12 text-muted-foreground/30" />
                                             </div>
                                         )}
-                                        <div className="absolute top-3 left-3 bg-black/75 px-3 py-1 rounded-full border border-white/5 text-[10px] text-zinc-300 font-semibold font-mono">
+                                        <div className="absolute top-3 left-3 bg-black/75 px-3 py-1 rounded-full border border-border text-[10px] text-zinc-300 font-semibold font-mono">
                                             {format(parseISO(haircut.created_at), "dd/MM/yyyy HH:mm")}
                                         </div>
                                     </div>
@@ -434,7 +434,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                         <div className="flex items-center justify-between">
                                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                                                 <UserIcon className="h-3 w-3 text-primary" />
-                                                Atendido por: <strong className="text-white">{haircut.barber?.name || "Barbero"}</strong>
+                                                Atendido por: <strong className="text-foreground">{haircut.barber?.name || "Barbero"}</strong>
                                             </span>
                                         </div>
                                         {haircut.notes && (
@@ -456,7 +456,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                             {orders.length === 0 ? (
                                 <div className="text-center py-16 text-muted-foreground">
                                     <ShoppingBag className="h-10 w-10 mx-auto mb-3 opacity-25" />
-                                    <p className="font-semibold text-white/80">Sin compras registradas</p>
+                                    <p className="font-semibold text-foreground/80">Sin compras registradas</p>
                                     <p className="text-sm mt-1">El cliente no realizó compras de productos en la tienda.</p>
                                 </div>
                             ) : (
@@ -495,7 +495,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
 
                                             return (
                                                 <TableRow key={order.id} className="border-b border-border/30">
-                                                    <TableCell className="font-mono text-xs font-semibold text-white pl-6 py-4">
+                                                    <TableCell className="font-mono text-xs font-semibold text-foreground pl-6 py-4">
                                                         {order.id.slice(0, 8).toUpperCase()}
                                                     </TableCell>
                                                     <TableCell className="text-zinc-300 text-sm">
@@ -538,7 +538,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                             {messages.length === 0 ? (
                                 <div className="text-center py-16 text-muted-foreground">
                                     <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-25" />
-                                    <p className="font-semibold text-white/80">Sin mensajes enviados</p>
+                                    <p className="font-semibold text-foreground/80">Sin mensajes enviados</p>
                                     <p className="text-sm mt-1">No se registran logs de notificaciones enviadas a este cliente.</p>
                                 </div>
                             ) : (

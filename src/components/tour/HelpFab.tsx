@@ -12,16 +12,7 @@ export function HelpFab() {
     const { startTour, isOpen } = useTourStore();
 
     // Determine if there is a tour for the current page
-    // We check for exact match or partial match for admin
-    let tourKey = null;
-
-    if (APP_TOURS[pathname]) {
-        tourKey = pathname;
-    } else if (pathname.startsWith('/admin') && APP_TOURS['/admin/dashboard']) {
-        // For now, generic admin tour if specific one doesn't exist? 
-        // Or just only show on dashboard? Let's show dashboard tour on dashboard only for now to be safe.
-        if (pathname === '/admin/dashboard') tourKey = '/admin/dashboard';
-    }
+    const tourKey = APP_TOURS[pathname] ? pathname : null;
 
     if (!tourKey || isOpen) return null; // Don't show if no tour or tour is already open
 

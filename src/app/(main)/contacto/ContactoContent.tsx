@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Header, Footer } from "@/components/layout";
 import { BUSINESS_CONFIG, BRANCHES, ROUTES } from "@/lib/constants";
+import { useFeatures } from "@/lib/features";
 
 const TEAM = [
     {
@@ -49,6 +50,7 @@ function normalizePhoneForWhatsApp(phone: string): string {
 }
 
 export function ContactoContent() {
+    const { features } = useFeatures();
     const hours = `${BUSINESS_CONFIG.workingHours.start}:00 - ${BUSINESS_CONFIG.workingHours.end}:00`;
 
     return (
@@ -144,7 +146,7 @@ export function ContactoContent() {
                 </section>
 
                 {/* El Equipo */}
-                <section className="relative py-24 overflow-hidden bg-black/50">
+                <section className="relative py-24 overflow-hidden bg-muted/30">
                     <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
 
                     <div className="container mx-auto px-4 relative z-10">
@@ -157,7 +159,7 @@ export function ContactoContent() {
                             <p className="font-display text-sm uppercase tracking-[0.25em] text-primary mb-4">
                                 El Equipo
                             </p>
-                            <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
+                            <h2 className="text-3xl md:text-5xl font-bold text-foreground mb-6">
                                 Las manos detrás de cada corte
                             </h2>
                             <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
@@ -173,9 +175,9 @@ export function ContactoContent() {
                                     whileInView={{ opacity: 1, y: 0 }}
                                     viewport={{ once: true }}
                                     transition={{ delay: index * 0.1, duration: 0.6 }}
-                                    className="group relative rounded-2xl overflow-hidden border border-white/10 bg-zinc-900/50 backdrop-blur-md transition-all duration-500 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10"
+                                    className="group relative rounded-2xl overflow-hidden border border-border bg-card/50 backdrop-blur-md transition-all duration-500 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10"
                                 >
-                                    <div className="relative aspect-square overflow-hidden bg-zinc-950">
+                                    <div className="relative aspect-square overflow-hidden bg-muted">
                                         <Image
                                             src={member.image}
                                             alt={member.name}
@@ -186,13 +188,13 @@ export function ContactoContent() {
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" />
                                     </div>
                                     <div className="p-6 relative">
-                                        <h3 className="text-xl font-bold text-white group-hover:text-primary transition-colors">
+                                        <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
                                             {member.name}
                                         </h3>
                                         <p className="text-xs uppercase tracking-wider text-primary/80 mt-1 mb-3">
                                             {member.role}
                                         </p>
-                                        <p className="text-sm text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors">
+                                        <p className="text-sm text-muted-foreground leading-relaxed group-hover:text-foreground transition-colors">
                                             {member.bio}
                                         </p>
                                     </div>
@@ -216,7 +218,7 @@ export function ContactoContent() {
                                 <p className="font-display text-sm uppercase tracking-[0.25em] text-primary mb-4">
                                     Sucursales
                                 </p>
-                                <h2 className="text-3xl md:text-5xl font-bold text-white">
+                                <h2 className="text-3xl md:text-5xl font-bold text-foreground">
                                     Tres formas de vivir la experiencia NB
                                 </h2>
                             </motion.div>
@@ -225,7 +227,7 @@ export function ContactoContent() {
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true }}
                                 transition={{ delay: 0.1 }}
-                                className="flex items-center gap-2 text-sm text-muted-foreground border border-white/10 rounded-full px-4 py-2 bg-white/5"
+                                className="flex items-center gap-2 text-sm text-muted-foreground border border-border rounded-full px-4 py-2 bg-muted"
                             >
                                 <Clock className="h-4 w-4 text-primary" />
                                 Lun a sáb · {hours}
@@ -247,7 +249,7 @@ export function ContactoContent() {
                                         whileInView={{ opacity: 1, y: 0 }}
                                         viewport={{ once: true }}
                                         transition={{ delay: index * 0.1, duration: 0.6 }}
-                                        className="flex flex-col h-full rounded-2xl overflow-hidden border border-white/10 bg-card/50 backdrop-blur-md transition-all duration-500 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10"
+                                        className="flex flex-col h-full rounded-2xl overflow-hidden border border-border bg-card/50 backdrop-blur-md transition-all duration-500 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10"
                                     >
                                         <div className="relative aspect-[4/3] w-full overflow-hidden">
                                             <Image
@@ -264,7 +266,7 @@ export function ContactoContent() {
                                         </div>
 
                                         <div className="p-6 flex flex-col flex-grow">
-                                            <p className="text-sm text-zinc-400 mb-4">{branch.tone}</p>
+                                            <p className="text-sm text-muted-foreground mb-4">{branch.tone}</p>
 
                                             <div className="space-y-3 mb-6">
                                                 <p className="flex items-start gap-2 text-sm text-muted-foreground">
@@ -294,9 +296,11 @@ export function ContactoContent() {
                                                         WhatsApp
                                                     </a>
                                                 </Button>
-                                                <Button asChild variant="outline" className="w-full rounded-full border-white/15 bg-white/5 hover:bg-white/10">
-                                                    <Link href={ROUTES.RESERVAR}>Reservar en esta sede</Link>
-                                                </Button>
+                                                {features.reservas_online && (
+                                                    <Button asChild variant="outline" className="w-full rounded-full border-border bg-muted hover:bg-accent hover:text-accent-foreground">
+                                                        <Link href={ROUTES.RESERVAR}>Reservar en esta sede</Link>
+                                                    </Button>
+                                                )}
                                             </div>
                                         </div>
                                     </motion.article>
@@ -337,16 +341,18 @@ export function ContactoContent() {
                             Escribinos por WhatsApp, llamanos o elegí tu horario ahora mismo. Cualquier camino te lleva a la misma silla.
                         </p>
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                            <Button
-                                size="lg"
-                                asChild
-                                className="text-lg px-10 py-8 rounded-full shadow-2xl shadow-primary/20 hover:scale-105 transition-transform bg-primary hover:bg-primary/90 text-primary-foreground"
-                            >
-                                <Link href={ROUTES.RESERVAR}>
-                                    Reservar Turno
-                                    <ArrowRight className="ml-2 h-6 w-6" />
-                                </Link>
-                            </Button>
+                            {features.reservas_online && (
+                                <Button
+                                    size="lg"
+                                    asChild
+                                    className="text-lg px-10 py-8 rounded-full shadow-2xl shadow-primary/20 hover:scale-105 transition-transform bg-primary hover:bg-primary/90 text-primary-foreground"
+                                >
+                                    <Link href={ROUTES.RESERVAR}>
+                                        Reservar Turno
+                                        <ArrowRight className="ml-2 h-6 w-6" />
+                                    </Link>
+                                </Button>
+                            )}
                             <Button
                                 size="lg"
                                 variant="outline"

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useFeatures } from "@/lib/features";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +56,16 @@ import {
 import type { Barber, BarberSettlement, SettlementPreview } from "@/types/database.types";
 
 export default function AdminLiquidacionesPage() {
+    const { features, isLoaded } = useFeatures();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (isLoaded && !features.contabilidad) {
+            toast.error("El módulo contable no está activo");
+            router.replace("/admin/dashboard");
+        }
+    }, [isLoaded, features.contabilidad, router]);
+
     const supabase = createClient();
 
     const [barbers, setBarbers] = useState<Barber[]>([]);
@@ -267,8 +279,16 @@ export default function AdminLiquidacionesPage() {
         }
     };
 
+    if (!isLoaded || !features.contabilidad) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-8 text-white">
+        <div className="space-y-8 text-foreground">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -294,7 +314,7 @@ export default function AdminLiquidacionesPage() {
             {/* Filtros y Preview */}
             <div className="grid gap-6 lg:grid-cols-3">
                 {/* Panel de Filtros */}
-                <Card className="bg-zinc-950 border-zinc-800 lg:col-span-1">
+                <Card id="admin-liquidations-form" className="bg-card border-border lg:col-span-1">
                     <CardHeader>
                         <CardTitle className="text-sm font-semibold uppercase tracking-wider text-primary">
                             Parámetros de Liquidación
@@ -309,10 +329,10 @@ export default function AdminLiquidacionesPage() {
                                 value={selectedBarberId}
                                 onValueChange={setSelectedBarberId}
                             >
-                                <SelectTrigger className="bg-black border-zinc-800 text-white">
+                                <SelectTrigger className="bg-background border-border text-foreground">
                                     <SelectValue placeholder="Seleccioná un barbero" />
                                 </SelectTrigger>
-                                <SelectContent className="bg-zinc-950 border-zinc-800 text-white">
+                                <SelectContent className="bg-card border-border text-foreground">
                                     {barbers.map((b) => (
                                         <SelectItem key={b.id} value={b.id}>
                                             {b.name}
@@ -326,7 +346,7 @@ export default function AdminLiquidacionesPage() {
                             <label className="text-xs text-muted-foreground font-medium mb-1.5 block">
                                 Período de liquidación
                             </label>
-                            <div className="bg-black border border-zinc-800 rounded-md p-1">
+                            <div className="bg-background border border-border rounded-md p-1">
                                 <CalendarDateRangePicker date={dateRange} setDate={setDateRange} />
                             </div>
                         </div>
@@ -335,7 +355,7 @@ export default function AdminLiquidacionesPage() {
                             <Button
                                 size="sm"
                                 variant="outline"
-                                className="border-zinc-800 hover:bg-zinc-900 text-xs"
+                                className="border-border hover:bg-muted text-xs"
                                 onClick={() => setPresetRange("this_week")}
                             >
                                 Esta Semana
@@ -343,7 +363,7 @@ export default function AdminLiquidacionesPage() {
                             <Button
                                 size="sm"
                                 variant="outline"
-                                className="border-zinc-800 hover:bg-zinc-900 text-xs"
+                                className="border-border hover:bg-muted text-xs"
                                 onClick={() => setPresetRange("last_week")}
                             >
                                 Semana Pasada
@@ -351,7 +371,7 @@ export default function AdminLiquidacionesPage() {
                             <Button
                                 size="sm"
                                 variant="outline"
-                                className="border-zinc-800 hover:bg-zinc-900 text-xs"
+                                className="border-border hover:bg-muted text-xs"
                                 onClick={() => setPresetRange("this_month")}
                             >
                                 Este Mes
@@ -359,7 +379,7 @@ export default function AdminLiquidacionesPage() {
                             <Button
                                 size="sm"
                                 variant="outline"
-                                className="border-zinc-800 hover:bg-zinc-900 text-xs"
+                                className="border-border hover:bg-muted text-xs"
                                 onClick={() => setPresetRange("last_month")}
                             >
                                 Mes Pasado
@@ -369,7 +389,7 @@ export default function AdminLiquidacionesPage() {
                 </Card>
 
                 {/* Panel de Preview */}
-                <Card className="bg-zinc-950 border-zinc-800 lg:col-span-2">
+                <Card className="bg-card border-border lg:col-span-2">
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <div>
                             <CardTitle className="text-sm font-semibold uppercase tracking-wider text-primary">
@@ -382,9 +402,13 @@ export default function AdminLiquidacionesPage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {isPreviewLoading ? (
-                            <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
-                                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                                <span>Calculando comisiones...</span>
+                            <div className="space-y-4 py-4">
+                                <div className="h-6 bg-muted/40 rounded w-1/3 animate-pulse" />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="h-20 bg-muted/30 rounded-lg animate-pulse" />
+                                    <div className="h-20 bg-muted/30 rounded-lg animate-pulse" />
+                                </div>
+                                <div className="h-24 bg-muted/20 rounded animate-pulse" />
                             </div>
                         ) : !previewData ? (
                             <div className="text-center py-12 text-muted-foreground text-sm">
@@ -404,17 +428,17 @@ export default function AdminLiquidacionesPage() {
                                 )}
 
                                 {/* Detalles del acuerdo vigente */}
-                                <div className="p-3 bg-black rounded-lg border border-zinc-900 text-xs flex justify-between gap-4">
+                                <div className="p-3 bg-muted/40 rounded-lg border border-border text-xs flex justify-between gap-4">
                                     <div>
                                         <span className="text-muted-foreground block font-medium">Esquema Vigente</span>
-                                        <span className="font-semibold text-white mt-0.5 block">
+                                        <span className="font-semibold text-foreground mt-0.5 block">
                                             {COMPENSATION_MODEL_LABELS[previewData.model]}
                                         </span>
                                     </div>
                                     {previewData.commission_pct !== null && (
                                         <div>
                                             <span className="text-muted-foreground block font-medium">Comisión Barbero</span>
-                                            <span className="font-semibold text-white mt-0.5 block">
+                                            <span className="font-semibold text-foreground mt-0.5 block">
                                                 {previewData.commission_pct}%
                                             </span>
                                         </div>
@@ -422,7 +446,7 @@ export default function AdminLiquidacionesPage() {
                                     {previewData.rental_amount !== null && (
                                         <div>
                                             <span className="text-muted-foreground block font-medium">Renta Sillón</span>
-                                            <span className="font-semibold text-white mt-0.5 block">
+                                            <span className="font-semibold text-foreground mt-0.5 block">
                                                 {formatPrice(previewData.rental_amount)} ({previewData.rental_period === "weekly" ? "Semanal" : "Mensual"})
                                             </span>
                                         </div>
@@ -430,7 +454,7 @@ export default function AdminLiquidacionesPage() {
                                     {previewData.model === "employee" && (
                                         <div>
                                             <span className="text-muted-foreground block font-medium">Sueldo Asignado</span>
-                                            <span className="font-semibold text-white mt-0.5 block">
+                                            <span className="font-semibold text-foreground mt-0.5 block">
                                                 {formatPrice(previewData.salary_amount || 0)}
                                             </span>
                                         </div>
@@ -439,9 +463,9 @@ export default function AdminLiquidacionesPage() {
 
                                 {/* Grilla de Totales */}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="bg-black border border-zinc-900 rounded-lg p-3">
+                                    <div className="bg-muted/40 border border-border rounded-lg p-3">
                                         <span className="text-[10px] text-muted-foreground uppercase font-semibold">Cortes (Servicios)</span>
-                                        <div className="text-lg font-bold text-white mt-0.5">
+                                        <div className="text-lg font-bold text-foreground mt-0.5">
                                             {formatPrice(previewData.services_total)}
                                         </div>
                                         <span className="text-[10px] text-muted-foreground mt-0.5 block">
@@ -449,7 +473,7 @@ export default function AdminLiquidacionesPage() {
                                         </span>
                                     </div>
 
-                                    <div className="bg-black border border-zinc-900 rounded-lg p-3">
+                                    <div className="bg-muted/40 border border-border rounded-lg p-3">
                                         <span className="text-[10px] text-muted-foreground uppercase font-semibold">Propinas</span>
                                         <div className="text-lg font-bold text-amber-400 mt-0.5">
                                             {formatPrice(previewData.tips_total)}
@@ -459,7 +483,7 @@ export default function AdminLiquidacionesPage() {
                                         </span>
                                     </div>
 
-                                    <div className="bg-black border border-zinc-900 rounded-lg p-3 bg-amber-500/5 border-amber-500/10">
+                                    <div className="bg-muted/40 border border-border rounded-lg p-3 bg-amber-500/5 border-amber-500/10">
                                         <span className="text-[10px] text-amber-400 uppercase font-semibold">Total Barbero</span>
                                         <div className="text-xl font-bold text-primary text-glow mt-0.5">
                                             {formatPrice(previewData.barber_total)}
@@ -471,9 +495,9 @@ export default function AdminLiquidacionesPage() {
                                         )}
                                     </div>
 
-                                    <div className="bg-black border border-zinc-900 rounded-lg p-3">
+                                    <div className="bg-muted/40 border border-border rounded-lg p-3">
                                         <span className="text-[10px] text-muted-foreground uppercase font-semibold">Total Casa</span>
-                                        <div className="text-lg font-bold text-white mt-0.5">
+                                        <div className="text-lg font-bold text-foreground mt-0.5">
                                             {formatPrice(previewData.house_total)}
                                         </div>
                                         <span className="text-[10px] text-muted-foreground mt-0.5 block">
@@ -483,7 +507,7 @@ export default function AdminLiquidacionesPage() {
                                 </div>
 
                                 {/* Acciones de Cierre */}
-                                <div className="border-t border-zinc-900 pt-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                                <div className="border-t border-border pt-4 flex flex-col md:flex-row items-center justify-between gap-4">
                                     <div className="flex items-center space-x-2">
                                         <Switch
                                             id="payout"
@@ -523,16 +547,17 @@ export default function AdminLiquidacionesPage() {
             </div>
 
             {/* Historial Histórico */}
-            <div className="rounded-md border border-zinc-800 bg-zinc-950">
-                <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+            <div className="rounded-md border border-border bg-card">
+                <div className="p-4 border-b border-border flex items-center justify-between">
                     <h3 className="font-semibold flex items-center gap-2 text-primary">
                         <TrendingUp className="h-4 w-4" />
                         Historial de Liquidaciones Cerradas
                     </h3>
                 </div>
-                <Table>
-                    <TableHeader className="bg-black/40">
-                        <TableRow className="border-zinc-800">
+                <div className="overflow-x-auto">
+                    <Table>
+                    <TableHeader className="bg-muted/40">
+                        <TableRow className="border-border">
                             <TableHead className="text-muted-foreground">Barbero</TableHead>
                             <TableHead className="text-muted-foreground">Período</TableHead>
                             <TableHead className="text-muted-foreground">Modelo</TableHead>
@@ -546,24 +571,56 @@ export default function AdminLiquidacionesPage() {
                     </TableHeader>
                     <TableBody>
                         {isHistoryLoading ? (
-                            <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center">
-                                    <div className="flex justify-center items-center gap-2 text-muted-foreground">
-                                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                                        Cargando historial...
-                                    </div>
-                                </TableCell>
-                            </TableRow>
+                            [...Array(3)].map((_, i) => (
+                                <TableRow key={i} className="animate-pulse">
+                                    <TableCell>
+                                        <div className="h-4 bg-muted/40 rounded w-24" />
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="h-4 bg-muted/30 rounded w-32" />
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="h-4 bg-muted/30 rounded w-20" />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="h-4 bg-muted/40 rounded w-10 ml-auto" />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="h-4 bg-muted/40 rounded w-12 ml-auto" />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="h-4 bg-muted/40 rounded w-14 ml-auto" />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="h-4 bg-muted/40 rounded w-14 ml-auto" />
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="h-5 bg-muted/30 rounded w-16 mx-auto" />
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="h-4 bg-muted/30 rounded w-20" />
+                                    </TableCell>
+                                </TableRow>
+                            ))
                         ) : history.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground text-sm">
-                                    No hay liquidaciones cerradas registradas.
+                                <TableCell colSpan={9} className="py-12 text-center text-muted-foreground">
+                                    <TrendingUp className="h-12 w-12 mx-auto mb-3 text-muted-foreground/20" />
+                                    <p className="font-semibold text-lg text-foreground/80">No hay liquidaciones cerradas</p>
+                                    <p className="text-sm mt-1 mb-4">Las liquidaciones procesadas y cerradas se listarán aquí.</p>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={loadHistory}
+                                    >
+                                        Actualizar
+                                    </Button>
                                 </TableCell>
                             </TableRow>
                         ) : (
                             history.map((s) => (
-                                <TableRow key={s.id} className="border-zinc-800/50 hover:bg-zinc-900/10">
-                                    <TableCell className="font-medium text-white flex items-center gap-2">
+                                <TableRow key={s.id} className="border-border/50 hover:bg-muted/10">
+                                    <TableCell className="font-medium text-foreground flex items-center gap-2">
                                         <User className="h-3.5 w-3.5 text-primary" />
                                         {s.barber?.name || "Desconocido"}
                                     </TableCell>
@@ -597,11 +654,12 @@ export default function AdminLiquidacionesPage() {
                         )}
                     </TableBody>
                 </Table>
+                </div>
             </div>
 
             {/* Dialog Registrar Renta Cobrada */}
             <Dialog open={isRentaDialogOpen} onOpenChange={setIsRentaDialogOpen}>
-                <DialogContent className="bg-black border-zinc-800 text-white max-w-md">
+                <DialogContent className="bg-card border-border text-foreground max-w-md">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Building className="h-5 w-5 text-primary" />
@@ -618,10 +676,10 @@ export default function AdminLiquidacionesPage() {
                                 value={rentaBarberId}
                                 onValueChange={setRentaBarberId}
                             >
-                                <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+                                <SelectTrigger className="bg-background border-border text-foreground">
                                     <SelectValue placeholder="Seleccioná al barbero" />
                                 </SelectTrigger>
-                                <SelectContent className="bg-zinc-950 border-zinc-800 text-white">
+                                <SelectContent className="bg-card border-border text-foreground">
                                     {barbers.map((b) => (
                                         <SelectItem key={b.id} value={b.id}>
                                             {b.name}
@@ -642,7 +700,7 @@ export default function AdminLiquidacionesPage() {
                                 value={rentaForm.amount}
                                 onChange={(e) => setRentaForm({ ...rentaForm, amount: e.target.value })}
                                 required
-                                className="bg-zinc-950 border-zinc-800 text-white"
+                                className="bg-background border-border text-foreground"
                             />
                         </div>
 
@@ -654,7 +712,7 @@ export default function AdminLiquidacionesPage() {
                                 value={rentaForm.description}
                                 onChange={(e) => setRentaForm({ ...rentaForm, description: e.target.value })}
                                 required
-                                className="bg-zinc-950 border-zinc-800 text-white"
+                                className="bg-background border-border text-foreground"
                             />
                         </div>
 
@@ -666,10 +724,10 @@ export default function AdminLiquidacionesPage() {
                                 value={rentaForm.paymentMethod}
                                 onValueChange={(v) => setRentaForm({ ...rentaForm, paymentMethod: v })}
                             >
-                                <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+                                <SelectTrigger className="bg-background border-border text-foreground">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent className="bg-zinc-950 border-zinc-800 text-white">
+                                <SelectContent className="bg-card border-border text-foreground">
                                     <SelectItem value="cash">Efectivo</SelectItem>
                                     <SelectItem value="transfer">Transferencia</SelectItem>
                                     <SelectItem value="card">Tarjeta</SelectItem>
@@ -683,7 +741,7 @@ export default function AdminLiquidacionesPage() {
                                 variant="outline"
                                 onClick={() => setIsRentaDialogOpen(false)}
                                 disabled={isRentaSubmitting}
-                                className="border-zinc-800 text-white hover:bg-zinc-900"
+                                className="border-border hover:bg-muted"
                             >
                                 Cancelar
                             </Button>

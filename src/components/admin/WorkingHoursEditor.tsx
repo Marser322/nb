@@ -79,11 +79,11 @@ export function WorkingHoursEditor({ value, onChange }: WorkingHoursEditorProps)
     };
 
     return (
-        <div className="space-y-4 p-4 rounded-lg border border-white/10 bg-zinc-950/40 backdrop-blur-md glass-card">
+        <div className="space-y-4 p-4 rounded-lg glass-card">
             <h3 className="text-sm font-semibold text-primary tracking-wider uppercase mb-2">
                 Horarios Semanales
             </h3>
-            <div className="divide-y divide-white/5 space-y-3">
+            <div className="divide-y divide-border/50 space-y-3">
                 {DAYS_OF_WEEK.map((day) => {
                     const dayConfig = localHours[day.key];
                     const isOpen = !!dayConfig;
@@ -113,30 +113,30 @@ export function WorkingHoursEditor({ value, onChange }: WorkingHoursEditorProps)
                                         onCheckedChange={(checked) => toggleDay(day.key, checked)}
                                         className="data-[state=checked]:bg-primary"
                                     />
-                                    <span className={`text-sm font-medium ${isOpen ? "text-white" : "text-muted-foreground"}`}>
+                                    <span className={`text-sm font-medium ${isOpen ? "text-foreground" : "text-muted-foreground"}`}>
                                         {day.label}
                                     </span>
                                 </div>
 
                                 {isOpen && dayConfig && (
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <div className="flex items-center gap-1.5 bg-zinc-900 px-2 py-1 rounded border border-white/5">
+                                        <div className="flex items-center gap-1.5 bg-card px-2 py-1 rounded border border-border">
                                             <span className="text-[10px] text-muted-foreground">Inicio</span>
                                             <Input
                                                 type="time"
                                                 value={dayConfig.start.slice(0, 5)}
                                                 onChange={(e) => updateDayConfig(day.key, "start", e.target.value)}
-                                                className="w-[85px] h-7 bg-transparent border-0 p-0 text-xs text-center focus:ring-0 text-white focus:outline-none"
+                                                className="w-[85px] h-7 bg-transparent border-0 p-0 text-xs text-center focus:ring-0 text-foreground focus:outline-none"
                                             />
                                         </div>
                                         <span className="text-muted-foreground text-xs">—</span>
-                                        <div className="flex items-center gap-1.5 bg-zinc-900 px-2 py-1 rounded border border-white/5">
+                                        <div className="flex items-center gap-1.5 bg-card px-2 py-1 rounded border border-border">
                                             <span className="text-[10px] text-muted-foreground">Fin</span>
                                             <Input
                                                 type="time"
                                                 value={dayConfig.end.slice(0, 5)}
                                                 onChange={(e) => updateDayConfig(day.key, "end", e.target.value)}
-                                                className="w-[85px] h-7 bg-transparent border-0 p-0 text-xs text-center focus:ring-0 text-white focus:outline-none"
+                                                className="w-[85px] h-7 bg-transparent border-0 p-0 text-xs text-center focus:ring-0 text-foreground focus:outline-none"
                                             />
                                         </div>
 
@@ -169,22 +169,22 @@ export function WorkingHoursEditor({ value, onChange }: WorkingHoursEditorProps)
 
                             {isOpen && dayConfig && hasBreak && (
                                 <div className="flex items-center gap-2 pl-12 animate-in fade-in slide-in-from-top-1 duration-200">
-                                    <div className="flex items-center gap-1.5 bg-zinc-950 px-2 py-1 rounded border border-yellow-500/10">
+                                    <div className="flex items-center gap-1.5 bg-card px-2 py-1 rounded border border-primary/20">
                                         <span className="text-[10px] text-primary/70">Pausa</span>
                                         <Input
                                             type="time"
                                             value={dayConfig.break_start?.slice(0, 5) || "13:00"}
                                             onChange={(e) => updateDayConfig(day.key, "break_start", e.target.value)}
-                                            className="w-[80px] h-6 bg-transparent border-0 p-0 text-xs text-center focus:ring-0 text-white/90"
+                                            className="w-[80px] h-6 bg-transparent border-0 p-0 text-xs text-center focus:ring-0 text-foreground"
                                         />
                                     </div>
                                     <span className="text-primary/40 text-xs">a</span>
-                                    <div className="flex items-center gap-1.5 bg-zinc-950 px-2 py-1 rounded border border-yellow-500/10">
+                                    <div className="flex items-center gap-1.5 bg-card px-2 py-1 rounded border border-primary/20">
                                         <Input
                                             type="time"
                                             value={dayConfig.break_end?.slice(0, 5) || "14:00"}
                                             onChange={(e) => updateDayConfig(day.key, "break_end", e.target.value)}
-                                            className="w-[80px] h-6 bg-transparent border-0 p-0 text-xs text-center focus:ring-0 text-white/90"
+                                            className="w-[80px] h-6 bg-transparent border-0 p-0 text-xs text-center focus:ring-0 text-foreground"
                                         />
                                     </div>
                                 </div>

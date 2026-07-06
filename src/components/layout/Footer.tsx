@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Scissors, Instagram, Phone, MapPin, Clock } from "lucide-react";
 import { ROUTES, BUSINESS_CONFIG } from "@/lib/constants";
+import { useFeatures } from "@/lib/features";
 
 export function Footer() {
+    const { features } = useFeatures();
     const [clickCount, setClickCount] = useState(0);
     const router = useRouter();
 
@@ -46,30 +48,36 @@ export function Footer() {
                     <div className="space-y-4">
                         <h4 className="font-semibold text-lg">Enlaces Rápidos</h4>
                         <ul className="space-y-2">
-                            <li>
-                                <Link
-                                    href={ROUTES.RESERVAR}
-                                    className="text-muted-foreground hover:text-primary transition-colors text-sm"
-                                >
-                                    Reservar Turno
-                                </Link>
-                            </li>
-                            <li>
-                                <Link
-                                    href={ROUTES.TIENDA}
-                                    className="text-muted-foreground hover:text-primary transition-colors text-sm"
-                                >
-                                    Tienda Online
-                                </Link>
-                            </li>
-                            <li>
-                                <Link
-                                    href={ROUTES.LOOKBOOK}
-                                    className="text-muted-foreground hover:text-primary transition-colors text-sm"
-                                >
-                                    Lookbook
-                                </Link>
-                            </li>
+                            {features.reservas_online && (
+                                <li>
+                                    <Link
+                                        href={ROUTES.RESERVAR}
+                                        className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                                    >
+                                        Reservar Turno
+                                    </Link>
+                                </li>
+                            )}
+                            {features.tienda && (
+                                <li>
+                                    <Link
+                                        href={ROUTES.TIENDA}
+                                        className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                                    >
+                                        Tienda Online
+                                    </Link>
+                                </li>
+                            )}
+                            {features.lookbook && (
+                                <li>
+                                    <Link
+                                        href={ROUTES.LOOKBOOK}
+                                        className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                                    >
+                                        Lookbook
+                                    </Link>
+                                </li>
+                            )}
                             <li>
                                 <Link
                                     href={ROUTES.CONTACTO}

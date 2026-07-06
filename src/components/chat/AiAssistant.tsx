@@ -2,9 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, X, Send, Scissors, Sparkles, Calendar, MapPin, DollarSign, ArrowRight } from "lucide-react";
+import { MessageSquare, X, Send, Scissors, Sparkles, Calendar, MapPin, DollarSign, ArrowRight, Wallet, Settings, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { usePathname } from "next/navigation";
+import { useFeatures } from "@/lib/features";
 import Link from "next/link";
 
 type ServiceItem = {
@@ -54,51 +56,102 @@ interface Message {
   data?: MessageData;
 }
 
-const QUICK_ACTIONS = [
-  { label: "Recomendame un corte", icon: Scissors },
-  { label: "Ver Precios", icon: DollarSign },
-  { label: "Sucursales", icon: MapPin },
-  { label: "Reservar Turno", icon: Calendar },
-];
+interface AiAssistantProps {
+  mode?: 'client' | 'admin';
+}
 
-export function AiAssistant() {
+export function AiAssistant({ mode: propMode }: AiAssistantProps) {
+  const pathname = usePathname();
+  const { features } = useFeatures();
   const [isOpen, setIsOpen] = useState(false);
+  
+  // Determine mode and visibility
+  const isAdminRoute = pathname.startsWith('/admin') && !pathname.startsWith('/admin-login');
+  const isClientRoute = pathname === '/' || 
+    pathname.startsWith('/reservar') || 
+    pathname.startsWith('/tienda') || 
+    pathname.startsWith('/lookbook') || 
+    pathname.startsWith('/contacto') || 
+    pathname.startsWith('/checkout') || 
+    pathname.startsWith('/mi-cuenta');
+
+  const resolvedMode = propMode || (isAdminRoute ? 'admin' : 'client');
+  const shouldRender = propMode ? true : (isAdminRoute || isClientRoute);
+
+  // Dynamic session key and greetings
+  const sessionKey = resolvedMode === 'admin' ? "nb-chat-messages-admin" : "nb-chat-messages-client";
+  const clientGreeting = "¡Hola! Soy tu **Asesor de Estilo** de New Brothers. Estoy aquí para recomendarte cortes, darte información de servicios, precios, sucursales y ayudarte a reservar tu turno. ¿En qué te puedo asesorar hoy?";
+  const adminGreeting = "¡Hola, Administrador! Soy tu Coach de Gestión de New Brothers. Estoy aquí para guiarte en el uso del CRM, resolver tus dudas operativas (caja, liquidaciones, stock, clientes) y ayudarte a optimizar el negocio. ¿En qué módulo puedo asistirte hoy?";
+  const defaultGreeting = resolvedMode === 'admin' ? adminGreeting : clientGreeting;
+
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "¡Hola! Soy tu **Asesor de Estilo** de New Brothers. Estoy aquí para recomendarte cortes, darte información de servicios, precios, sucursales y ayudarte a reservar tu turno. ¿En qué te puedo asesorar hoy?",
+      content: defaultGreeting,
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cargar mensajes desde sessionStorage al montar el componente (seguro para SSR)
+  // Dynamic quick actions
+  const getQuickActions = () => {
+    if (resolvedMode === 'admin') {
+      return [
+        { label: "Cómo cobro una cita", icon: DollarSign },
+        { label: "Cómo liquido a un barbero", icon: Wallet },
+        { label: "Cómo controlo el stock", icon: Package },
+        { label: "Gestionar configuraciones", icon: Settings },
+      ];
+    } else {
+      const actions = [
+        { label: "Recomendame un corte", icon: Scissors },
+        { label: "Ver Precios", icon: DollarSign },
+        { label: "Sucursales", icon: MapPin },
+      ];
+      if (features.reservas_online) {
+        actions.push({ label: "Reservar Turno", icon: Calendar });
+      }
+      return actions;
+    }
+  };
+
+  const quickActions = getQuickActions();
+
+  // Load chat messages from sessionStorage when mode/sessionKey changes
   useEffect(() => {
     try {
-      const stored = sessionStorage.getItem("nb-chat-messages");
+      const stored = sessionStorage.getItem(sessionKey);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setMessages(parsed);
+          return;
         }
       }
+      // Fallback to default greeting
+      setMessages([
+        {
+          role: "assistant",
+          content: defaultGreeting,
+        },
+      ]);
     } catch (e) {
       console.error("Error loading chat messages from sessionStorage:", e);
     }
-  }, []);
+  }, [sessionKey, defaultGreeting]);
 
-  // Guardar mensajes en sessionStorage al cambiar
+  // Save chat messages to sessionStorage on update
   useEffect(() => {
-    // Solo persistir si la conversación avanzó más allá del saludo inicial por defecto
-    if (messages.length > 1 || (messages.length === 1 && messages[0].content !== "¡Hola! Soy tu **Asesor de Estilo** de New Brothers. Estoy aquí para recomendarte cortes, darte información de servicios, precios, sucursales y ayudarte a reservar tu turno. ¿En qué te puedo asesorar hoy?")) {
+    const isInitialGreeting = messages.length === 1 && messages[0].content === defaultGreeting;
+    if (messages.length > 1 || (messages.length === 1 && !isInitialGreeting)) {
       try {
-        sessionStorage.setItem("nb-chat-messages", JSON.stringify(messages));
+        sessionStorage.setItem(sessionKey, JSON.stringify(messages));
       } catch (e) {
         console.error("Error saving chat messages to sessionStorage:", e);
       }
     }
-  }, [messages]);
+  }, [messages, sessionKey, defaultGreeting]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -119,6 +172,7 @@ export function AiAssistant() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          mode: resolvedMode,
           messages: [...messages, userMessage].map((m) => ({
             role: m.role,
             content: m.content,
@@ -151,6 +205,8 @@ export function AiAssistant() {
     }
   };
 
+  if (!shouldRender) return null;
+
   return (
     <>
       {/* Floating Action Button - Positioned bottom-left to avoid colliding with HelpFab (bottom-right) */}
@@ -163,7 +219,9 @@ export function AiAssistant() {
           {isOpen ? <X className="h-6 w-6 animate-in spin-in duration-300" /> : <MessageSquare className="h-6 w-6 animate-in zoom-in duration-300" />}
           <span className="absolute -top-1 -right-1 flex h-4 w-4">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-amber-500 items-center justify-center text-[10px] font-bold text-black">AI</span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-amber-500 items-center justify-center text-[10px] font-bold text-black">
+              {resolvedMode === 'admin' ? 'CRM' : 'AI'}
+            </span>
           </span>
         </Button>
       </div>
@@ -172,41 +230,45 @@ export function AiAssistant() {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, x: -50, scale: 0.95 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: -50, scale: 0.95 }}
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.3 }}
-            className="fixed bottom-24 left-6 z-50 w-[90vw] sm:w-[400px] h-[70vh] max-h-[600px] rounded-3xl border border-white/10 bg-zinc-950/90 backdrop-blur-2xl shadow-2xl overflow-hidden flex flex-col"
+            className="fixed bottom-24 left-4 right-4 sm:left-6 sm:right-auto z-50 w-auto sm:w-[400px] h-[70vh] max-h-[600px] rounded-3xl border border-border bg-card/95 backdrop-blur-2xl shadow-2xl overflow-hidden flex flex-col"
           >
             {/* Header */}
-            <div className="p-4 border-b border-white/10 bg-gradient-to-r from-zinc-900 to-zinc-950 flex items-center justify-between">
+            <div className="p-4 border-b border-border bg-gradient-to-r from-card to-background flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
-                  <Sparkles className="h-5 w-5 text-amber-400" />
+                <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">
+                  <Sparkles className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-white text-sm">Asesor de Estilo New Brothers</h3>
-                  <span className="text-[10px] text-amber-500 font-mono tracking-widest uppercase">Inteligencia Artificial</span>
+                  <h3 className="font-bold text-foreground text-sm">
+                    {resolvedMode === 'admin' ? "Coach de Gestión New Brothers" : "Asesor de Estilo New Brothers"}
+                  </h3>
+                  <span className="text-[10px] text-primary font-mono tracking-widest uppercase">
+                    {resolvedMode === 'admin' ? "Soporte CRM" : "Inteligencia Artificial"}
+                  </span>
                 </div>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsOpen(false)}
-                className="h-8 w-8 rounded-full text-zinc-400 hover:text-white hover:bg-white/5"
+                className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
             {/* Quick Actions / Suggestions */}
-            <div className="px-4 py-3 border-b border-white/5 bg-zinc-900/30 flex gap-2 overflow-x-auto scrollbar-none shrink-0">
-              {QUICK_ACTIONS.map((action) => (
+            <div className="px-4 py-3 border-b border-border/50 bg-muted/30 flex gap-2 overflow-x-auto scrollbar-none shrink-0">
+              {quickActions.map((action) => (
                 <Button
                   key={action.label}
                   variant="outline"
                   onClick={() => handleSendMessage(action.label)}
-                  className="rounded-full h-8 px-3 text-xs bg-white/5 border-white/10 text-zinc-300 hover:bg-amber-500 hover:border-amber-500 hover:text-black transition-all flex items-center gap-1.5 shrink-0"
+                  className="rounded-full h-8 px-3 text-xs bg-card border-border text-muted-foreground hover:bg-primary hover:border-primary hover:text-primary-foreground transition-all flex items-center gap-1.5 shrink-0"
                 >
                   <action.icon className="h-3 w-3" />
                   {action.label}
@@ -224,20 +286,20 @@ export function AiAssistant() {
                   <div
                     className={`max-w-[85%] rounded-2xl p-3.5 text-sm leading-relaxed ${
                       msg.role === "user"
-                        ? "bg-amber-500 text-black font-medium rounded-tr-none shadow-lg shadow-amber-500/10"
-                        : "bg-white/5 border border-white/10 text-zinc-200 rounded-tl-none"
+                        ? "bg-primary text-primary-foreground font-medium rounded-tr-none shadow-lg shadow-primary/10"
+                        : "bg-muted border border-border text-foreground rounded-tl-none"
                     }`}
                   >
                     {/* Render message text with simple markdown-like bold parsing */}
-                    <p className="whitespace-pre-line">
+                    <p className="whitespace-pre-line text-xs sm:text-sm">
                       {msg.content.split("**").map((part, idx) =>
-                        idx % 2 === 1 ? <strong key={idx} className="font-bold text-white">{part}</strong> : part
+                        idx % 2 === 1 ? <strong key={idx} className="font-bold text-foreground">{part}</strong> : part
                       )}
                     </p>
 
                     {/* Rich UI Components based on response payload */}
                     {msg.data && (
-                      <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                      <div className="mt-3 pt-3 border-t border-border space-y-2">
                         {/* Services List Card */}
                         {msg.data.type === "services" && msg.data.items && (
                           <div className="space-y-1.5">
@@ -245,15 +307,15 @@ export function AiAssistant() {
                               <Link
                                 key={service.id}
                                 href={`/reservar?serviceId=${service.id}`}
-                                className="flex justify-between items-center bg-white/5 p-2 rounded-lg border border-white/5 hover:border-amber-500/50 hover:bg-white/10 transition-all text-xs group"
+                                className="flex justify-between items-center bg-card p-2 rounded-lg border border-border hover:border-primary/50 hover:bg-accent transition-all text-xs group"
                               >
                                 <div>
-                                  <p className="font-bold text-white group-hover:text-amber-400 transition-colors">{service.name}</p>
-                                  <p className="text-[10px] text-zinc-400">{service.duration} min</p>
+                                  <p className="font-bold text-foreground group-hover:text-primary transition-colors">{service.name}</p>
+                                  <p className="text-[10px] text-muted-foreground">{service.duration} min</p>
                                 </div>
                                 <div className="flex items-center gap-1.5 font-mono">
-                                  <span className="font-bold text-white">${service.price}</span>
-                                  <ArrowRight className="h-3 w-3 text-amber-500 opacity-0 group-hover:opacity-100 transition-all" />
+                                  <span className="font-bold text-foreground">${service.price}</span>
+                                  <ArrowRight className="h-3 w-3 text-primary opacity-0 group-hover:opacity-100 transition-all" />
                                 </div>
                               </Link>
                             ))}
@@ -267,10 +329,10 @@ export function AiAssistant() {
                               <Link
                                 key={style.id}
                                 href={`/reservar?styleId=${style.id}&serviceId=${style.serviceId}`}
-                                className="bg-white/5 p-2 rounded-lg border border-white/5 hover:border-amber-500/50 hover:bg-white/10 transition-all text-left text-xs block group"
+                                className="bg-card p-2 rounded-lg border border-border hover:border-primary/50 hover:bg-accent transition-all text-left text-xs block group"
                               >
-                                <p className="font-bold text-white line-clamp-1 group-hover:text-amber-400 transition-colors">{style.name}</p>
-                                <p className="text-[10px] text-amber-500 mt-1 flex items-center gap-1">
+                                <p className="font-bold text-foreground line-clamp-1 group-hover:text-primary transition-colors">{style.name}</p>
+                                <p className="text-[10px] text-primary mt-1 flex items-center gap-1">
                                   Reservar <ArrowRight className="h-2.5 w-2.5 group-hover:translate-x-1 transition-transform" />
                                 </p>
                               </Link>
@@ -284,16 +346,16 @@ export function AiAssistant() {
                             {msg.data.items.map((prod, idx) => (
                               <div
                                 key={idx}
-                                className="flex justify-between items-center bg-white/5 p-2 rounded-lg border border-white/5 text-xs"
+                                className="flex justify-between items-center bg-card p-2 rounded-lg border border-border text-xs"
                               >
                                 <div>
-                                  <p className="font-bold text-white">{prod.name}</p>
-                                  <p className="text-[10px] text-zinc-400 line-clamp-1">{prod.desc}</p>
+                                  <p className="font-bold text-foreground">{prod.name}</p>
+                                  <p className="text-[10px] text-muted-foreground line-clamp-1">{prod.desc}</p>
                                 </div>
-                                <span className="font-mono font-bold text-amber-400 shrink-0 ml-2">${prod.price}</span>
+                                <span className="font-mono font-bold text-primary shrink-0 ml-2">${prod.price}</span>
                               </div>
                             ))}
-                            <Button asChild size="sm" className="w-full text-xs h-8 rounded-lg bg-amber-500 hover:bg-amber-600 text-black mt-1">
+                            <Button asChild size="sm" className="w-full text-xs h-8 rounded-lg bg-primary hover:bg-primary/95 text-primary-foreground mt-1">
                               <Link href="/tienda">Ver Tienda Completa</Link>
                             </Button>
                           </div>
@@ -301,7 +363,7 @@ export function AiAssistant() {
 
                         {/* General Actions (Redirect to booking page, etc.) */}
                         {msg.data.type === "action" && msg.data.label && msg.data.url && (
-                          <Button asChild className="w-full text-xs h-9 rounded-lg bg-amber-500 hover:bg-amber-600 text-black">
+                          <Button asChild className="w-full text-xs h-9 rounded-lg bg-primary hover:bg-primary/95 text-primary-foreground">
                             <Link href={msg.data.url}>
                               {msg.data.label}
                               <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
@@ -316,13 +378,15 @@ export function AiAssistant() {
 
               {isLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-white/5 border border-white/10 rounded-2xl rounded-tl-none p-3.5 text-sm text-zinc-400 flex items-center gap-2">
+                  <div className="bg-muted border border-border rounded-2xl rounded-tl-none p-3.5 text-sm text-muted-foreground flex items-center gap-2">
                     <span className="flex gap-1">
-                      <span className="h-2 w-2 rounded-full bg-zinc-500 animate-bounce" />
-                      <span className="h-2 w-2 rounded-full bg-zinc-500 animate-bounce delay-150" />
-                      <span className="h-2 w-2 rounded-full bg-zinc-500 animate-bounce delay-300" />
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" />
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce delay-150" />
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce delay-300" />
                     </span>
-                    <span>Analizando estilo...</span>
+                    <span>
+                      {resolvedMode === 'admin' ? "Analizando CRM..." : "Analizando estilo..."}
+                    </span>
                   </div>
                 </div>
               )}
@@ -335,20 +399,20 @@ export function AiAssistant() {
                 e.preventDefault();
                 handleSendMessage(input);
               }}
-              className="p-4 border-t border-white/10 bg-zinc-950 flex gap-2 items-center shrink-0"
+              className="p-4 border-t border-border bg-card flex gap-2 items-center shrink-0"
             >
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Preguntame sobre cortes, precios o reservá..."
+                placeholder={resolvedMode === 'admin' ? "Preguntame cómo cobrar, liquidar, stock..." : "Preguntame sobre cortes, precios o reservá..."}
                 disabled={isLoading}
-                className="bg-white/5 border-white/10 text-white rounded-full focus-visible:ring-amber-500 h-10 px-4 flex-grow placeholder:text-zinc-500"
+                className="bg-background border-border text-foreground rounded-full focus-visible:ring-primary h-10 px-4 flex-grow placeholder:text-muted-foreground text-xs sm:text-sm"
               />
               <Button
                 type="submit"
                 disabled={isLoading || !input.trim()}
                 size="icon"
-                className="h-10 w-10 rounded-full bg-amber-500 hover:bg-amber-600 text-black shrink-0 transition-transform active:scale-90 disabled:opacity-50"
+                className="h-10 w-10 rounded-full bg-primary hover:bg-primary/95 text-primary-foreground shrink-0 transition-transform active:scale-90 disabled:opacity-50"
               >
                 <Send className="h-4 w-4" />
               </Button>

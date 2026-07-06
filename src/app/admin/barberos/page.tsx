@@ -23,7 +23,7 @@ import {
     DialogTrigger,
     DialogFooter,
 } from "@/components/ui/dialog";
-import { Users, Plus, Loader2, Edit2, CalendarRange, Trash2, Calendar, Clock, DollarSign } from "lucide-react";
+import { Users, Plus, Loader2, Edit2, CalendarRange, Trash2, Calendar, Clock, DollarSign, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { Barber, Branch, WorkingHours, ScheduleBlock, BarberCompensation } from "@/types/database.types";
 import {
@@ -36,6 +36,7 @@ import {
 import { WorkingHoursEditor } from "@/components/admin/WorkingHoursEditor";
 import { COMPENSATION_MODEL_LABELS } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
+import { ImageUpload } from "@/components/admin/image-upload";
 
 export default function AdminBarberosPage() {
     const [barbers, setBarbers] = useState<Barber[]>([]);
@@ -69,6 +70,16 @@ export default function AdminBarberosPage() {
     
     // Si usa horario personalizado (en caso contrario, guarda null y hereda de sucursal)
     const [useCustomHours, setUseCustomHours] = useState(false);
+
+    const [searchQuery, setSearchQuery] = useState("");
+
+    const filteredBarbers = useMemo(() => {
+        return barbers.filter((barber) => {
+            const query = searchQuery.toLowerCase().trim();
+            if (!query) return true;
+            return barber.name.toLowerCase().includes(query);
+        });
+    }, [barbers, searchQuery]);
 
     // Estado para la gestión de bloqueos
     const [activeBarberForBlocks, setActiveBarberForBlocks] = useState<Barber | null>(null);
@@ -368,7 +379,7 @@ export default function AdminBarberosPage() {
                 </div>
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button onClick={openNewDialog}>
+                        <Button id="admin-btn-new-barber" onClick={openNewDialog}>
                             <Plus className="h-4 w-4 mr-2" />
                             Nuevo Barbero
                         </Button>
@@ -398,12 +409,23 @@ export default function AdminBarberosPage() {
                                 />
                             </div>
                             <div>
-                                <label className="text-sm font-medium mb-2 block">URL de Avatar</label>
-                                <Input
-                                    placeholder="https://ejemplo.com/foto.jpg"
-                                    value={formData.avatar_url}
-                                    onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
-                                />
+                                <label className="text-sm font-medium mb-2 block">Avatar del Barbero</label>
+                                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                                    <ImageUpload
+                                        value={formData.avatar_url}
+                                        onChange={(url) => setFormData({ ...formData, avatar_url: url })}
+                                        folder="avatars"
+                                        placeholder="Subir avatar"
+                                    />
+                                    <div className="flex-1 space-y-2 w-full">
+                                        <span className="text-xs text-muted-foreground">O introduce una URL externa:</span>
+                                        <Input
+                                            placeholder="https://ejemplo.com/foto.jpg"
+                                            value={formData.avatar_url}
+                                            onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
                             </div>
                             <div>
                                 <label className="text-sm font-medium mb-2 block">Sucursal</label>
@@ -469,35 +491,79 @@ export default function AdminBarberosPage() {
                 </Dialog>
             </div>
 
+            {/* Buscador */}
+            <div className="flex items-center gap-4 bg-card/50 p-4 rounded-lg border border-border/50 mb-6">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Buscar barbero por nombre..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="max-w-sm border-none bg-transparent focus-visible:ring-0 px-0"
+                />
+            </div>
+
             <div className="rounded-md border bg-card">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Barbero</TableHead>
-                            <TableHead>Biografía</TableHead>
-                            <TableHead>Sucursal</TableHead>
-                            <TableHead className="text-center">Estado</TableHead>
-                            <TableHead className="text-center">Acciones</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {isLoading ? (
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">
-                                    <div className="flex justify-center items-center gap-2">
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        Cargando barberos...
-                                    </div>
-                                </TableCell>
+                                <TableHead>Barbero</TableHead>
+                                <TableHead>Biografía</TableHead>
+                                <TableHead>Sucursal</TableHead>
+                                <TableHead className="text-center">Estado</TableHead>
+                                <TableHead className="text-center">Acciones</TableHead>
                             </TableRow>
-                        ) : barbers.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                                    No hay barberos registrados.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            barbers.map((barber) => (
+                        </TableHeader>
+                        <TableBody>
+                            {isLoading ? (
+                                [...Array(3)].map((_, i) => (
+                                    <TableRow key={i}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-3 animate-pulse">
+                                                <div className="h-10 w-10 rounded-full bg-muted/40" />
+                                                <div className="h-4 bg-muted/50 rounded w-24" />
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="h-4 bg-muted/40 rounded w-48 animate-pulse" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="h-4 bg-muted/40 rounded w-20 animate-pulse" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="h-6 w-10 bg-muted/30 rounded-full mx-auto animate-pulse" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex justify-center gap-2 animate-pulse">
+                                                <div className="h-8 w-8 bg-muted/40 rounded" />
+                                                <div className="h-8 w-8 bg-muted/40 rounded" />
+                                                <div className="h-8 w-8 bg-muted/40 rounded" />
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : filteredBarbers.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
+                                        <Users className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
+                                        <p className="font-semibold text-lg text-foreground/80">No se encontraron barberos</p>
+                                        <p className="text-sm mt-1 mb-4">
+                                            {searchQuery ? "Intenta ajustando el término de búsqueda." : "Registra un barbero para empezar a gestionar la agenda."}
+                                        </p>
+                                        {searchQuery ? (
+                                            <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
+                                                Limpiar búsqueda
+                                            </Button>
+                                        ) : (
+                                            <Button variant="outline" size="sm" onClick={() => setIsDialogOpen(true)}>
+                                                <Plus className="h-4 w-4 mr-2" />
+                                                Agregar primer barbero
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filteredBarbers.map((barber) => (
                                 <TableRow key={barber.id}>
                                     <TableCell>
                                         <div className="flex items-center gap-3">
@@ -564,6 +630,7 @@ export default function AdminBarberosPage() {
                         )}
                     </TableBody>
                 </Table>
+                </div>
             </div>
 
             {/* Diálogo para Gestionar Bloqueos */}
@@ -595,10 +662,10 @@ export default function AdminBarberosPage() {
                                     {blocks.map((block) => (
                                         <div
                                             key={block.id}
-                                            className="flex items-center justify-between p-3 rounded-lg border border-white/5 bg-zinc-900/50 text-xs"
+                                            className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/40 text-xs"
                                         >
                                             <div className="space-y-1">
-                                                <div className="font-semibold text-white">
+                                                <div className="font-semibold text-foreground">
                                                     {block.reason || "Sin motivo especificado"}
                                                 </div>
                                                 <div className="text-muted-foreground flex items-center gap-3">
@@ -631,7 +698,7 @@ export default function AdminBarberosPage() {
                         </div>
 
                         {/* Formulario de alta */}
-                        <form onSubmit={handleCreateBlock} className="space-y-4 border-t border-white/5 pt-4">
+                        <form onSubmit={handleCreateBlock} className="space-y-4 border-t border-border pt-4">
                             <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">
                                 Nuevo Bloqueo (Vacaciones, Día libre, etc.)
                             </h3>
@@ -669,7 +736,7 @@ export default function AdminBarberosPage() {
                                     onCheckedChange={(checked) => setBlockForm({ ...blockForm, isFullDay: checked })}
                                     className="data-[state=checked]:bg-primary"
                                 />
-                                <label htmlFor="barber-is-fullday" className="text-xs font-medium text-white cursor-pointer select-none">
+                                <label htmlFor="barber-is-fullday" className="text-xs font-medium text-foreground cursor-pointer select-none">
                                     Bloquear todo el día
                                 </label>
                             </div>
@@ -742,7 +809,7 @@ export default function AdminBarberosPage() {
 
             {/* Diálogo para Gestionar Compensaciones */}
             <Dialog open={activeBarberForCompensation !== null} onOpenChange={(open) => !open && setActiveBarberForCompensation(null)}>
-                <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl bg-black border-zinc-800 text-white">
+                <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl bg-card border-border text-foreground">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-xl font-bold">
                             <DollarSign className="h-5 w-5 text-primary text-glow" />
@@ -769,10 +836,10 @@ export default function AdminBarberosPage() {
                                     {compensationHistory.map((c) => (
                                         <div
                                             key={c.id}
-                                            className="flex items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-950 text-xs"
+                                            className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/40 text-xs"
                                         >
                                             <div className="space-y-1">
-                                                <div className="font-semibold text-white text-sm">
+                                                <div className="font-semibold text-foreground text-sm">
                                                     {COMPENSATION_MODEL_LABELS[c.model]}
                                                 </div>
                                                 <div className="text-muted-foreground">
@@ -788,7 +855,7 @@ export default function AdminBarberosPage() {
                                                 )}
                                             </div>
                                             <div className="text-right">
-                                                <div className="text-white font-mono">
+                                                <div className="text-foreground font-mono">
                                                     Desde: {format(new Date(c.effective_from + "T12:00:00"), "dd/MM/yyyy")}
                                                 </div>
                                             </div>
@@ -799,7 +866,7 @@ export default function AdminBarberosPage() {
                         </div>
 
                         {/* Nueva Compensación */}
-                        <div className="border-t border-zinc-800 pt-4">
+                        <div className="border-t border-border pt-4">
                             <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-4">
                                 Configurar Nueva Compensación
                             </h3>
@@ -811,10 +878,10 @@ export default function AdminBarberosPage() {
                                             value={compForm.model}
                                             onValueChange={(v) => setCompForm({ ...compForm, model: v })}
                                         >
-                                            <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+                                            <SelectTrigger className="bg-background border-border text-foreground">
                                                 <SelectValue />
                                             </SelectTrigger>
-                                            <SelectContent className="bg-zinc-950 border-zinc-800 text-white">
+                                            <SelectContent className="bg-card border-border text-foreground">
                                                 <SelectItem value="commission">Comisión</SelectItem>
                                                 <SelectItem value="chair_rental">Renta de sillón</SelectItem>
                                                 <SelectItem value="hybrid">Híbrido</SelectItem>
@@ -829,7 +896,7 @@ export default function AdminBarberosPage() {
                                             value={compForm.effectiveFrom}
                                             onChange={(e) => setCompForm({ ...compForm, effectiveFrom: e.target.value })}
                                             required
-                                            className="bg-zinc-950 border-zinc-800 text-white"
+                                            className="bg-background border-border text-foreground"
                                         />
                                     </div>
                                 </div>
@@ -846,7 +913,7 @@ export default function AdminBarberosPage() {
                                                 value={compForm.commissionPct}
                                                 onChange={(e) => setCompForm({ ...compForm, commissionPct: e.target.value })}
                                                 required
-                                                className="bg-zinc-950 border-zinc-800 text-white"
+                                                className="bg-background border-border text-foreground"
                                             />
                                         </div>
                                     )}
@@ -862,7 +929,7 @@ export default function AdminBarberosPage() {
                                                     value={compForm.rentalAmount}
                                                     onChange={(e) => setCompForm({ ...compForm, rentalAmount: e.target.value })}
                                                     required
-                                                    className="bg-zinc-950 border-zinc-800 text-white"
+                                                    className="bg-background border-border text-foreground"
                                                 />
                                             </div>
                                             <div>
@@ -871,10 +938,10 @@ export default function AdminBarberosPage() {
                                                     value={compForm.rentalPeriod}
                                                     onValueChange={(v) => setCompForm({ ...compForm, rentalPeriod: v })}
                                                 >
-                                                    <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+                                                    <SelectTrigger className="bg-background border-border text-foreground">
                                                         <SelectValue />
                                                     </SelectTrigger>
-                                                    <SelectContent className="bg-zinc-950 border-zinc-800 text-white">
+                                                    <SelectContent className="bg-card border-border text-foreground">
                                                         <SelectItem value="weekly">Semanal</SelectItem>
                                                         <SelectItem value="monthly">Mensual</SelectItem>
                                                     </SelectContent>
@@ -893,7 +960,7 @@ export default function AdminBarberosPage() {
                                                 value={compForm.salaryAmount}
                                                 onChange={(e) => setCompForm({ ...compForm, salaryAmount: e.target.value })}
                                                 required
-                                                className="bg-zinc-950 border-zinc-800 text-white"
+                                                className="bg-background border-border text-foreground"
                                             />
                                         </div>
                                     )}
@@ -905,7 +972,7 @@ export default function AdminBarberosPage() {
                                         placeholder="Comisiones especiales o detalles del acuerdo"
                                         value={compForm.notes}
                                         onChange={(e) => setCompForm({ ...compForm, notes: e.target.value })}
-                                        className="bg-zinc-950 border-zinc-800 text-white"
+                                        className="bg-background border-border text-foreground"
                                     />
                                 </div>
 
@@ -915,7 +982,7 @@ export default function AdminBarberosPage() {
                                         variant="outline"
                                         onClick={() => setActiveBarberForCompensation(null)}
                                         disabled={isCreatingComp}
-                                        className="border-zinc-800 text-white hover:bg-zinc-900"
+                                        className="border-border hover:bg-muted"
                                     >
                                         Cancelar
                                     </Button>

@@ -55,7 +55,7 @@ export function CrmCards({
                                 Clientes enfriándose, listos para recuperar con un mensaje.
                             </CardDescription>
                         </div>
-                        <Button asChild variant="outline" size="sm" className="shrink-0 border-white/10">
+                        <Button asChild variant="outline" size="sm" className="shrink-0 border-border">
                             <Link href="/admin/clientes?filtro=inactivos">Ver todos</Link>
                         </Button>
                     </CardHeader>
@@ -79,7 +79,7 @@ export function CrmCards({
                                         className="flex items-center justify-between gap-3 rounded-lg border border-border/40 bg-background/40 p-3"
                                     >
                                         <div className="min-w-0">
-                                            <p className="truncate font-medium text-white">
+                                            <p className="truncate font-medium text-foreground">
                                                 {client.full_name || "Cliente sin nombre"}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
@@ -187,7 +187,7 @@ function RankingCard({
                                 <div key={item.name} className="space-y-2">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                            <p className="truncate font-medium text-white">
+                                            <p className="truncate font-medium text-foreground">
                                                 {index + 1}. {item.name}
                                             </p>
                                             <p className="text-xs text-muted-foreground">

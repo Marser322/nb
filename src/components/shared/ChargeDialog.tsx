@@ -109,7 +109,7 @@ export default function ChargeDialog({
                     <DialogTitle>Cobrar y Completar Cita</DialogTitle>
                     <DialogDescription>
                         Registrá el cobro del servicio para{" "}
-                        <span className="font-semibold text-white">
+                        <span className="font-semibold text-foreground">
                             {appointment.client?.full_name || "Cliente sin nombre"}
                         </span>
                         .
@@ -121,9 +121,9 @@ export default function ChargeDialog({
                         <label className="text-sm font-medium mb-1.5 block">
                             Servicio contratado
                         </label>
-                        <div className="p-3 bg-zinc-950 rounded-lg border border-white/5 text-sm">
+                        <div className="p-3 bg-muted rounded-lg border border-border text-sm">
                             <div className="flex justify-between items-center">
-                                <span className="font-medium text-white">
+                                <span className="font-medium text-foreground">
                                     {appointment.service?.name || "Servicio"}
                                 </span>
                                 <span className="text-primary font-bold">
@@ -147,7 +147,7 @@ export default function ChargeDialog({
                             value={finalAmount}
                             onChange={(e) => setFinalAmount(e.target.value)}
                             required
-                            className="bg-zinc-950 border-white/10 text-white focus-visible:ring-primary"
+                            className="bg-background border-border text-foreground focus-visible:ring-primary"
                         />
                     </div>
 
@@ -160,7 +160,7 @@ export default function ChargeDialog({
                                 value={paymentMethod}
                                 onValueChange={setPaymentMethod}
                             >
-                                <SelectTrigger className="bg-zinc-950 border-white/10 text-white focus:ring-primary">
+                                <SelectTrigger className="bg-background border-border text-foreground focus:ring-primary">
                                     <SelectValue placeholder="Elegí método" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -187,7 +187,7 @@ export default function ChargeDialog({
                                     placeholder="0"
                                     value={tipAmount}
                                     onChange={(e) => setTipAmount(e.target.value)}
-                                    className="bg-zinc-950 border-white/10 text-white focus-visible:ring-primary"
+                                    className="bg-background border-border text-foreground focus-visible:ring-primary"
                                 />
                                 <span className="text-[10px] text-muted-foreground mt-1 block">
                                     * 100 % para el barbero
@@ -202,14 +202,14 @@ export default function ChargeDialog({
                             variant="outline"
                             onClick={() => onOpenChange(false)}
                             disabled={isSubmitting}
-                            className="border-white/10 text-white hover:bg-white/5"
+                            className="border-border text-foreground hover:bg-accent"
                         >
                             Cancelar
                         </Button>
                         <Button
                             type="submit"
                             disabled={isSubmitting}
-                            className="bg-primary text-black hover:bg-primary/90 font-semibold"
+                            className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
                         >
                             {isSubmitting ? (
                                 <>

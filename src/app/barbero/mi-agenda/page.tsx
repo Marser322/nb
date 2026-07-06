@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
     Calendar,
     Clock,
@@ -32,7 +33,16 @@ type AppointmentWithRelations = Appointment & {
 };
 
 export default function BarberoAgendaPage() {
-    const { features } = useFeatures();
+    const { features, isLoaded } = useFeatures();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (isLoaded && !features.portal_barbero) {
+            toast.error("El portal de barberos no está disponible");
+            router.replace("/");
+        }
+    }, [isLoaded, features.portal_barbero, router]);
+
     const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [barberName, setBarberName] = useState<string | null>(null);
@@ -47,13 +57,10 @@ export default function BarberoAgendaPage() {
         setIsLoading(true);
 
         // Invocación oportunista del generador de turnos fijos (fire-and-forget)
-        const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
-        if (!isDummy) {
-            try {
-                await supabase.rpc("generate_subscription_appointments");
-            } catch (err) {
-                console.error("Error generating subscription appointments:", err);
-            }
+        try {
+            await supabase.rpc("generate_subscription_appointments");
+        } catch (err) {
+            console.error("Error generating subscription appointments:", err);
         }
 
         const { data: { user } } = await supabase.auth.getUser();
@@ -148,6 +155,15 @@ export default function BarberoAgendaPage() {
         confirmadas: appointments.filter((a) => a.status === "confirmed").length,
         completadas: appointments.filter((a) => a.status === "completed").length,
     };
+
+    // Guard de módulo: se evalúa DESPUÉS de todos los hooks para no violar las Reglas de Hooks.
+    if (!isLoaded || !features.portal_barbero) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            </div>
+        );
+    }
 
     if (!isLoading && accessError) {
         return (

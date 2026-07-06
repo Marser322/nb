@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useFeatures } from "@/lib/features";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -34,8 +36,19 @@ import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils";
 import { PRODUCT_CATEGORIES } from "@/lib/constants";
 import type { Product } from "@/types/database.types";
+import { ImageUpload } from "@/components/admin/image-upload";
 
 export default function AdminProductsPage() {
+    const { features, isLoaded } = useFeatures();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (isLoaded && !features.tienda) {
+            toast.error("El módulo de tienda no está activo");
+            router.replace("/admin/dashboard");
+        }
+    }, [isLoaded, features.tienda, router]);
+
     const [products, setProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -212,6 +225,13 @@ export default function AdminProductsPage() {
     const filteredProducts = products.filter(p =>
         p.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+    if (!isLoaded || !features.tienda) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -224,7 +244,7 @@ export default function AdminProductsPage() {
                 </div>
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button onClick={openNewDialog}>
+                        <Button id="admin-btn-new-product" onClick={openNewDialog}>
                             <Plus className="h-4 w-4 mr-2" />
                             Agregar Producto
                         </Button>
@@ -291,12 +311,23 @@ export default function AdminProductsPage() {
                                 </Select>
                             </div>
                             <div>
-                                <label className="text-sm font-medium mb-2 block">URL de Imagen</label>
-                                <Input
-                                    placeholder="https://ejemplo.com/producto.jpg"
-                                    value={formData.image_url}
-                                    onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                                />
+                                <label className="text-sm font-medium mb-2 block">Imagen del Producto</label>
+                                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                                    <ImageUpload
+                                        value={formData.image_url}
+                                        onChange={(url) => setFormData({ ...formData, image_url: url })}
+                                        folder="products"
+                                        placeholder="Subir imagen"
+                                    />
+                                    <div className="flex-1 space-y-2 w-full">
+                                        <span className="text-xs text-muted-foreground">O introduce una URL externa:</span>
+                                        <Input
+                                            placeholder="https://ejemplo.com/producto.jpg"
+                                            value={formData.image_url}
+                                            onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
                             </div>
                             <div className="flex justify-end gap-2 pt-4">
                                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -323,38 +354,74 @@ export default function AdminProductsPage() {
             </div>
 
             <div className="rounded-md border bg-card">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Producto</TableHead>
-                            <TableHead>Categoría</TableHead>
-                            <TableHead>Precio</TableHead>
-                            <TableHead className="text-center">Stock</TableHead>
-                            <TableHead className="text-center">Estado</TableHead>
-                            <TableHead className="text-center">Acciones</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {isLoading ? (
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center">
-                                    <div className="flex justify-center items-center gap-2">
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        Cargando inventario...
-                                    </div>
-                                </TableCell>
+                                <TableHead>Producto</TableHead>
+                                <TableHead>Categoría</TableHead>
+                                <TableHead>Precio</TableHead>
+                                <TableHead className="text-center">Stock</TableHead>
+                                <TableHead className="text-center">Estado</TableHead>
+                                <TableHead className="text-center">Acciones</TableHead>
                             </TableRow>
-                        ) : filteredProducts.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                    No se encontraron productos.
-                                    <Button variant="link" onClick={openNewDialog} className="ml-2">
-                                        Agregar uno
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            filteredProducts.map((product) => (
+                        </TableHeader>
+                        <TableBody>
+                            {isLoading ? (
+                                [...Array(4)].map((_, i) => (
+                                    <TableRow key={i}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-3 animate-pulse">
+                                                <div className="h-10 w-10 rounded-md bg-muted/40" />
+                                                <div className="h-4 bg-muted/50 rounded w-32" />
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="h-4 bg-muted/40 rounded w-20 animate-pulse" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="h-4 bg-muted/40 rounded w-16 animate-pulse" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center justify-center gap-2 animate-pulse">
+                                                <div className="h-8 w-8 bg-muted/40 rounded" />
+                                                <div className="h-4 bg-muted/40 rounded w-8" />
+                                                <div className="h-8 w-8 bg-muted/40 rounded" />
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="h-6 w-10 bg-muted/30 rounded-full mx-auto animate-pulse" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex justify-center gap-2 animate-pulse">
+                                                <div className="h-8 w-8 bg-muted/40 rounded" />
+                                                <div className="h-8 w-8 bg-muted/40 rounded" />
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : filteredProducts.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
+                                        <Package className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
+                                        <p className="font-semibold text-lg text-foreground/80">No se encontraron productos</p>
+                                        <p className="text-sm mt-1 mb-4">
+                                            {searchQuery ? "Intenta ajustando el término de búsqueda." : "Registra un producto para que aparezca en la tienda."}
+                                        </p>
+                                        {searchQuery ? (
+                                            <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
+                                                Limpiar búsqueda
+                                            </Button>
+                                        ) : (
+                                            <Button variant="outline" size="sm" onClick={openNewDialog}>
+                                                <Plus className="h-4 w-4 mr-2" />
+                                                Agregar primer producto
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filteredProducts.map((product) => (
                                 <TableRow key={product.id}>
                                     <TableCell>
                                         <div className="flex items-center gap-3">
@@ -434,6 +501,7 @@ export default function AdminProductsPage() {
                         )}
                     </TableBody>
                 </Table>
+                </div>
             </div>
         </div>
     );

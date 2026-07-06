@@ -15,7 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import { APPOINTMENT_STATUS_COLORS, APPOINTMENT_STATUS_LABELS, ROUTES } from "@/lib/constants";
 import { toast } from "sonner";
 import { formatPrice, canCancelAppointment } from "@/lib/utils";
-import { getBarberAvatarUrl, STATIC_SERVICES, STATIC_BARBERS } from "@/lib/static-data";
+import { getBarberAvatarUrl } from "@/lib/static-data";
 import type { Appointment, Barber, HaircutHistory, Profile, Service, Subscription } from "@/types/database.types";
 import { useFeatures } from "@/lib/features";
 
@@ -43,74 +43,6 @@ export default function MiCuentaPage() {
     useEffect(() => {
         async function loadAccount() {
             setIsLoading(true);
-
-            const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
-
-            if (isDummy) {
-                // Simulación local completa
-                const dummyProfile: Profile = {
-                    id: "mock-client-id",
-                    full_name: "Cliente de Prueba",
-                    phone: "099 123 456",
-                    avatar_url: null,
-                    role: "cliente",
-                    notes: "Perfil de prueba local offline",
-                    created_at: new Date().toISOString(),
-                };
-
-                const todayStr = new Date().toISOString().slice(0, 10);
-                const localApps = JSON.parse(localStorage.getItem("nb-appointments") || "[]") as Appointment[];
-                
-                const hydratedApps = localApps.map((app) => {
-                    const service = STATIC_SERVICES.find((s) => s.id === app.service_id) || {
-                        id: app.service_id,
-                        name: "Servicio Especial",
-                        price: 500,
-                        duration_minutes: 30,
-                        image_url: null,
-                        is_active: true,
-                        sort_order: 99,
-                        description: null,
-                        created_at: new Date().toISOString(),
-                    };
-                    const barber = STATIC_BARBERS.find((b) => b.id === app.barber_id) || {
-                        id: app.barber_id,
-                        profile_id: "mock-barber-profile",
-                        name: "Barbero",
-                        bio: null,
-                        avatar_url: null,
-                        is_active: true,
-                        branch_id: null,
-                        working_hours: null,
-                        created_at: new Date().toISOString(),
-                    };
-                    return { ...app, service, barber } as AppointmentWithRelations;
-                });
-
-                const upcoming = hydratedApps.filter(
-                    (app) => app.appointment_date >= todayStr && ["pending", "confirmed"].includes(app.status)
-                );
-                const recent = hydratedApps.filter(
-                    (app) => app.appointment_date < todayStr || app.status === "completed"
-                );
-
-                const localSubs = JSON.parse(localStorage.getItem("nb-subscriptions") || "[]") as Subscription[];
-                const hydratedSubs = localSubs
-                    .filter((sub) => sub.status === "active")
-                    .map((sub) => {
-                        const service = STATIC_SERVICES.find((s) => s.id === sub.service_id) || null;
-                        const barber = STATIC_BARBERS.find((b) => b.id === sub.barber_id) || null;
-                        return { ...sub, service, barber } as Subscription;
-                    });
-
-                setProfile(dummyProfile);
-                setUpcomingAppointments(upcoming);
-                setRecentAppointments(recent);
-                setSubscriptions(hydratedSubs);
-                setHistory([]);
-                setIsLoading(false);
-                return;
-            }
 
             const { data: { user } } = await supabase.auth.getUser();
 
@@ -199,22 +131,6 @@ export default function MiCuentaPage() {
             return;
         }
 
-        const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
-
-        if (isDummy) {
-            const localSubs = JSON.parse(localStorage.getItem("nb-subscriptions") || "[]") as Subscription[];
-            const updatedSubs = localSubs.map(sub => {
-                if (sub.id === subId) {
-                    return { ...sub, status: "cancelled" as const, updated_at: new Date().toISOString() };
-                }
-                return sub;
-            });
-            localStorage.setItem("nb-subscriptions", JSON.stringify(updatedSubs));
-            setSubscriptions(prev => prev.filter(sub => sub.id !== subId));
-            toast.success("Turno fijo cancelado correctamente");
-            return;
-        }
-
         try {
             const { error } = await supabase
                 .from("subscriptions")
@@ -233,34 +149,6 @@ export default function MiCuentaPage() {
 
     const handleCancelAppointment = async (appointmentId: string) => {
         if (!window.confirm("¿Estás seguro de que deseas cancelar este turno?")) {
-            return;
-        }
-
-        const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
-
-        if (isDummy) {
-            const localApps = JSON.parse(localStorage.getItem("nb-appointments") || "[]") as Appointment[];
-            const app = localApps.find(a => a.id === appointmentId);
-            if (!app) {
-                toast.error("Cita no encontrada");
-                return;
-            }
-
-            if (!canCancelAppointment(app.appointment_date, app.start_time)) {
-                toast.error("Solo podés cancelar hasta 2 horas antes del turno");
-                return;
-            }
-
-            const updatedApps = localApps.map(a => {
-                if (a.id === appointmentId) {
-                    return { ...a, status: "cancelled" as const };
-                }
-                return a;
-            });
-            localStorage.setItem("nb-appointments", JSON.stringify(updatedApps));
-
-            setUpcomingAppointments(prev => prev.filter(a => a.id !== appointmentId));
-            toast.success("Reserva cancelada correctamente");
             return;
         }
 
@@ -305,7 +193,7 @@ export default function MiCuentaPage() {
                 ) : (
                     <div className="space-y-10">
                         <section className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6 items-stretch">
-                            <div className="relative overflow-hidden rounded-lg border border-white/10 bg-zinc-950 p-8 md:p-10">
+                            <div className="relative overflow-hidden rounded-lg border border-border bg-card p-8 md:p-10">
                                 <div className="absolute inset-0">
                                     <Image
                                         src="/images/hero/detalle-corte.jpg"
@@ -335,7 +223,7 @@ export default function MiCuentaPage() {
                                 </div>
                             </div>
 
-                            <Card className="border-white/10 bg-card/70">
+                            <Card id="profile-card" className="border-border bg-card/70">
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
                                         <User className="h-5 w-5 text-primary" />
@@ -345,11 +233,11 @@ export default function MiCuentaPage() {
                                 <CardContent className="space-y-5">
                                     <div>
                                         <p className="text-sm text-muted-foreground">Nombre</p>
-                                        <p className="text-xl font-bold text-white">{profile?.full_name || "Cliente NB"}</p>
+                                        <p className="text-xl font-bold text-foreground">{profile?.full_name || "Cliente NB"}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground">Teléfono</p>
-                                        <p className="text-white">{profile?.phone || "Sin teléfono cargado"}</p>
+                                        <p className="text-foreground">{profile?.phone || "Sin teléfono cargado"}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground">Próximas reservas</p>
@@ -360,7 +248,7 @@ export default function MiCuentaPage() {
                         </section>
 
                         <section className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-6">
-                            <Card className="border-white/10 bg-card/70">
+                            <Card id="last-experience-card" className="border-border bg-card/70">
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
                                         <Scissors className="h-5 w-5 text-primary" />
@@ -387,14 +275,14 @@ export default function MiCuentaPage() {
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-white">{lastExperience.service?.name || "Servicio NB"}</p>
+                                                    <p className="font-bold text-foreground">{lastExperience.service?.name || "Servicio NB"}</p>
                                                     <p className="text-sm text-muted-foreground">
                                                         {lastExperience.barber?.name || "Barbero NB"}
                                                     </p>
                                                 </div>
                                             </div>
                                             {lastExperience.notes && (
-                                                <p className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
+                                                <p className="rounded-lg border border-border bg-muted p-4 text-sm text-muted-foreground">
                                                     {lastExperience.notes}
                                                 </p>
                                             )}
@@ -405,7 +293,7 @@ export default function MiCuentaPage() {
                                     ) : (
                                         <div className="py-10 text-center">
                                             <History className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
-                                            <p className="font-semibold text-white">Todavía no hay historial</p>
+                                            <p className="font-semibold text-foreground">Todavía no hay historial</p>
                                             <p className="text-sm text-muted-foreground mt-2">
                                                 Cuando completes una visita, la vas a ver acá.
                                             </p>
@@ -414,7 +302,7 @@ export default function MiCuentaPage() {
                                 </CardContent>
                             </Card>
 
-                            <Card className="border-white/10 bg-card/70">
+                            <Card id="upcoming-reservations-card" className="border-border bg-card/70">
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
                                         <Calendar className="h-5 w-5 text-primary" />
@@ -425,7 +313,7 @@ export default function MiCuentaPage() {
                                     {upcomingAppointments.length === 0 ? (
                                         <div className="py-10 text-center">
                                             <Calendar className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
-                                            <p className="font-semibold text-white">No tenés reservas próximas</p>
+                                            <p className="font-semibold text-foreground">No tenés reservas próximas</p>
                                             <Button asChild className="mt-5 rounded-full">
                                                 <Link href={ROUTES.RESERVAR}>Reservar turno</Link>
                                             </Button>
@@ -433,10 +321,10 @@ export default function MiCuentaPage() {
                                     ) : (
                                         <div className="space-y-3">
                                             {upcomingAppointments.map((appointment) => (
-                                                <div key={appointment.id} className="rounded-lg border border-white/10 bg-black/30 p-4">
+                                                <div key={appointment.id} className="rounded-lg border border-border bg-muted/30 p-4">
                                                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                                                         <div>
-                                                            <p className="font-bold text-white">{appointment.service?.name}</p>
+                                                            <p className="font-bold text-foreground">{appointment.service?.name}</p>
                                                             <p className="text-sm text-muted-foreground">
                                                                 {format(parseISO(appointment.appointment_date), "EEEE d 'de' MMMM", { locale: es })}
                                                             </p>
@@ -481,7 +369,7 @@ export default function MiCuentaPage() {
 
                         {/* Sección de Suscripciones (Turnos Fijos) */}
                         {features.suscripciones && (
-                            <Card className="border-white/10 bg-card/70">
+                            <Card id="subscriptions-card" className="border-border bg-card/70">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <Repeat className="h-5 w-5 text-primary animate-pulse" />
@@ -492,7 +380,7 @@ export default function MiCuentaPage() {
                                 {subscriptions.length === 0 ? (
                                     <div className="py-10 text-center">
                                         <Repeat className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
-                                        <p className="font-semibold text-white">No tenés suscripciones de turnos fijos activas</p>
+                                        <p className="font-semibold text-foreground">No tenés suscripciones de turnos fijos activas</p>
                                         <p className="text-xs text-muted-foreground mt-2 max-w-md mx-auto">
                                             Al agendar un turno, podés activar la opción &quot;¿Querés reservar este turno de forma fija semanal?&quot; para asegurar tu espacio de forma recurrente todas las semanas.
                                         </p>
@@ -507,13 +395,13 @@ export default function MiCuentaPage() {
                                                 <div key={sub.id} className="rounded-lg border border-primary/20 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 p-5 flex flex-col justify-between gap-4">
                                                     <div className="flex items-start justify-between gap-2">
                                                         <div>
-                                                            <p className="font-bold text-white text-base md:text-lg">{sub.service?.name}</p>
+                                                            <p className="font-bold text-foreground text-base md:text-lg">{sub.service?.name}</p>
                                                             <p className="text-sm text-primary font-medium flex items-center gap-1.5 mt-1">
                                                                 <Repeat className="h-4 w-4" />
                                                                 Todos los {dayName} a las {sub.start_time.slice(0, 5)} hs
                                                             </p>
                                                             <p className="text-xs text-muted-foreground mt-2">
-                                                                Profesional: <span className="text-zinc-200">{sub.barber?.name}</span>
+                                                                Profesional: <span className="text-foreground">{sub.barber?.name}</span>
                                                             </p>
                                                         </div>
                                                         <Badge className="bg-primary/20 text-primary border-primary/30 uppercase tracking-wider text-[9px] h-5 rounded-full">
@@ -521,7 +409,7 @@ export default function MiCuentaPage() {
                                                         </Badge>
                                                     </div>
                                                     
-                                                    <div className="flex items-center justify-between border-t border-white/5 pt-3 mt-1">
+                                                    <div className="flex items-center justify-between border-t border-border pt-3 mt-1">
                                                         <span className="text-xs text-muted-foreground">
                                                             {sub.service && formatPrice(sub.service.price)} / sesión
                                                         </span>

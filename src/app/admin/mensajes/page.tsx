@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { useFeatures } from "@/lib/features";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +34,16 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 
 export default function AdminMensajesPage() {
+    const { features, isLoaded } = useFeatures();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (isLoaded && !features.mensajes_crm) {
+            toast.error("El módulo de mensajes CRM no está activo");
+            router.replace("/admin/dashboard");
+        }
+    }, [isLoaded, features.mensajes_crm, router]);
+
     // State for Logs
     const [logs, setLogs] = useState<CommunicationLog[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -208,11 +220,18 @@ export default function AdminMensajesPage() {
         const messageMatches = log.message_sent?.toLowerCase().includes(query) ?? false;
         return nameMatches || phoneMatches || messageMatches;
     });
+    if (!isLoaded || !features.mensajes_crm) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-2">
+                <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
                     <MessageCircle className="h-8 w-8 text-primary" />
                     Mensajería y Reactivación
                 </h1>
@@ -246,7 +265,7 @@ export default function AdminMensajesPage() {
                                 className="pl-10 bg-background/50 border-input/50 focus:border-amber-500/50"
                             />
                         </div>
-                        <Button variant="outline" onClick={loadLogs} className="border-white/10 hover:bg-white/5">
+                        <Button variant="outline" onClick={loadLogs} className="border-border hover:bg-muted">
                             Actualizar
                         </Button>
                     </div>
@@ -268,8 +287,21 @@ export default function AdminMensajesPage() {
                             ) : filteredLogs.length === 0 ? (
                                 <div className="text-center py-16 text-muted-foreground">
                                     <MessageCircle className="h-12 w-12 mx-auto mb-3 text-muted-foreground/20" />
-                                    <p className="font-semibold text-lg text-white/80">No hay registros de envío</p>
-                                    <p className="text-sm mt-1">Los WhatsApps iniciados manualmente quedarán asentados acá.</p>
+                                    <p className="font-semibold text-lg text-foreground/80">
+                                        {searchQuery ? "No se encontraron mensajes" : "No hay registros de envío"}
+                                    </p>
+                                    <p className="text-sm mt-1 mb-4">
+                                        {searchQuery ? "Intentá ajustando el término de búsqueda." : "Los WhatsApps iniciados manualmente quedarán asentados acá."}
+                                    </p>
+                                    {searchQuery ? (
+                                        <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
+                                            Limpiar búsqueda
+                                        </Button>
+                                    ) : (
+                                        <Button variant="outline" size="sm" onClick={() => router.push("/admin/clientes?filtro=inactivos")}>
+                                            Ver Clientes Inactivos
+                                        </Button>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="overflow-x-auto">
@@ -301,7 +333,7 @@ export default function AdminMensajesPage() {
                                                         <TableCell className="text-zinc-300 text-sm pl-6 py-4">
                                                             {format(parseISO(log.sent_at), "dd/MM/yyyy HH:mm")}
                                                         </TableCell>
-                                                        <TableCell className="font-semibold text-white">
+                                                        <TableCell className="font-semibold text-foreground">
                                                             {log.client_name || "Sin nombre"}
                                                         </TableCell>
                                                         <TableCell className="text-zinc-300 font-mono text-sm">
@@ -330,7 +362,7 @@ export default function AdminMensajesPage() {
                 <TabsContent value="plantillas" className="mt-6 space-y-4">
                     <div className="flex justify-between items-center">
                         <div>
-                            <h2 className="text-lg font-bold text-white">Configuración de Recordatorios</h2>
+                            <h2 className="text-lg font-bold text-foreground">Configuración de Recordatorios</h2>
                             <p className="text-xs text-muted-foreground">Plantillas disparadas según los días desde el último corte.</p>
                         </div>
                         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -339,9 +371,9 @@ export default function AdminMensajesPage() {
                                     <Plus className="mr-2 h-4 w-4" /> Nueva Plantilla
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent className="max-w-md bg-card/95 border-border/50 backdrop-blur-xl text-white">
+                            <DialogContent className="max-w-md bg-card/95 border-border/50 backdrop-blur-xl text-foreground">
                                 <DialogHeader>
-                                    <DialogTitle className="text-white">
+                                    <DialogTitle className="text-foreground">
                                         {editingTemplate ? "Editar Plantilla" : "Nueva Plantilla"}
                                     </DialogTitle>
                                 </DialogHeader>
@@ -373,7 +405,7 @@ export default function AdminMensajesPage() {
                                         </p>
                                     </div>
                                     <div className="flex items-center justify-between border-t border-border/20 pt-4">
-                                        <Label htmlFor="is_active" className="text-white/80">¿Está activa?</Label>
+                                        <Label htmlFor="is_active" className="text-foreground/80">¿Está activa?</Label>
                                         <Switch
                                             id="is_active"
                                             checked={formData.is_active}
@@ -381,7 +413,7 @@ export default function AdminMensajesPage() {
                                         />
                                     </div>
                                     <div className="flex justify-end gap-3 pt-4 border-t border-border/20">
-                                        <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="text-white hover:bg-white/5">
+                                        <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="text-muted-foreground hover:bg-muted">
                                             Cancelar
                                         </Button>
                                         <Button type="submit" disabled={isSubmitting} className="bg-primary hover:bg-primary/90 text-black font-semibold">
@@ -393,7 +425,7 @@ export default function AdminMensajesPage() {
                         </Dialog>
                     </div>
 
-                    <Card className="bg-card/50 border-border/50 overflow-hidden">
+                    <Card id="admin-reminders-card" className="bg-card/50 border-border/50 overflow-hidden">
                         <CardContent className="p-0">
                             {isTemplatesLoading ? (
                                 <div className="p-8 space-y-4">
@@ -409,64 +441,74 @@ export default function AdminMensajesPage() {
                             ) : templates.length === 0 ? (
                                 <div className="text-center py-16 text-muted-foreground">
                                     <Calendar className="h-12 w-12 mx-auto mb-3 text-muted-foreground/20" />
-                                    <p className="font-semibold text-lg text-white/80">No hay plantillas de recordatorio</p>
-                                    <p className="text-sm mt-1">Creá tu primer regla de recordatorio usando el botón superior.</p>
+                                    <p className="font-semibold text-lg text-foreground/80">No hay plantillas de recordatorio</p>
+                                    <p className="text-sm mt-1 mb-4">Creá tu primera regla de recordatorio usando el botón superior.</p>
+                                    <Button variant="outline" size="sm" onClick={() => {
+                                        setEditingTemplate(null);
+                                        setFormData({ days_since_last_visit: "", message_template: "", is_active: true });
+                                        setIsDialogOpen(true);
+                                    }}>
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Crear plantilla
+                                    </Button>
                                 </div>
                             ) : (
-                                <Table>
-                                    <TableHeader className="bg-muted/10 border-b border-border/30">
-                                        <TableRow className="hover:bg-transparent">
-                                            <TableHead className="pl-6 w-[20%]">Días de Inactividad</TableHead>
-                                            <TableHead className="w-[50%]">Plantilla de Mensaje</TableHead>
-                                            <TableHead className="w-[15%]">Canal</TableHead>
-                                            <TableHead className="w-[15%] text-right pr-6">Acciones</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {templates.map((t) => (
-                                            <TableRow key={t.id} className="border-b border-border/30">
-                                                <TableCell className="font-bold text-white text-base pl-6 py-4">
-                                                    {t.days_since_last_visit} días
-                                                </TableCell>
-                                                <TableCell className="text-zinc-300 text-xs max-w-sm break-words leading-relaxed">
-                                                    {t.message_template}
-                                                </TableCell>
-                                                <TableCell className="text-zinc-300 text-xs font-semibold capitalize">
-                                                    {t.channel || "whatsapp"}
-                                                </TableCell>
-                                                <TableCell className="text-right pr-6">
-                                                    <div className="flex items-center justify-end gap-3">
-                                                        <div className="flex items-center gap-1.5 mr-2">
-                                                            <span className="text-[10px] text-muted-foreground">
-                                                                {t.is_active ? "Activa" : "Inactiva"}
-                                                            </span>
-                                                            <Switch
-                                                                checked={t.is_active}
-                                                                onCheckedChange={() => toggleTemplateActive(t)}
-                                                            />
-                                                        </div>
-                                                        <Button
-                                                            size="icon"
-                                                            variant="ghost"
-                                                            onClick={() => openEditTemplate(t)}
-                                                            className="text-zinc-400 hover:text-white hover:bg-white/5"
-                                                        >
-                                                            <Edit2 className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            size="icon"
-                                                            variant="ghost"
-                                                            onClick={() => handleDeleteTemplate(t.id)}
-                                                            className="text-red-400 hover:text-red-500 hover:bg-red-500/10"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
+                                <div className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader className="bg-muted/10 border-b border-border/30">
+                                            <TableRow className="hover:bg-transparent">
+                                                <TableHead className="pl-6 w-[20%]">Días de Inactividad</TableHead>
+                                                <TableHead className="w-[50%]">Plantilla de Mensaje</TableHead>
+                                                <TableHead className="w-[15%]">Canal</TableHead>
+                                                <TableHead className="w-[15%] text-right pr-6">Acciones</TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {templates.map((t) => (
+                                                <TableRow key={t.id} className="border-b border-border/30">
+                                                    <TableCell className="font-bold text-foreground text-base pl-6 py-4">
+                                                        {t.days_since_last_visit} días
+                                                    </TableCell>
+                                                    <TableCell className="text-zinc-300 text-xs max-w-sm break-words leading-relaxed">
+                                                        {t.message_template}
+                                                    </TableCell>
+                                                    <TableCell className="text-zinc-300 text-xs font-semibold capitalize">
+                                                        {t.channel || "whatsapp"}
+                                                    </TableCell>
+                                                    <TableCell className="text-right pr-6">
+                                                        <div className="flex items-center justify-end gap-3">
+                                                            <div className="flex items-center gap-1.5 mr-2">
+                                                                <span className="text-[10px] text-muted-foreground">
+                                                                    {t.is_active ? "Activa" : "Inactiva"}
+                                                                </span>
+                                                                <Switch
+                                                                    checked={t.is_active}
+                                                                    onCheckedChange={() => toggleTemplateActive(t)}
+                                                                />
+                                                            </div>
+                                                            <Button
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                onClick={() => openEditTemplate(t)}
+                                                                className="text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                            >
+                                                                <Edit2 className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                onClick={() => handleDeleteTemplate(t.id)}
+                                                                className="text-red-400 hover:text-red-500 hover:bg-red-500/10"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             )}
                         </CardContent>
                     </Card>

@@ -141,7 +141,7 @@ export default function LoginPage() {
     return (
         <Suspense fallback={
             <Card className="border-border/50 bg-card/50 backdrop-blur">
-                <CardContent className="p-8 flex items-center justify-center text-white">
+                <CardContent className="p-8 flex items-center justify-center text-foreground">
                     <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
                     Cargando...
                 </CardContent>

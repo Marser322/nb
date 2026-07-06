@@ -41,7 +41,7 @@ npm run lint    # eslint
 
 ## Estilo visual
 
-"Lujo minimalista": tema **oscuro únicamente** (html con `className="dark"`), negro profundo con acentos dorados/ámbar (`#D4AF37`, primary en OKLCH en `globals.css`). Utilidades propias: `.glass-card`, `.text-glow`, `.bg-noise`. Animaciones con framer-motion (entrance, `whileInView`, hover). Mantener esta estética en todo lo nuevo.
+"Lujo minimalista": tema **híbrido claro/oscuro** (por defecto oscuro branded gold/black de lujo minimalista, con opción a tema claro premium boutique en tonos marfil, crema y acentos dorados). Utilidades propias: `.glass-card`, `.text-glow`, `.bg-noise` que reaccionan de forma nativa al tema activo. Animaciones con framer-motion (entrance, `whileInView`, hover). Mantener esta estética en todo lo nuevo.
 
 ## Convenciones
 

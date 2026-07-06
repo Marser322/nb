@@ -9,10 +9,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // @ts-expect-error - eslint config is valid but types might be outdated
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Nota: en Next 16 la clave `eslint` en next.config ya no está soportada
+  // (emitía warnings). El linting se corre aparte con `npm run lint` (ideal en CI).
 };
 
 export default nextConfig;

@@ -146,7 +146,7 @@ export function SendWhatsappDialog({
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-md bg-card/95 border-border/50 backdrop-blur-xl">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-white">
+                    <DialogTitle className="flex items-center gap-2 text-foreground">
                         <MessageSquare className="h-5 w-5 text-primary" />
                         Enviar Mensaje de WhatsApp
                     </DialogTitle>
@@ -171,7 +171,7 @@ export function SendWhatsappDialog({
 
                     {/* Selector de Plantilla */}
                     <div className="space-y-2">
-                        <Label htmlFor="template" className="text-white/80">Plantilla de Mensaje</Label>
+                        <Label htmlFor="template" className="text-foreground/80">Plantilla de Mensaje</Label>
                         <Select
                             value={selectedTemplateId}
                             onValueChange={handleTemplateChange}
@@ -180,7 +180,7 @@ export function SendWhatsappDialog({
                             <SelectTrigger id="template" className="bg-background/50 border-input/50 focus:ring-0">
                                 <SelectValue placeholder="Seleccioná una plantilla..." />
                             </SelectTrigger>
-                            <SelectContent className="bg-zinc-900 border-border/50 text-white">
+                            <SelectContent className="bg-card border-border text-foreground">
                                 <SelectItem value="custom">Mensaje Personalizado (Vacío)</SelectItem>
                                 {templates.map((t) => (
                                     <SelectItem key={t.id} value={t.id}>
@@ -193,13 +193,13 @@ export function SendWhatsappDialog({
 
                     {/* Mensaje Textarea */}
                     <div className="space-y-2">
-                        <Label htmlFor="message" className="text-white/80">Mensaje</Label>
+                        <Label htmlFor="message" className="text-foreground/80">Mensaje</Label>
                         <Textarea
                             id="message"
                             placeholder="Escribí el mensaje..."
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
-                            className="min-h-[120px] bg-background/50 border-input/50 focus:border-amber-500/50"
+                            className="min-h-[120px] bg-background/50 border-input/50 focus:border-primary/50"
                         />
                     </div>
                 </div>
@@ -208,14 +208,14 @@ export function SendWhatsappDialog({
                     <Button
                         variant="ghost"
                         onClick={() => onOpenChange(false)}
-                        className="text-white hover:bg-white/5"
+                        className="text-foreground hover:bg-accent"
                     >
                         Cancelar
                     </Button>
                     <Button
                         onClick={handleSend}
                         disabled={isSubmitting || !isPhoneValid || !message.trim()}
-                        className="bg-primary hover:bg-primary/90 text-black font-semibold"
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
                     >
                         {isSubmitting ? (
                             <>

@@ -470,7 +470,7 @@ function ReservarPageContent() {
                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
                 className="relative w-20 h-20 md:w-32 md:h-32 opacity-20"
               >
-                <Image src="/images/hero/herramientas-barberia.jpg" alt="Scissor" fill className="object-cover rounded-2xl grayscale border border-white/10" />
+                <Image src="/images/hero/herramientas-barberia.jpg" alt="Scissor" fill className="object-cover rounded-2xl grayscale border border-border" />
               </motion.div>
             </div>
 
@@ -491,10 +491,10 @@ function ReservarPageContent() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
             >
-              <Badge variant="outline" className="mb-6 border-primary/50 text-white bg-white/5 backdrop-blur-md px-4 py-1 uppercase tracking-[0.2em] text-xs">
+              <Badge variant="outline" className="mb-6 border-primary/50 text-foreground bg-primary/10 backdrop-blur-md px-4 py-1 uppercase tracking-[0.2em] text-xs">
                 Premium Booking
               </Badge>
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-4 text-white tracking-tighter drop-shadow-2xl">
+              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-4 text-foreground tracking-tighter drop-shadow-2xl">
                 Elegí tu <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-amber-200 to-primary">Estilo</span>
               </h1>
               <p className="text-base md:text-lg text-zinc-300 max-w-2xl mx-auto leading-relaxed font-light">
@@ -609,7 +609,7 @@ function ReservarPageContent() {
                     {isLoading ? (
                       <div className="space-y-3">
                         {[...Array(4)].map((_, i) => (
-                          <Card key={i} className="bg-card/50 border-white/5 animate-pulse">
+                          <Card key={i} className="bg-card/50 border-border animate-pulse">
                             <CardContent className="p-6 space-y-3">
                               <div className="flex justify-between items-center">
                                 <div className="h-5 bg-muted/60 rounded w-1/3" />
@@ -638,7 +638,7 @@ function ReservarPageContent() {
                         <CardContent className="p-6 relative z-10">
                           <div className="flex justify-between items-start mb-2 opacity-90 group-hover:opacity-100 transition-opacity">
                             <h3 className="font-bold text-lg">{service.name}</h3>
-                            <Badge variant="secondary" className="bg-white/5 border-white/10 group-hover:border-primary/30 transition-colors">
+                            <Badge variant="secondary" className="bg-muted border-border group-hover:border-primary/30 transition-colors">
                               {service.duration_minutes} min
                             </Badge>
                           </div>
@@ -655,7 +655,7 @@ function ReservarPageContent() {
                   </div>
                 </div>
 
-                <div className="hidden lg:block sticky top-24 h-[500px] rounded-3xl overflow-hidden border border-white/10 bg-black/40 backdrop-blur-xl relative">
+                <div className="hidden lg:block sticky top-24 h-[500px] rounded-3xl overflow-hidden border border-border bg-card/45 backdrop-blur-xl relative">
                   <AnimatePresence mode="wait">
                     <motion.div
                       key={hoveredService?.id || selectedService?.id || "default"}
@@ -682,10 +682,10 @@ function ReservarPageContent() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.2 }}
                     >
-                      <h3 className="text-2xl font-bold text-white mb-2">
+                      <h3 className="text-2xl font-bold text-foreground mb-2">
                         {hoveredService?.name || selectedService?.name || "Seleccioná tu experiencia"}
                       </h3>
-                      <p className="text-zinc-300 text-sm">
+                      <p className="text-muted-foreground text-sm">
                         {hoveredService?.description || selectedService?.description || "Nuestros barberos expertos te esperan."}
                       </p>
                     </motion.div>
@@ -715,7 +715,7 @@ function ReservarPageContent() {
                         setSelectedStyle(null);
                         setCurrentStep(3);
                       }}
-                      className="text-xs border-white/10 text-zinc-300 hover:text-white bg-white/5 rounded-full px-4"
+                      className="text-xs border-border text-muted-foreground hover:text-foreground bg-muted rounded-full px-4"
                     >
                       Omitir e ir a Barbero
                     </Button>
@@ -724,7 +724,7 @@ function ReservarPageContent() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setSelectedStyle(null)}
-                        className="text-xs text-muted-foreground hover:text-white"
+                        className="text-xs text-muted-foreground hover:text-foreground"
                       >
                         Limpiar
                       </Button>
@@ -744,7 +744,7 @@ function ReservarPageContent() {
                         setCurrentStep(3);
                       }}
                     >
-                      <div className="relative aspect-[4/3] w-full overflow-hidden bg-zinc-900">
+                      <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
                         <Image
                           src={style.image_url}
                           alt={style.title}
@@ -754,7 +754,7 @@ function ReservarPageContent() {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                       </div>
                       <CardContent className="p-3 text-center flex-grow flex items-center justify-center">
-                        <span className="font-bold text-xs text-white group-hover:text-amber-400 transition-colors">
+                        <span className="font-bold text-xs text-foreground group-hover:text-primary transition-colors">
                           {style.title}
                         </span>
                       </CardContent>
@@ -779,7 +779,7 @@ function ReservarPageContent() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {isLoading ? (
                     [...Array(3)].map((_, i) => (
-                      <Card key={i} className="bg-card/50 border-white/5 animate-pulse overflow-hidden">
+                      <Card key={i} className="bg-card/50 border-border animate-pulse overflow-hidden">
                         <div className="relative aspect-square w-full bg-muted/40 animate-pulse" />
                         <div className="p-5 space-y-2">
                           <div className="h-4 bg-muted/60 rounded w-1/2" />
@@ -789,9 +789,9 @@ function ReservarPageContent() {
                       </Card>
                     ))
                   ) : filteredBarbers.length === 0 ? (
-                    <div className="col-span-1 md:col-span-3 text-center py-12 text-muted-foreground bg-card/25 border border-white/5 rounded-xl">
+                    <div className="col-span-1 md:col-span-3 text-center py-12 text-muted-foreground bg-card/25 border border-border rounded-xl">
                       <User className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30 animate-pulse" />
-                      <p className="font-semibold text-white/80 text-base">No hay barberos asignados a esta sucursal</p>
+                      <p className="font-semibold text-foreground/80 text-base">No hay barberos asignados a esta sucursal</p>
                       <p className="text-xs mt-1">Intentá seleccionando otra sucursal.</p>
                     </div>
                   ) : filteredBarbers.map((barber) => {
@@ -811,7 +811,7 @@ function ReservarPageContent() {
                         }}
                       >
                         <CardContent className="p-0">
-                          <div className="relative aspect-square overflow-hidden bg-zinc-950">
+                          <div className="relative aspect-square overflow-hidden bg-muted">
                             {avatarUrl ? (
                               <Image
                                 src={avatarUrl}
@@ -833,7 +833,7 @@ function ReservarPageContent() {
                             )}
                           </div>
                           <div className="p-5">
-                            <h3 className="font-semibold text-base text-white">{barber.name}</h3>
+                            <h3 className="font-semibold text-base text-foreground">{barber.name}</h3>
                             {barber.bio && (
                               <p className="text-xs text-muted-foreground mt-2 line-clamp-3">
                                 {barber.bio}
@@ -931,50 +931,50 @@ function ReservarPageContent() {
                   <Check className="h-5 w-5 text-primary" />
                   Confirmá tu reserva
                 </h2>
-                <Card className="overflow-hidden border border-white/10 bg-zinc-900/50 backdrop-blur-sm">
-                  <CardHeader className="bg-gradient-to-r from-zinc-900 to-zinc-950 border-b border-white/5">
+                <Card className="overflow-hidden border border-border bg-card/50 backdrop-blur-sm">
+                  <CardHeader className="bg-gradient-to-r from-card to-background border-b border-border">
                     <CardTitle className="text-lg">Resumen de tu turno</CardTitle>
                     <CardDescription className="text-xs">Verificá que todo esté correcto antes de confirmar</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 p-6">
-                    <div className="flex justify-between py-2 border-b border-white/5 text-sm">
+                    <div className="flex justify-between py-2 border-b border-border/50 text-sm">
                       <span className="text-muted-foreground">Sucursal</span>
-                      <span className="font-medium text-white">{selectedBranch?.name}</span>
+                      <span className="font-medium text-foreground">{selectedBranch?.name}</span>
                     </div>
-                    <div className="flex justify-between py-2 border-b border-white/5 text-sm">
+                    <div className="flex justify-between py-2 border-b border-border/50 text-sm">
                       <span className="text-muted-foreground">Servicio</span>
-                      <span className="font-medium text-white">{selectedService?.name}</span>
+                      <span className="font-medium text-foreground">{selectedService?.name}</span>
                     </div>
                     {selectedStyle && (
-                      <div className="flex justify-between py-2 border-b border-white/5 text-sm items-center">
+                      <div className="flex justify-between py-2 border-b border-border/50 text-sm items-center">
                         <span className="text-muted-foreground">Referencia de Estilo</span>
                         <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-2 py-1 rounded">
                           <span className="font-bold text-xs text-primary">{selectedStyle.title}</span>
                         </div>
                       </div>
                     )}
-                    <div className="flex justify-between py-2 border-b border-white/5 text-sm">
+                    <div className="flex justify-between py-2 border-b border-border/50 text-sm">
                       <span className="text-muted-foreground">Barbero</span>
-                      <span className="font-medium text-white">{selectedBarber?.name}</span>
+                      <span className="font-medium text-foreground">{selectedBarber?.name}</span>
                     </div>
-                    <div className="flex justify-between py-2 border-b border-white/5 text-sm">
+                    <div className="flex justify-between py-2 border-b border-border/50 text-sm">
                       <span className="text-muted-foreground">Fecha</span>
-                      <span className="font-medium text-white">
+                      <span className="font-medium text-foreground">
                         {selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
                       </span>
                     </div>
-                    <div className="flex justify-between py-2 border-b border-white/5 text-sm">
+                    <div className="flex justify-between py-2 border-b border-border/50 text-sm">
                       <span className="text-muted-foreground">Hora</span>
-                      <span className="font-medium text-white">
+                      <span className="font-medium text-foreground">
                         {selectedTime} - {selectedService && calculateEndTime(selectedTime!, selectedService.duration_minutes)}
                       </span>
                     </div>
-                    <div className="flex justify-between py-2 border-b border-white/5 text-sm">
+                    <div className="flex justify-between py-2 border-b border-border/50 text-sm">
                       <span className="text-muted-foreground">Duración</span>
-                      <span className="font-medium text-white">{selectedService?.duration_minutes} minutos</span>
+                      <span className="font-medium text-foreground">{selectedService?.duration_minutes} minutos</span>
                     </div>
                     <div className="flex justify-between py-4 text-base">
-                      <span className="font-bold text-white">Total a pagar en local</span>
+                      <span className="font-bold text-foreground">Total a pagar en local</span>
                       <span className="font-bold text-primary text-lg">
                         {selectedService && formatPrice(selectedService.price)}
                       </span>
@@ -987,11 +987,11 @@ function ReservarPageContent() {
                   <div className="mt-6 p-5 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 backdrop-blur-md">
                     <div className="flex items-start gap-4 justify-between">
                       <div className="space-y-1">
-                        <h3 className="font-bold text-sm md:text-base text-white flex items-center gap-2">
+                        <h3 className="font-bold text-sm md:text-base text-foreground flex items-center gap-2">
                           <Repeat className="h-5 w-5 text-primary animate-pulse" />
                           ¿Querés reservar este turno de forma fija semanal?
                         </h3>
-                        <p className="text-xs text-zinc-400 leading-relaxed max-w-lg">
+                        <p className="text-xs text-muted-foreground leading-relaxed max-w-lg">
                           Activá una suscripción para asegurar automáticamente este horario ({selectedTime} todos los {selectedDate && format(selectedDate, "EEEE", { locale: es })}) con {selectedBarber?.name}. Podrás cancelarla en cualquier momento desde tu perfil.
                         </p>
                       </div>
@@ -1001,7 +1001,7 @@ function ReservarPageContent() {
                           id="recurring-toggle"
                           checked={isRecurring}
                           onChange={(e) => setIsRecurring(e.target.checked)}
-                          className="w-10 h-6 bg-zinc-800 checked:bg-primary border-zinc-700 rounded-full cursor-pointer appearance-none relative before:content-[''] before:absolute before:w-4 before:h-4 before:rounded-full before:bg-zinc-400 before:top-1 before:left-1 checked:before:left-5 checked:before:bg-black before:transition-all duration-300"
+                          className="w-10 h-6 bg-muted checked:bg-primary border-border rounded-full cursor-pointer appearance-none relative before:content-[''] before:absolute before:w-4 before:h-4 before:rounded-full before:bg-muted-foreground before:top-1 before:left-1 checked:before:left-5 checked:before:bg-primary-foreground before:transition-all duration-300"
                         />
                       </div>
                     </div>
@@ -1011,12 +1011,12 @@ function ReservarPageContent() {
             )}
 
             {/* Navegación */}
-            <div className="flex justify-between mt-8 border-t border-white/5 pt-6">
+            <div className="flex justify-between mt-8 border-t border-border pt-6">
               <Button
                 variant="outline"
                 onClick={prevStep}
                 disabled={currentStep === 0}
-                className="gap-2 h-10 px-4 text-xs md:text-sm border-white/10 text-zinc-300 hover:text-white"
+                className="gap-2 h-10 px-4 text-xs md:text-sm border-border text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Atrás
@@ -1049,7 +1049,7 @@ function ReservarPageContent() {
 
 export default function ReservarPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-white">Cargando...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-foreground">Cargando...</div>}>
       <ReservarPageContent />
     </Suspense>
   );

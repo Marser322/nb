@@ -139,20 +139,20 @@ function Tooltip({ step, index, total, targetRect, onNext, onPrev, onClose }: To
             className="pointer-events-auto absolute max-w-sm w-full"
             style={targetRect ? style : undefined}
         >
-            <div className="bg-zinc-900/90 backdrop-blur-xl border border-amber-500/30 p-6 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden relative">
+            <div className="bg-card/90 backdrop-blur-xl border border-primary/30 p-6 rounded-2xl shadow-2xl shadow-foreground/10 overflow-hidden relative">
                 {/* Decoration */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent opacity-50" />
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
-                <button onClick={onClose} className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors">
+                <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
                     <X size={18} />
                 </button>
 
                 <div className="mb-4">
-                    <span className="text-xs font-semibold text-amber-500 uppercase tracking-wider mb-2 block">
+                    <span className="text-xs font-semibold text-primary uppercase tracking-wider mb-2 block">
                         Paso {index + 1} de {total}
                     </span>
-                    <h3 className="text-xl font-bold text-white mb-2">{step.title}</h3>
-                    <p className="text-zinc-300 text-sm leading-relaxed">
+                    <h3 className="text-xl font-bold text-foreground mb-2">{step.title}</h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed">
                         {step.content}
                     </p>
                 </div>
@@ -163,14 +163,14 @@ function Tooltip({ step, index, total, targetRect, onNext, onPrev, onClose }: To
                         size="sm"
                         onClick={onPrev}
                         disabled={index === 0}
-                        className="text-zinc-400 hover:text-white hover:bg-white/10"
+                        className="text-muted-foreground hover:text-foreground hover:bg-accent"
                     >
                         Anterior
                     </Button>
                     <Button
                         size="sm"
                         onClick={onNext}
-                        className="bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-full px-6"
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-full px-6"
                     >
                         {index === total - 1 ? 'Finalizar' : 'Siguiente'}
                         {index !== total - 1 && <ArrowRight size={16} className="ml-2" />}

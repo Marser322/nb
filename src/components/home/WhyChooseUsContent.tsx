@@ -50,15 +50,15 @@ export function WhyChooseUsContent() {
                         {features.map((feature, index) => (
                             <motion.div
                                 key={index}
-                                className={`flex gap-5 group cursor-pointer p-4 rounded-2xl transition-all duration-300 ${activeFeature === index ? "bg-white/5 border border-white/5" : "hover:bg-white/5 border border-transparent"}`}
+                                className={`flex gap-5 group cursor-pointer p-4 rounded-2xl transition-all duration-300 ${activeFeature === index ? "bg-card border border-border" : "hover:bg-card/50 border border-transparent"}`}
                                 onMouseEnter={() => setActiveFeature(index)}
                                 whileHover={{ scale: 1.02, x: 10 }}
                             >
-                                <div className={`h-14 w-14 rounded-2xl border flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${activeFeature === index ? "border-primary bg-primary/20" : "border-white/10 bg-white/5 group-hover:border-primary/50"}`}>
-                                    <feature.icon className={`h-6 w-6 transition-colors ${activeFeature === index ? "text-primary" : "text-gray-400 group-hover:text-primary"}`} />
+                                <div className={`h-14 w-14 rounded-2xl border flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${activeFeature === index ? "border-primary bg-primary/20" : "border-border bg-card group-hover:border-primary/50"}`}>
+                                    <feature.icon className={`h-6 w-6 transition-colors ${activeFeature === index ? "text-primary" : "text-muted-foreground group-hover:text-primary"}`} />
                                 </div>
                                 <div>
-                                    <h4 className={`text-xl font-bold mb-2 transition-colors ${activeFeature === index ? "text-primary" : "text-white group-hover:text-white"}`}>
+                                    <h4 className={`text-xl font-bold mb-2 transition-colors ${activeFeature === index ? "text-primary" : "text-foreground group-hover:text-primary"}`}>
                                         {feature.title}
                                     </h4>
                                     <p className="text-muted-foreground leading-relaxed">
@@ -88,7 +88,7 @@ export function WhyChooseUsContent() {
                                     src={features[activeFeature].image}
                                     alt={features[activeFeature].title}
                                     fill
-                                    className="object-cover rounded-[2rem] shadow-2xl border border-white/10"
+                                    className="object-cover rounded-[2rem] shadow-2xl border border-border"
                                 />
                             </motion.div>
                         </AnimatePresence>
@@ -113,7 +113,7 @@ export function WhyChooseUsContent() {
                                         src={features[activeFeature].secondaryImage}
                                         alt="Detail"
                                         fill
-                                        className="object-cover rounded-2xl shadow-xl border border-white/10"
+                                        className="object-cover rounded-2xl shadow-xl border border-border"
                                     />
                                 </motion.div>
                             </motion.div>
@@ -127,14 +127,14 @@ export function WhyChooseUsContent() {
                             transition={{ delay: 0.5 }}
                             className="absolute bottom-10 -left-10 z-30"
                         >
-                            <Card className="border-primary/20 bg-black/80 backdrop-blur-xl shadow-2xl shadow-primary/10 w-auto">
+                            <Card className="border-primary/20 bg-card/85 backdrop-blur-xl shadow-2xl shadow-primary/10 w-auto">
                                 <CardContent className="p-4 md:p-6 flex items-center gap-4">
                                     <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
                                         <Calendar className="h-5 w-5 text-primary" />
                                     </div>
                                     <div>
                                         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Próximo Turno</p>
-                                        <p className="text-lg font-bold text-white">Hoy, 15:30</p>
+                                        <p className="text-lg font-bold text-foreground">Hoy, 15:30</p>
                                     </div>
                                 </CardContent>
                             </Card>

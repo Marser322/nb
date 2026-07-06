@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { invalidateFeatures } from "@/lib/features";
-import { AlertCircle, Loader2, Settings, ShoppingBag, Repeat, Wallet, MessageSquare, Sparkles } from "lucide-react";
+import { AlertCircle, Loader2, Settings, ShoppingBag, Repeat, Wallet, MessageSquare, Sparkles, Camera, Calendar, Users } from "lucide-react";
 
 interface AppSetting {
     key: string;
@@ -21,6 +21,9 @@ const FEATURE_ICONS: Record<string, typeof ShoppingBag> = {
     "feature.contabilidad": Wallet,
     "feature.propinas": Sparkles,
     "feature.mensajes_crm": MessageSquare,
+    "feature.lookbook": Camera,
+    "feature.reservas_online": Calendar,
+    "feature.portal_barbero": Users,
 };
 
 const FEATURE_TITLES: Record<string, string> = {
@@ -29,6 +32,9 @@ const FEATURE_TITLES: Record<string, string> = {
     "feature.contabilidad": "Módulo Contable y Caja",
     "feature.propinas": "Propinas",
     "feature.mensajes_crm": "Mensajes CRM y WhatsApp",
+    "feature.lookbook": "Galería de Estilos (Lookbook)",
+    "feature.reservas_online": "Reservas Online (Wizard)",
+    "feature.portal_barbero": "Portal de Barberos (Agenda)",
 };
 
 export default function AdminConfiguracionPage() {
@@ -123,7 +129,7 @@ export default function AdminConfiguracionPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-2">
+                <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
                     <Settings className="h-8 w-8 text-primary" />
                     Configuración de Módulos
                 </h1>
@@ -136,7 +142,7 @@ export default function AdminConfiguracionPage() {
             <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-400 text-sm flex items-start gap-3 backdrop-blur-md">
                 <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
                 <div>
-                    <span className="font-semibold block text-white">Importante sobre la sincronización</span>
+                    <span className="font-semibold block text-foreground">Importante sobre la sincronización</span>
                     Los cambios pueden tardar hasta 5 minutos en reflejarse para visitantes externos que tengan la página abierta en este momento, debido a la caché de rendimiento.
                 </div>
             </div>
@@ -146,14 +152,14 @@ export default function AdminConfiguracionPage() {
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div id="features-gating-card" className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {settings.map((item) => {
                         const Icon = FEATURE_ICONS[item.key] || Settings;
                         const title = FEATURE_TITLES[item.key] || item.key;
                         const isUpdating = updatingKeys.has(item.key);
 
                         return (
-                            <Card key={item.key} className="border-white/10 bg-zinc-900/50 backdrop-blur-md relative overflow-hidden group hover:border-primary/20 transition-all duration-300">
+                            <Card key={item.key} className="border-border bg-card/50 backdrop-blur-md relative overflow-hidden group hover:border-primary/20 transition-all duration-300">
                                 <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
                                     <Icon className="h-24 w-24 text-primary" />
                                 </div>
@@ -162,7 +168,7 @@ export default function AdminConfiguracionPage() {
                                         <Icon className="h-6 w-6" />
                                     </div>
                                     <div className="space-y-0.5">
-                                        <CardTitle className="text-lg text-white font-bold">{title}</CardTitle>
+                                        <CardTitle className="text-lg text-foreground font-bold">{title}</CardTitle>
                                         <CardDescription className="text-xs text-zinc-500 font-mono">
                                             {item.key}
                                         </CardDescription>
@@ -172,7 +178,7 @@ export default function AdminConfiguracionPage() {
                                     <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
                                         {item.description}
                                     </p>
-                                    <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                                    <div className="flex items-center justify-between border-t border-border pt-4">
                                         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                             Estado del módulo
                                         </span>

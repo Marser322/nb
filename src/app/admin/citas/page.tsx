@@ -61,9 +61,18 @@ export default function AdminCitasPage() {
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [branchFilter, setBranchFilter] = useState<string>("all");
     const [barberFilter, setBarberFilter] = useState<string>("all");
+    const [searchQuery, setSearchQuery] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [chargeApt, setChargeApt] = useState<AppointmentWithRelations | null>(null);
+
+    // Reprogramar cita
+    const [rescheduleApt, setRescheduleApt] = useState<AppointmentWithRelations | null>(null);
+    const [rescheduleDate, setRescheduleDate] = useState("");
+    const [rescheduleTime, setRescheduleTime] = useState("");
+    const [rescheduleSlots, setRescheduleSlots] = useState<string[]>([]);
+    const [isReschedLoadingSlots, setIsReschedLoadingSlots] = useState(false);
+    const [isRescheduling, setIsRescheduling] = useState(false);
 
     // Form state for new appointment
     const [services, setServices] = useState<Service[]>([]);
@@ -117,7 +126,7 @@ export default function AdminCitasPage() {
         loadFormData();
     }, []);
 
-    // Filtrar por estado, sucursal y barbero (en memoria)
+    // Filtrar por estado, sucursal, barbero y búsqueda de cliente (en memoria)
     useEffect(() => {
         let temp = appointments;
 
@@ -133,8 +142,17 @@ export default function AdminCitasPage() {
             temp = temp.filter((a) => a.barber_id === barberFilter);
         }
 
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase().trim();
+            temp = temp.filter((a) => {
+                const clientName = a.client?.full_name?.toLowerCase() ?? "";
+                const clientPhone = a.client?.phone ?? "";
+                return clientName.includes(query) || clientPhone.includes(query);
+            });
+        }
+
         setFilteredAppointments(temp);
-    }, [statusFilter, branchFilter, barberFilter, appointments]);
+    }, [statusFilter, branchFilter, barberFilter, searchQuery, appointments]);
 
     // Cargar slots ocupados en el formulario
     useEffect(() => {
@@ -181,6 +199,114 @@ export default function AdminCitasPage() {
         setAppointments((prev) =>
             prev.map((a) => (a.id === id ? { ...a, status: newStatus as Appointment["status"] } : a))
         );
+    };
+
+    // Abrir el diálogo de reprogramación precargando la fecha/hora actual de la cita
+    const openReschedule = (cita: AppointmentWithRelations) => {
+        setRescheduleApt(cita);
+        setRescheduleDate(cita.appointment_date);
+        setRescheduleTime(cita.start_time.slice(0, 5));
+    };
+
+    // Cargar slots ocupados del barbero para la nueva fecha, EXCLUYENDO la propia cita
+    useEffect(() => {
+        async function loadReschedSlots() {
+            if (!rescheduleApt || !rescheduleDate) {
+                setRescheduleSlots([]);
+                return;
+            }
+            setIsReschedLoadingSlots(true);
+            try {
+                const { data } = await supabase
+                    .from("appointments")
+                    .select("start_time, end_time")
+                    .eq("barber_id", rescheduleApt.barber_id)
+                    .eq("appointment_date", rescheduleDate)
+                    .in("status", ["pending", "confirmed"])
+                    .neq("id", rescheduleApt.id);
+                setRescheduleSlots(computeBookedSlots(data || []));
+            } catch (error) {
+                console.error("Error loading reschedule slots:", error);
+            } finally {
+                setIsReschedLoadingSlots(false);
+            }
+        }
+        loadReschedSlots();
+    }, [rescheduleApt, rescheduleDate, supabase]);
+
+    // Reprograma la cita a la nueva fecha/hora (mismo barbero y servicio)
+    const handleReschedule = async () => {
+        if (!rescheduleApt || !rescheduleDate || !rescheduleTime) {
+            toast.error("Elegí fecha y hora");
+            return;
+        }
+        const duration = rescheduleApt.service?.duration_minutes ?? BUSINESS_CONFIG.timeSlotMinutes;
+        const startHHMM = rescheduleTime.slice(0, 5);
+        const endHHMM = calculateEndTime(startHHMM, duration);
+
+        setIsRescheduling(true);
+        try {
+            // Validación de solape en cliente (excluyendo la propia cita).
+            // La constraint EXCLUDE en la BD es la red de seguridad final.
+            const { data: others } = await supabase
+                .from("appointments")
+                .select("start_time, end_time")
+                .eq("barber_id", rescheduleApt.barber_id)
+                .eq("appointment_date", rescheduleDate)
+                .in("status", ["pending", "confirmed"])
+                .neq("id", rescheduleApt.id);
+
+            if (hasOverlap(startHHMM, endHHMM, others || [])) {
+                toast.error("El nuevo horario se superpone con otra cita del barbero");
+                setIsRescheduling(false);
+                return;
+            }
+
+            const { error } = await supabase
+                .from("appointments")
+                .update({
+                    appointment_date: rescheduleDate,
+                    start_time: startHHMM + ":00",
+                    end_time: endHHMM + ":00",
+                })
+                .eq("id", rescheduleApt.id);
+
+            if (error) {
+                // 23P01 = exclusion_violation (anti-solape en la BD)
+                toast.error(
+                    error.code === "23P01"
+                        ? "El horario ya está ocupado"
+                        : "Error al reprogramar: " + error.message
+                );
+                setIsRescheduling(false);
+                return;
+            }
+
+            toast.success("Cita reprogramada");
+            setRescheduleApt(null);
+            loadAppointments();
+        } catch (err) {
+            console.error("Error en handleReschedule:", err);
+            toast.error("Ocurrió un error inesperado");
+        } finally {
+            setIsRescheduling(false);
+        }
+    };
+
+    // ¿El slot queda deshabilitado para la reprogramación? (considera la duración del servicio)
+    const isRescheduleSlotDisabled = (slot: string) => {
+        if (isReschedLoadingSlots) return true;
+        const duration = rescheduleApt?.service?.duration_minutes ?? BUSINESS_CONFIG.timeSlotMinutes;
+        const slotsNeeded = Math.ceil(duration / BUSINESS_CONFIG.timeSlotMinutes);
+        const slots = generateTimeSlots();
+        const startIdx = slots.indexOf(slot);
+        for (let i = 0; i < slotsNeeded; i++) {
+            const slotToCheck = slots[startIdx + i];
+            if (!slotToCheck || rescheduleSlots.includes(slotToCheck)) {
+                return true;
+            }
+        }
+        return false;
     };
 
     // Crear cita manual
@@ -358,7 +484,7 @@ export default function AdminCitasPage() {
                 </div>
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button>
+                        <Button id="admin-btn-new-appointment">
                             <Plus className="h-4 w-4 mr-2" />
                             Nueva Cita
                         </Button>
@@ -461,9 +587,9 @@ export default function AdminCitasPage() {
             </div>
 
             {/* Filtros */}
-            <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between">
                 {/* Selector de fecha rápido */}
-                <div className="flex gap-2 overflow-x-auto pb-2">
+                <div className="flex gap-2 overflow-x-auto pb-2 xl:pb-0 w-full xl:w-auto">
                     {quickDates.map((date) => {
                         const dateStr = format(date, "yyyy-MM-dd");
                         const isSelected = selectedDate === dateStr;
@@ -485,54 +611,67 @@ export default function AdminCitasPage() {
                     })}
                 </div>
 
-                {/* Filtro de estado */}
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-full md:w-[180px]">
-                        <Filter className="h-4 w-4 mr-2" />
-                        <SelectValue placeholder="Estado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todos los estados</SelectItem>
-                        <SelectItem value="pending">Pendientes</SelectItem>
-                        <SelectItem value="confirmed">Confirmadas</SelectItem>
-                        <SelectItem value="completed">Completadas</SelectItem>
-                        <SelectItem value="cancelled">Canceladas</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto xl:flex-1 xl:justify-end">
+                    {/* Buscador de cliente */}
+                    <div className="relative w-full md:max-w-[240px]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Buscar cliente/teléfono..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-9 bg-background/50 border-input/50 focus:border-amber-500/50"
+                        />
+                    </div>
 
-                {/* Filtro de sucursal */}
-                <Select value={branchFilter} onValueChange={setBranchFilter}>
-                    <SelectTrigger className="w-full md:w-[180px]">
-                        <Filter className="h-4 w-4 mr-2" />
-                        <SelectValue placeholder="Sucursal" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todas las sucursales</SelectItem>
-                        {branches.map((b) => (
-                            <SelectItem key={b.id} value={b.id}>
-                                {b.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                    {/* Filtro de estado */}
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-full md:w-[180px]">
+                            <Filter className="h-4 w-4 mr-2" />
+                            <SelectValue placeholder="Estado" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos los estados</SelectItem>
+                            <SelectItem value="pending">Pendientes</SelectItem>
+                            <SelectItem value="confirmed">Confirmadas</SelectItem>
+                            <SelectItem value="completed">Completadas</SelectItem>
+                            <SelectItem value="cancelled">Canceladas</SelectItem>
+                        </SelectContent>
+                    </Select>
 
-                {/* Filtro de barbero */}
-                <Select value={barberFilter} onValueChange={setBarberFilter}>
-                    <SelectTrigger className="w-full md:w-[180px]">
-                        <Filter className="h-4 w-4 mr-2" />
-                        <SelectValue placeholder="Barbero" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todos los barberos</SelectItem>
-                        {barbers
-                            .filter((b) => branchFilter === "all" || b.branch_id === branchFilter)
-                            .map((b) => (
+                    {/* Filtro de sucursal */}
+                    <Select value={branchFilter} onValueChange={setBranchFilter}>
+                        <SelectTrigger className="w-full md:w-[180px]">
+                            <Filter className="h-4 w-4 mr-2" />
+                            <SelectValue placeholder="Sucursal" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todas las sucursales</SelectItem>
+                            {branches.map((b) => (
                                 <SelectItem key={b.id} value={b.id}>
                                     {b.name}
                                 </SelectItem>
                             ))}
-                    </SelectContent>
-                </Select>
+                        </SelectContent>
+                    </Select>
+
+                    {/* Filtro de barbero */}
+                    <Select value={barberFilter} onValueChange={setBarberFilter}>
+                        <SelectTrigger className="w-full md:w-[180px]">
+                            <Filter className="h-4 w-4 mr-2" />
+                            <SelectValue placeholder="Barbero" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos los barberos</SelectItem>
+                            {barbers
+                                .filter((b) => branchFilter === "all" || b.branch_id === branchFilter)
+                                .map((b) => (
+                                    <SelectItem key={b.id} value={b.id}>
+                                        {b.name}
+                                    </SelectItem>
+                                ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             {/* Lista de citas */}
@@ -638,6 +777,14 @@ export default function AdminCitasPage() {
                                             <Button
                                                 size="sm"
                                                 variant="outline"
+                                                onClick={() => openReschedule(cita)}
+                                            >
+                                                <Clock className="h-4 w-4 mr-1" />
+                                                Reprogramar
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
                                                 className="text-red-400 border-red-400/30 hover:bg-red-400/10"
                                                 onClick={() => updateStatus(cita.id, "cancelled")}
                                             >
@@ -661,6 +808,57 @@ export default function AdminCitasPage() {
                     onSuccess={loadAppointments}
                 />
             )}
+
+            {/* Reprogramar cita */}
+            <Dialog open={rescheduleApt !== null} onOpenChange={(open) => !open && setRescheduleApt(null)}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Reprogramar cita</DialogTitle>
+                    </DialogHeader>
+                    {rescheduleApt && (
+                        <div className="space-y-4 mt-4">
+                            <p className="text-sm text-muted-foreground">
+                                {rescheduleApt.service?.name} · {rescheduleApt.client?.full_name || "Cliente"}
+                                {" · "}Barbero: {rescheduleApt.barber?.name || "Sin asignar"}
+                            </p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium mb-2 block">Nueva fecha</label>
+                                    <Input
+                                        type="date"
+                                        value={rescheduleDate}
+                                        onChange={(e) => { setRescheduleDate(e.target.value); setRescheduleTime(""); }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium mb-2 block">Nueva hora</label>
+                                    <Select value={rescheduleTime} onValueChange={setRescheduleTime} disabled={isReschedLoadingSlots}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={isReschedLoadingSlots ? "Cargando..." : "Hora"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {generateTimeSlots().map((slot) => (
+                                                <SelectItem key={slot} value={slot} disabled={isRescheduleSlotDisabled(slot)}>
+                                                    {slot}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <Button type="button" variant="outline" onClick={() => setRescheduleApt(null)}>
+                                    Cancelar
+                                </Button>
+                                <Button type="button" onClick={handleReschedule} disabled={isRescheduling}>
+                                    {isRescheduling && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                    Reprogramar
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

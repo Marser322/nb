@@ -169,8 +169,8 @@ export async function bookAppointment(
 }
 
 /**
- * Obtiene la disponibilidad diaria efectiva de un barbero en un rango de fechas.
- * Soporta un fallback / mock si se está en modo interactivo de pruebas local (isDummy).
+ * Obtiene la disponibilidad diaria efectiva de un barbero en un rango de fechas
+ * usando el RPC 'get_availability' (fuente única de verdad del wizard de reservas).
  */
 export async function fetchAvailability(
     supabase: SupabaseClient<Database>,
@@ -178,68 +178,6 @@ export async function fetchAvailability(
     fromISO: string, // YYYY-MM-DD
     toISO: string    // YYYY-MM-DD
 ): Promise<DayAvailability[]> {
-    const isDummy =
-        typeof window !== "undefined" &&
-        (process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") ||
-            !process.env.NEXT_PUBLIC_SUPABASE_URL);
-
-    if (isDummy) {
-        // Simular datos de disponibilidad para pruebas locales
-        const start = new Date(fromISO + "T00:00:00");
-        const end = new Date(toISO + "T00:00:00");
-        const list: DayAvailability[] = [];
-
-        // Cargar citas mocks locales
-        const localAppointments = JSON.parse(
-            localStorage.getItem("nb-appointments") || "[]"
-        ) as Array<{
-            barber_id: string;
-            appointment_date: string;
-            status: string;
-            start_time: string;
-            end_time: string;
-        }>;
-
-        const current = new Date(start);
-        while (current <= end) {
-            const dayOfWeek = current.getDay(); // 0 = Domingo, 6 = Sábado
-            const dateStr = current.toISOString().split("T")[0];
-
-            // Abierto de lunes a sábado
-            const isOpen = dayOfWeek !== 0;
-            const openTime = "09:00:00";
-            const closeTime = dayOfWeek === 6 ? "18:00:00" : "20:00:00";
-
-            // Filtrar citas para este barbero en esta fecha
-            const dayApts = localAppointments.filter(
-                (apt) =>
-                    apt.barber_id === barberId &&
-                    apt.appointment_date === dateStr &&
-                    (apt.status === "pending" || apt.status === "confirmed")
-            );
-
-            const bookedSlots = dayApts.map((apt) => ({
-                start: apt.start_time,
-                end: apt.end_time,
-            }));
-
-            list.push({
-                day: dateStr,
-                is_open: isOpen,
-                open_time: isOpen ? openTime : null,
-                close_time: isOpen ? closeTime : null,
-                break_start: null,
-                break_end: null,
-                slot_minutes: 30,
-                booked: bookedSlots,
-                blocks: [],
-            });
-
-            current.setDate(current.getDate() + 1);
-        }
-        return list;
-    }
-
     const { data, error } = await supabase.rpc("get_availability", {
         p_barber_id: barberId,
         p_from: fromISO,

@@ -1,6 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Camera, Instagram, Hash, Star, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,13 +9,35 @@ import { Header, Footer } from "@/components/layout";
 import type { Lookbook } from "@/types/database.types";
 import Link from "next/link";
 import Image from "next/image";
-import { ROUTES } from "@/lib/constants";
+import { ROUTES, BUSINESS_CONFIG } from "@/lib/constants";
 import { STATIC_STYLES, getServiceIdForStyle } from "@/lib/static-data";
+import { useFeatures } from "@/lib/features";
+import { toast } from "sonner";
+import { buildWaLink } from "@/lib/whatsapp";
 
 export default function LookbookPage() {
+    const { features, isLoaded } = useFeatures();
+    const router = useRouter();
+    const waLink = buildWaLink(BUSINESS_CONFIG.phone, "Hola, me gustaría reservar un turno.");
+
+    useEffect(() => {
+        if (isLoaded && !features.lookbook) {
+            toast.error("El Lookbook no está disponible");
+            router.replace("/");
+        }
+    }, [isLoaded, features.lookbook, router]);
+
     const styles: Lookbook[] = STATIC_STYLES;
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
     const isLoading = false;
+
+    if (!isLoaded || !features.lookbook) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            </div>
+        );
+    }
 
     // Obtener todos los tags únicos
     const allTags = [...new Set(styles.flatMap((s) => s.tags || []))];
@@ -88,7 +111,7 @@ export default function LookbookPage() {
                                 onClick={() => setSelectedTag(null)}
                                 className={`rounded-full px-6 h-10 transition-all ${selectedTag === null
                                     ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90"
-                                    : "border-white/10 hover:border-primary/50 bg-white/5 text-muted-foreground hover:text-primary"
+                                    : "border-border hover:border-primary/50 bg-muted text-muted-foreground hover:text-primary"
                                     }`}
                             >
                                 Todos
@@ -100,7 +123,7 @@ export default function LookbookPage() {
                                     onClick={() => setSelectedTag(tag)}
                                     className={`rounded-full px-6 h-10 transition-all ${selectedTag === tag
                                         ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90"
-                                        : "border-white/10 hover:border-primary/50 bg-white/5 text-muted-foreground hover:text-primary"
+                                        : "border-border hover:border-primary/50 bg-muted text-muted-foreground hover:text-primary"
                                         }`}
                                 >
                                     <Hash className="h-3 w-3 mr-1 opacity-70" />
@@ -114,30 +137,32 @@ export default function LookbookPage() {
                     {isLoading ? (
                         <div className="columns-2 md:columns-3 lg:columns-4 gap-6 space-y-6">
                             {[...Array(8)].map((_, i) => (
-                                <div key={i} className="aspect-[3/4] bg-white/5 rounded-2xl animate-pulse break-inside-avoid border border-white/5" />
+                                <div key={i} className="aspect-[3/4] bg-muted rounded-2xl animate-pulse break-inside-avoid border border-border" />
                             ))}
                         </div>
                     ) : filteredStyles.length === 0 ? (
-                        <div className="text-center py-24 bg-white/5 rounded-3xl border border-white/10">
-                            <div className="h-20 w-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <div className="text-center py-24 bg-card rounded-3xl border border-border">
+                            <div className="h-20 w-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
                                 <Camera className="h-10 w-10 text-muted-foreground/50" />
                             </div>
                             <h3 className="text-xl font-bold mb-2">Aún no hay estilos</h3>
                             <p className="text-muted-foreground mb-8 text-lg">
                                 Estamos preparando nuestra galería de cortes.
                             </p>
-                            <Button asChild size="lg" className="rounded-full">
-                                <Link href={ROUTES.RESERVAR}>
-                                    Reservar Turno
-                                    <ArrowRight className="ml-2 h-4 w-4" />
-                                </Link>
-                            </Button>
+                            {features.reservas_online && (
+                                <Button asChild size="lg" className="rounded-full">
+                                    <Link href={ROUTES.RESERVAR}>
+                                        Reservar Turno
+                                        <ArrowRight className="ml-2 h-4 w-4" />
+                                    </Link>
+                                </Button>
+                            )}
                         </div>
                     ) : (
-                        <div className="columns-2 md:columns-3 lg:columns-4 gap-6 space-y-6 pb-20">
+                        <div id="lookbook-grid" className="columns-2 md:columns-3 lg:columns-4 gap-6 space-y-6 pb-20">
                             {filteredStyles.map((style) => (
                                 <div key={style.id} className="break-inside-avoid relative group">
-                                    <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-card shadow-lg transition-all duration-500 group-hover:-translate-y-2 group-hover:shadow-2xl group-hover:shadow-primary/10">
+                                    <div className="relative rounded-2xl overflow-hidden border border-border bg-card shadow-lg transition-all duration-500 group-hover:-translate-y-2 group-hover:shadow-2xl group-hover:shadow-primary/10">
                                         {style.image_url ? (
                                             <div className="relative">
                                                 <Image
@@ -151,8 +176,8 @@ export default function LookbookPage() {
                                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                                             </div>
                                         ) : (
-                                            <div className="aspect-square flex items-center justify-center bg-zinc-900">
-                                                <Camera className="h-12 w-12 text-zinc-700" />
+                                            <div className="aspect-square flex items-center justify-center bg-muted">
+                                                <Camera className="h-12 w-12 text-muted-foreground/30" />
                                             </div>
                                         )}
 
@@ -171,21 +196,21 @@ export default function LookbookPage() {
                                             {style.tags && (
                                                 <div className="flex flex-wrap gap-1 mb-3">
                                                     {style.tags.slice(0, 3).map(tag => (
-                                                        <span key={tag} className="text-[10px] uppercase tracking-wider bg-white/20 text-white px-2 py-1 rounded-sm backdrop-blur-md">
+                                                        <span key={tag} className="text-[10px] uppercase tracking-wider bg-primary/20 text-primary px-2 py-1 rounded-sm backdrop-blur-md">
                                                             {tag}
                                                         </span>
                                                     ))}
                                                 </div>
                                             )}
 
-                                            {getServiceIdForStyle(style.id) && (
-                                                <Button asChild size="sm" className="w-full mt-3 rounded-full bg-primary hover:bg-primary/90 text-black font-bold text-xs h-8">
-                                                    <Link href={`/reservar?styleId=${style.id}&serviceId=${getServiceIdForStyle(style.id)}`}>
-                                                        Reservar Estilo
-                                                        <ArrowRight className="ml-1.5 h-3 w-3" />
-                                                    </Link>
-                                                </Button>
-                                            )}
+                                             {features.reservas_online && getServiceIdForStyle(style.id) && (
+                                                 <Button asChild size="sm" className="w-full mt-3 rounded-full bg-primary hover:bg-primary/90 text-black font-bold text-xs h-8">
+                                                     <Link href={`/reservar?styleId=${style.id}&serviceId=${getServiceIdForStyle(style.id)}`}>
+                                                         Reservar Estilo
+                                                         <ArrowRight className="ml-1.5 h-3 w-3" />
+                                                     </Link>
+                                                 </Button>
+                                             )}
 
                                             {style.instagram_url && (
                                                 <a
@@ -206,7 +231,7 @@ export default function LookbookPage() {
                     )}
 
                     {/* CTA Footer */}
-                    <div className="relative rounded-3xl overflow-hidden border border-white/10 p-8 md:p-16 text-center">
+                    <div className="relative rounded-3xl overflow-hidden border border-border p-8 md:p-16 text-center">
                         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent -z-10" />
                         <div className="absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent -z-10" />
 
@@ -217,12 +242,21 @@ export default function LookbookPage() {
                             Nuestros profesionales están listos para lograr el estilo que buscás.
                             Traenos tu referencia o dejate asesorar.
                         </p>
-                        <Button size="lg" asChild className="h-12 px-8 rounded-full shadow-xl shadow-primary/20 text-lg">
-                            <Link href={ROUTES.RESERVAR}>
-                                Reservar Cita Ahora
-                                <ArrowRight className="ml-2 h-5 w-5" />
-                            </Link>
-                        </Button>
+                        {features.reservas_online ? (
+                            <Button size="lg" asChild className="h-12 px-8 rounded-full shadow-xl shadow-primary/20 text-lg">
+                                <Link href={ROUTES.RESERVAR}>
+                                    Reservar Cita Ahora
+                                    <ArrowRight className="ml-2 h-5 w-5" />
+                                </Link>
+                            </Button>
+                        ) : (
+                            <Button size="lg" asChild className="h-12 px-8 rounded-full shadow-xl shadow-green-500/20 text-lg bg-[#25D366] hover:bg-[#1ebc59] text-black font-bold">
+                                <a href={waLink || "#"} target="_blank" rel="noopener noreferrer">
+                                    Reservar por WhatsApp
+                                    <ArrowRight className="ml-2 h-5 w-5" />
+                                </a>
+                            </Button>
+                        )}
                     </div>
                 </div>
             </main>

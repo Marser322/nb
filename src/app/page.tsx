@@ -7,9 +7,11 @@ import { ArrowRight, Calendar, Clock, Star, Scissors, Sparkles } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Header, Footer } from "@/components/layout";
-import { ROUTES } from "@/lib/constants";
+import { ROUTES, BUSINESS_CONFIG } from "@/lib/constants";
 import { BeforeAfterSlider } from "@/components/ui/before-after-slider";
 import { WhyChooseUsContent } from "@/components/home/WhyChooseUsContent";
+import { useFeatures } from "@/lib/features";
+import { buildWaLink } from "@/lib/whatsapp";
 
 // Servicios destacados (luego vendrán de la BD)
 const services = [
@@ -43,6 +45,9 @@ const services = [
 ];
 
 export default function HomePage() {
+  const { features } = useFeatures();
+  const waLink = buildWaLink(BUSINESS_CONFIG.phone, "Hola, me gustaría reservar un turno.");
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -81,19 +86,30 @@ export default function HomePage() {
             <div className="luxury-rule my-7 max-w-lg" />
 
             <p className="text-lg md:text-xl text-zinc-300 max-w-2xl leading-relaxed">
-              Corte, barba y styling con precisión de taller privado. Reservá online, elegí barbero y llegá directo a tu silla.
+              Corte, barba y styling con precisión de taller privado. {features.reservas_online ? "Reservá online, elegí barbero y llegá directo a tu silla." : `Reservas por WhatsApp o teléfono al ${BUSINESS_CONFIG.phone}.`}
             </p>
 
             <div className="mt-9 flex flex-col sm:flex-row gap-4">
-              <Button id="hero-cta" size="lg" asChild className="text-base md:text-lg h-14 px-9 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl shadow-primary/20">
-                <Link href={ROUTES.RESERVAR}>
-                  Reservar Turno
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
-              <Button size="lg" variant="outline" asChild className="text-base md:text-lg h-14 px-9 rounded-full border-white/15 bg-white/5 backdrop-blur-sm hover:bg-white/10 text-white">
-                <Link href={ROUTES.LOOKBOOK}>Ver estilos</Link>
-              </Button>
+              {features.reservas_online ? (
+                <Button id="hero-cta" size="lg" asChild className="text-base md:text-lg h-14 px-9 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl shadow-primary/20">
+                  <Link href={ROUTES.RESERVAR}>
+                    Reservar Turno
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
+                </Button>
+              ) : (
+                <Button id="hero-cta" size="lg" asChild className="text-base md:text-lg h-14 px-9 rounded-full bg-[#25D366] hover:bg-[#1ebc59] text-black font-bold shadow-xl shadow-green-500/20">
+                  <a href={waLink || "#"} target="_blank" rel="noopener noreferrer">
+                    Reservar por WhatsApp
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </a>
+                </Button>
+              )}
+              {features.lookbook && (
+                <Button size="lg" variant="outline" asChild className="text-base md:text-lg h-14 px-9 rounded-full border-white/15 bg-white/5 backdrop-blur-sm hover:bg-white/10 text-white">
+                  <Link href={ROUTES.LOOKBOOK}>Ver estilos</Link>
+                </Button>
+              )}
             </div>
 
             <div className="mt-16 grid grid-cols-3 gap-4 max-w-2xl">
@@ -147,7 +163,7 @@ export default function HomePage() {
                 whileHover={{ y: -10 }}
                 className="group relative h-full"
               >
-                <Card className="h-full border-white/5 bg-zinc-900/50 backdrop-blur-md overflow-hidden transition-all duration-500 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10">
+                <Card className="h-full border-border bg-card/50 backdrop-blur-md overflow-hidden transition-all duration-500 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10">
                   {/* Dynamic Background Image on Hover */}
                   <div className="absolute inset-0 z-0">
                     <Image
@@ -156,7 +172,7 @@ export default function HomePage() {
                       fill
                       className="object-cover opacity-0 group-hover:opacity-20 transition-all duration-700 group-hover:scale-110 grayscale group-hover:grayscale-0"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent z-10" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent z-10" />
                   </div>
 
                   {/* Floating Accessory/Effect */}
@@ -164,12 +180,12 @@ export default function HomePage() {
 
                   <CardContent className="p-8 relative z-20 flex flex-col h-full">
                     <div className="mb-6 flex justify-between items-start">
-                      <div className="h-14 w-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:bg-primary group-hover:border-primary transition-all duration-500 group-hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]">
-                        <service.icon className="h-7 w-7 text-white transition-colors" />
+                      <div className="h-14 w-14 rounded-2xl bg-muted border border-border flex items-center justify-center group-hover:bg-primary group-hover:border-primary transition-all duration-500 group-hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]">
+                        <service.icon className="h-7 w-7 text-foreground group-hover:text-primary-foreground transition-colors" />
                       </div>
                       {/* Animated Badge on Hover */}
                       <motion.div
-                        className="bg-white/10 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                        className="bg-primary/10 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                         animate={{ rotate: [0, 15, -15, 0] }}
                         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                       >
@@ -177,22 +193,22 @@ export default function HomePage() {
                       </motion.div>
                     </div>
 
-                    <h3 className="text-2xl font-bold mb-3 text-white group-hover:text-primary transition-colors duration-300">
+                    <h3 className="text-2xl font-bold mb-3 text-foreground group-hover:text-primary transition-colors duration-300">
                       {service.name}
                     </h3>
 
-                    <p className="text-gray-400 mb-8 leading-relaxed group-hover:text-gray-200 transition-colors duration-300">
+                    <p className="text-muted-foreground mb-8 leading-relaxed group-hover:text-foreground transition-colors duration-300">
                       {service.description}
                     </p>
 
-                    <div className="mt-auto flex items-center justify-between pt-6 border-t border-white/10 group-hover:border-white/20 transition-colors">
-                      <div className="flex items-center gap-2 text-sm text-gray-400 group-hover:text-white transition-colors">
+                    <div className="mt-auto flex items-center justify-between pt-6 border-t border-border group-hover:border-border/80 transition-colors">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground group-hover:text-foreground transition-colors">
                         <Clock className="h-4 w-4 text-primary" />
                         {service.duration} min
                       </div>
                       <div className="flex items-baseline gap-1">
                         <span className="text-sm text-primary">$</span>
-                        <span className="text-2xl font-bold text-white group-hover:text-amber-400 transition-colors text-glow">
+                        <span className="text-2xl font-bold text-foreground group-hover:text-primary transition-colors text-glow">
                           {service.price}
                         </span>
                       </div>
@@ -203,20 +219,22 @@ export default function HomePage() {
             ))}
           </div>
 
-          <div className="text-center mt-16">
-            <Button size="lg" className="h-14 px-8 text-lg rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all duration-300" asChild>
-              <Link href={ROUTES.RESERVAR}>
-                <Calendar className="mr-2 h-5 w-5" />
-                Reservar Cita
-              </Link>
-            </Button>
-          </div>
+          {features.reservas_online && (
+            <div className="text-center mt-16">
+              <Button size="lg" className="h-14 px-8 text-lg rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all duration-300" asChild>
+                <Link href={ROUTES.RESERVAR}>
+                  <Calendar className="mr-2 h-5 w-5" />
+                  Reservar Cita
+                </Link>
+              </Button>
+            </div>
+          )}
         </div>
       </section>
 
       {/* Why Choose Us */}
       {/* Transformations Section */}
-      <section className="py-24 relative bg-black/50">
+      <section className="py-24 relative bg-muted/35">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-6">
@@ -235,8 +253,8 @@ export default function HomePage() {
                 afterImage="/images/after-makeover.jpg"
               />
               <div className="text-center">
-                <h3 className="text-xl font-bold text-white">Full Makeover</h3>
-                <p className="text-sm text-gray-400">Corte + Barba + Styling</p>
+                <h3 className="text-xl font-bold text-foreground">Full Makeover</h3>
+                <p className="text-sm text-muted-foreground">Corte + Barba + Styling</p>
               </div>
             </div>
             <div className="space-y-4">
@@ -246,8 +264,8 @@ export default function HomePage() {
                 afterImage="/images/hero/estilo-moderno.jpg"
               />
               <div className="text-center">
-                <h3 className="text-xl font-bold text-white">Classic Fade</h3>
-                <p className="text-sm text-gray-400">Degradado perfecto y líneas limpias</p>
+                <h3 className="text-xl font-bold text-foreground">Classic Fade</h3>
+                <p className="text-sm text-muted-foreground">Degradado perfecto y líneas limpias</p>
               </div>
             </div>
           </div>
@@ -276,14 +294,23 @@ export default function HomePage() {
             ¿Listo para tu <span className="text-primary">nuevo look</span>?
           </h2>
           <p className="text-gray-300 mb-10 max-w-xl mx-auto text-lg leading-relaxed">
-            Reservá tu turno ahora y viví la experiencia NB Barber. No es solo un corte, es tu momento.
+            {features.reservas_online ? "Reservá tu turno ahora y viví la experiencia NB Barber. No es solo un corte, es tu momento." : `Escribinos por WhatsApp o llamanos ahora y viví la experiencia NB Barber. No es solo un corte, es tu momento.`}
           </p>
-          <Button size="lg" asChild className="text-lg px-10 py-8 rounded-full shadow-2xl shadow-primary/20 hover:scale-105 transition-transform bg-primary hover:bg-primary/90 text-primary-foreground">
-            <Link href={ROUTES.RESERVAR}>
-              Reservar Turno
-              <ArrowRight className="ml-2 h-6 w-6" />
-            </Link>
-          </Button>
+          {features.reservas_online ? (
+            <Button size="lg" asChild className="text-lg px-10 py-8 rounded-full shadow-2xl shadow-primary/20 hover:scale-105 transition-transform bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Link href={ROUTES.RESERVAR}>
+                Reservar Turno
+                <ArrowRight className="ml-2 h-6 w-6" />
+              </Link>
+            </Button>
+          ) : (
+            <Button size="lg" asChild className="text-lg px-10 py-8 rounded-full shadow-2xl shadow-green-500/20 hover:scale-105 transition-transform bg-[#25D366] hover:bg-[#1ebc59] text-black font-bold">
+              <a href={waLink || "#"} target="_blank" rel="noopener noreferrer">
+                Reservar por WhatsApp
+                <ArrowRight className="ml-2 h-6 w-6" />
+              </a>
+            </Button>
+          )}
         </div>
       </section>
 

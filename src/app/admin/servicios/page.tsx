@@ -141,7 +141,7 @@ export default function AdminServiciosPage() {
                 </div>
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button onClick={openNewDialog}>
+                        <Button id="admin-btn-new-service" onClick={openNewDialog}>
                             <Plus className="h-4 w-4 mr-2" />
                             Nuevo Servicio
                         </Button>
@@ -206,7 +206,8 @@ export default function AdminServiciosPage() {
             </div>
 
             <div className="rounded-md border bg-card">
-                <Table>
+                <div className="overflow-x-auto">
+                    <Table>
                     <TableHeader>
                         <TableRow>
                             <TableHead>Servicio</TableHead>
@@ -282,6 +283,7 @@ export default function AdminServiciosPage() {
                         )}
                     </TableBody>
                 </Table>
+                </div>
             </div>
         </div>
     );
