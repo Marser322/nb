@@ -8,13 +8,13 @@ export const BUSINESS_CONFIG = {
     email: "contacto@nbbarber.com",
     instagram: "@newbrothers.uy",
 
-    // Horarios de atención (24h format)
+    // Horarios de atención (24h format) - NOTA: Solo branding/copy. Ya no gobiernan la disponibilidad en vivo.
     workingHours: {
         start: 9,  // 9:00 AM
         end: 20,   // 8:00 PM
     },
 
-    // Días de trabajo (0 = Domingo, 6 = Sábado)
+    // Días de trabajo (0 = Domingo, 6 = Sábado) - NOTA: Solo branding/copy. Ya no gobiernan la disponibilidad en vivo.
     workingDays: [1, 2, 3, 4, 5, 6], // Lunes a Sábado
 
     // Política de cancelaciones (en minutos)
@@ -68,16 +68,46 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
 
 // Métodos de pago
 export const PAYMENT_METHODS = {
-    EFECTIVO: 'efectivo',
-    TRANSFERENCIA: 'transferencia',
-    MERCADOPAGO: 'mercadopago',
+    CASH: 'cash',
+    CARD: 'card',
+    TRANSFER: 'transfer',
+    OTHER: 'other',
 } as const
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
-    efectivo: 'Efectivo',
-    transferencia: 'Transferencia',
-    mercadopago: 'MercadoPago',
+    cash: 'Efectivo',
+    card: 'Tarjeta',
+    transfer: 'Transferencia',
+    other: 'Otro',
 }
+
+// Movimientos de Caja
+export const CASH_MOVEMENT_TYPE_LABELS: Record<string, string> = {
+    income: 'Ingreso',
+    expense: 'Egreso',
+}
+
+export const CASH_CATEGORY_LABELS: Record<string, string> = {
+    service: 'Servicio',
+    product: 'Producto',
+    tip: 'Propina',
+    adjustment: 'Ajuste',
+    supply: 'Insumos',
+    salary: 'Sueldo',
+    rent: 'Alquiler',
+    chair_rental: 'Renta de sillón',
+    settlement: 'Liquidación',
+    other: 'Otro',
+}
+
+// Modelos de Compensación
+export const COMPENSATION_MODEL_LABELS: Record<string, string> = {
+    commission: 'Comisión',
+    chair_rental: 'Renta de sillón',
+    hybrid: 'Híbrido',
+    employee: 'Empleado',
+}
+
 
 // Categorías de productos
 export const PRODUCT_CATEGORIES = [
@@ -143,9 +173,11 @@ export const ROUTES = {
     ADMIN_MENSAJES: '/admin/mensajes',
     ADMIN_PRODUCTOS: '/admin/productos',
     ADMIN_CAJA: '/admin/caja',
+    ADMIN_LIQUIDACIONES: '/admin/liquidaciones',
     ADMIN_SUCURSALES: '/admin/sucursales',
     ADMIN_BARBEROS: '/admin/barberos',
     ADMIN_SERVICIOS: '/admin/servicios',
+    ADMIN_CONFIGURACION: '/admin/configuracion',
 
     // Barbero
     BARBERO_AGENDA: '/barbero/mi-agenda',

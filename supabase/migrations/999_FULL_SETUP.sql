@@ -299,7 +299,9 @@ CREATE TABLE IF NOT EXISTS branches (
     name TEXT NOT NULL,
     address TEXT,
     phone TEXT,
-    active BOOLEAN DEFAULT true, -- NOTA: la migración 011 (F8) lo renombra a is_active
+    is_active BOOLEAN DEFAULT true,
+    working_hours JSONB DEFAULT '{"lunes": {"start": "09:00", "end": "20:00"}, "martes": {"start": "09:00", "end": "20:00"}, "miercoles": {"start": "09:00", "end": "20:00"}, "jueves": {"start": "09:00", "end": "20:00"}, "viernes": {"start": "09:00", "end": "20:00"}, "sabado": {"start": "09:00", "end": "18:00"}}'::jsonb,
+    image_url TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -344,7 +346,7 @@ ALTER TABLE communication_logs ENABLE ROW LEVEL SECURITY;
 -- (las policies de estas tablas se crean en la PARTE 7, ya endurecidas)
 
 -- Seed mínimo
-INSERT INTO branches (name, address, active)
+INSERT INTO branches (name, address, is_active)
 SELECT 'Casa Central', 'Av. Principal 1234', true
 WHERE NOT EXISTS (SELECT 1 FROM branches);
 
@@ -509,7 +511,7 @@ $$;
 -- Sucursales: lectura pública, escritura solo admin
 DROP POLICY IF EXISTS "Anyone can view active branches" ON branches;
 CREATE POLICY "Anyone can view active branches" ON branches
-  FOR SELECT USING (active = true OR is_admin());
+  FOR SELECT USING (is_active = true OR is_admin());
 
 DROP POLICY IF EXISTS "Admins manage branches" ON branches;
 CREATE POLICY "Admins manage branches" ON branches
@@ -749,9 +751,151 @@ DROP INDEX IF EXISTS idx_unique_barber_slot;
 DROP POLICY IF EXISTS "Clients can update own appointments" ON appointments;
 
 -- -------------------------------------------------------------
+-- 011 — Disponibilidad: bloqueos y RPC de disponibilidad
+-- -------------------------------------------------------------
+
+-- Bloqueos: vacaciones de barbero, feriado de sucursal, bloqueo puntual.
+-- start_time/end_time NULL (ambos) = día(s) completo(s).
+CREATE TABLE IF NOT EXISTS schedule_blocks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  barber_id UUID REFERENCES barbers(id) ON DELETE CASCADE,
+  branch_id UUID REFERENCES branches(id) ON DELETE CASCADE,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  start_time TIME,
+  end_time TIME,
+  reason TEXT,
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CHECK (end_date >= start_date),
+  CHECK ((start_time IS NULL) = (end_time IS NULL)),
+  CHECK (start_time IS NULL OR end_time > start_time),
+  CHECK (barber_id IS NOT NULL OR branch_id IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_schedule_blocks_barber
+  ON schedule_blocks(barber_id, start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_schedule_blocks_branch
+  ON schedule_blocks(branch_id, start_date, end_date);
+
+ALTER TABLE schedule_blocks ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admins manage schedule blocks" ON schedule_blocks;
+CREATE POLICY "Admins manage schedule blocks" ON schedule_blocks
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Barbers manage own blocks" ON schedule_blocks;
+CREATE POLICY "Barbers manage own blocks" ON schedule_blocks
+  FOR ALL USING (barber_id = current_barber_id())
+  WITH CHECK (barber_id = current_barber_id() AND branch_id IS NULL);
+
+-- RPC único de disponibilidad
+CREATE OR REPLACE FUNCTION get_availability(
+  p_barber_id UUID,
+  p_from DATE,
+  p_to DATE DEFAULT NULL
+) RETURNS TABLE (
+  day DATE,
+  is_open BOOLEAN,
+  open_time TIME,
+  close_time TIME,
+  break_start TIME,
+  break_end TIME,
+  slot_minutes INT,
+  booked JSONB,
+  blocks JSONB
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_barber RECORD;
+  v_to DATE;
+  v_day DATE;
+  v_key TEXT;
+  v_hours JSONB;
+  v_day_blocks JSONB;
+  v_full_day_block BOOLEAN;
+BEGIN
+  v_to := LEAST(COALESCE(p_to, p_from), p_from + 30);  -- cap 31 días
+
+  SELECT b.working_hours AS barber_hours, b.branch_id,
+         br.working_hours AS branch_hours
+  INTO v_barber
+  FROM barbers b
+  LEFT JOIN branches br ON br.id = b.branch_id
+  WHERE b.id = p_barber_id AND b.is_active = true;
+  IF NOT FOUND THEN RETURN; END IF;
+
+  v_day := p_from;
+  WHILE v_day <= v_to LOOP
+    v_key := (ARRAY['domingo','lunes','martes','miercoles','jueves','viernes','sabado'])
+             [EXTRACT(dow FROM v_day)::int + 1];
+    v_hours := COALESCE(v_barber.barber_hours -> v_key, v_barber.branch_hours -> v_key);
+    IF v_hours = 'null'::jsonb THEN v_hours := NULL; END IF;
+
+    SELECT
+      COALESCE(jsonb_agg(jsonb_build_object(
+        'start', COALESCE(sb.start_time::text, '00:00'),
+        'end',   COALESCE(sb.end_time::text,   '23:59'),
+        'reason', sb.reason) ORDER BY sb.start_time NULLS FIRST), '[]'::jsonb),
+      COALESCE(bool_or(sb.start_time IS NULL), false)
+    INTO v_day_blocks, v_full_day_block
+    FROM schedule_blocks sb
+    WHERE v_day BETWEEN sb.start_date AND sb.end_date
+      AND (sb.barber_id = p_barber_id
+           OR (sb.branch_id IS NOT NULL AND sb.branch_id = v_barber.branch_id));
+
+    day := v_day;
+    slot_minutes := 30;
+    blocks := v_day_blocks;
+    IF v_hours IS NULL OR v_full_day_block THEN
+      is_open := false;
+      open_time := NULL; close_time := NULL;
+      break_start := NULL; break_end := NULL;
+      booked := '[]'::jsonb;
+    ELSE
+      is_open := true;
+      open_time := (v_hours->>'start')::time;
+      close_time := (v_hours->>'end')::time;
+      break_start := (v_hours->>'break_start')::time;
+      break_end := (v_hours->>'break_end')::time;
+      SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'start', a.start_time::text, 'end', a.end_time::text)
+        ORDER BY a.start_time), '[]'::jsonb)
+      INTO booked
+      FROM appointments a
+      WHERE a.barber_id = p_barber_id AND a.appointment_date = v_day
+        AND a.status IN ('pending', 'confirmed');
+    END IF;
+    RETURN NEXT;
+    v_day := v_day + 1;
+  END LOOP;
+END; $$;
+
+GRANT EXECUTE ON FUNCTION get_availability(UUID, DATE, DATE) TO anon, authenticated;
+
+-- Validación server-side de slot
+CREATE OR REPLACE FUNCTION is_slot_bookable(
+  p_barber_id UUID, p_date DATE, p_start TIME, p_end TIME
+) RETURNS BOOLEAN
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v RECORD;
+BEGIN
+  SELECT * INTO v FROM get_availability(p_barber_id, p_date) LIMIT 1;
+  IF NOT FOUND OR NOT v.is_open THEN RETURN false; END IF;
+  IF p_start < v.open_time OR p_end > v.close_time THEN RETURN false; END IF;
+  IF v.break_start IS NOT NULL
+     AND p_start < v.break_end AND v.break_start < p_end THEN RETURN false; END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(v.blocks) blk
+    WHERE p_start < (blk->>'end')::time AND (blk->>'start')::time < p_end
+  ) THEN RETURN false; END IF;
+  RETURN true;
+END; $$;
+
+GRANT EXECUTE ON FUNCTION is_slot_bookable(UUID, DATE, TIME, TIME) TO anon, authenticated;
+
 -- RPC de reserva: end_time server-side, suscripción + cita en UNA
 -- transacción, y errores legibles para la UI.
--- -------------------------------------------------------------
 CREATE OR REPLACE FUNCTION book_appointment(
   p_barber_id UUID,
   p_service_id UUID,
@@ -791,6 +935,11 @@ BEGIN
   -- el reloj de Montevideo, no contra el del servidor (UTC).
   IF (p_date + p_start_time) <= (now() AT TIME ZONE 'America/Montevideo') THEN
     RAISE EXCEPTION 'HORARIO_PASADO';
+  END IF;
+
+  -- Validación de disponibilidad y bloqueos
+  IF NOT is_slot_bookable(p_barber_id, p_date, p_start_time, v_end_time) THEN
+    RAISE EXCEPTION 'FUERA_DE_HORARIO';
   END IF;
 
   IF p_recurring THEN
@@ -929,4 +1078,307 @@ SELECT cron.schedule(
   '0 6 * * *',
   'SELECT public.generate_subscription_appointments()'
 );
+
+
+-- =============================================================
+-- 012 — Contabilidad: compensación por barbero, cobro de citas,
+-- propinas y liquidaciones. Ejecutar a mano en el SQL Editor
+-- (requiere 009 por btree_gist).
+-- =============================================================
+
+-- 1. Compensación por barbero, con vigencia histórica: la UI siempre
+--    INSERTA una fila nueva (nunca UPDATE) — la liquidación de un período
+--    usa la fila vigente a esa fecha.
+CREATE TYPE compensation_model AS ENUM ('commission', 'chair_rental', 'hybrid', 'employee');
+
+CREATE TABLE IF NOT EXISTS barber_compensation (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  barber_id UUID NOT NULL REFERENCES barbers(id) ON DELETE CASCADE,
+  model compensation_model NOT NULL DEFAULT 'commission',
+  commission_pct NUMERIC(5,2) CHECK (commission_pct BETWEEN 0 AND 100), -- % que gana el BARBERO
+  rental_amount NUMERIC(10,2),
+  rental_period TEXT CHECK (rental_period IN ('weekly', 'monthly')),
+  salary_amount NUMERIC(10,2),
+  effective_from DATE NOT NULL DEFAULT CURRENT_DATE,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (barber_id, effective_from)
+);
+ALTER TABLE barber_compensation ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins manage compensation" ON barber_compensation;
+CREATE POLICY "Admins manage compensation" ON barber_compensation
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+DROP POLICY IF EXISTS "Barbers view own compensation" ON barber_compensation;
+CREATE POLICY "Barbers view own compensation" ON barber_compensation
+  FOR SELECT USING (barber_id = current_barber_id());
+
+-- 2. Extender cash_movements para atribuir movimientos a barbero/cita
+ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS barber_id UUID REFERENCES barbers(id);
+ALTER TABLE cash_movements ADD COLUMN IF NOT EXISTS appointment_id UUID REFERENCES appointments(id);
+CREATE INDEX IF NOT EXISTS idx_cash_movements_barber ON cash_movements(barber_id, created_at);
+
+-- Normalización defensiva de datos legados en español (si los hubiera)
+UPDATE cash_movements SET type = CASE type
+  WHEN 'ingreso' THEN 'income' WHEN 'egreso' THEN 'expense' ELSE type END;
+UPDATE cash_movements SET payment_method = CASE payment_method
+  WHEN 'efectivo' THEN 'cash' WHEN 'tarjeta' THEN 'card'
+  WHEN 'transferencia' THEN 'transfer' ELSE payment_method END;
+
+-- Categorías nuevas: chair_rental (renta cobrada al barbero) y
+-- settlement (pago de liquidación al barbero)
+ALTER TABLE cash_movements DROP CONSTRAINT IF EXISTS cash_movements_category_check;
+ALTER TABLE cash_movements ADD CONSTRAINT cash_movements_category_check
+  CHECK (category IN ('service', 'product', 'tip', 'adjustment', 'supply',
+                      'salary', 'rent', 'chair_rental', 'settlement', 'other'));
+
+-- El barbero ve sus propios movimientos (escribe solo vía RPC)
+DROP POLICY IF EXISTS "Barbers view own movements" ON cash_movements;
+CREATE POLICY "Barbers view own movements" ON cash_movements
+  FOR SELECT USING (barber_id = current_barber_id());
+
+-- 3. Migrar la tabla legacy cash_register (sin referencias en src/) y borrarla.
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'cash_register') THEN
+    INSERT INTO cash_movements (type, category, amount, payment_method, description,
+                                barber_id, created_at)
+    SELECT 'income', 'service', cr.amount,
+      CASE cr.payment_type WHEN 'efectivo' THEN 'cash'
+                           WHEN 'transferencia' THEN 'transfer' ELSE 'other' END,
+      'Migrado de cash_register', cr.barber_id,
+      COALESCE(cr.created_at, cr.register_date::timestamptz)
+    FROM cash_register cr;
+    
+    DROP POLICY IF EXISTS "Admins manage cash register" ON cash_register;
+    DROP TABLE IF EXISTS cash_register;
+  END IF;
+END $$;
+
+-- Anti doble cobro: una cita tiene a lo sumo UN movimiento de servicio.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_movements_appointment_service
+  ON cash_movements(appointment_id) WHERE category = 'service';
+
+-- 4. RPC de cobro al completar cita (barbero dueño o admin)
+CREATE OR REPLACE FUNCTION complete_appointment_with_payment(
+  p_appointment_id UUID,
+  p_final_amount NUMERIC,
+  p_payment_method TEXT,
+  p_tip_amount NUMERIC DEFAULT 0
+) RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_apt RECORD;
+BEGIN
+  IF p_final_amount IS NULL OR p_final_amount < 0 THEN
+    RAISE EXCEPTION 'MONTO_INVALIDO';
+  END IF;
+  IF p_tip_amount IS NULL OR p_tip_amount < 0 THEN
+    RAISE EXCEPTION 'PROPINA_INVALIDA';
+  END IF;
+  IF p_payment_method NOT IN ('cash', 'card', 'transfer', 'other') THEN
+    RAISE EXCEPTION 'METODO_INVALIDO';
+  END IF;
+
+  SELECT a.id, a.status, a.barber_id, b.branch_id AS barber_branch_id
+  INTO v_apt
+  FROM appointments a
+  JOIN barbers b ON b.id = a.barber_id
+  WHERE a.id = p_appointment_id
+  FOR UPDATE OF a;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'CITA_NO_ENCONTRADA'; END IF;
+  IF NOT (is_admin() OR v_apt.barber_id = current_barber_id()) THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+  IF v_apt.status NOT IN ('pending', 'confirmed') THEN
+    RAISE EXCEPTION 'ESTADO_INVALIDO';
+  END IF;
+
+  UPDATE appointments SET status = 'completed' WHERE id = p_appointment_id;
+
+  BEGIN
+    INSERT INTO cash_movements (type, category, amount, payment_method,
+      description, barber_id, appointment_id, branch_id, created_by)
+    VALUES ('income', 'service', p_final_amount, p_payment_method,
+      'Cobro de cita', v_apt.barber_id, p_appointment_id,
+      v_apt.barber_branch_id, auth.uid());
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'YA_COBRADA';
+  END;
+
+  IF p_tip_amount > 0 THEN
+    INSERT INTO cash_movements (type, category, amount, payment_method,
+      description, barber_id, appointment_id, branch_id, created_by)
+    VALUES ('income', 'tip', p_tip_amount, p_payment_method,
+      'Propina', v_apt.barber_id, p_appointment_id,
+      v_apt.barber_branch_id, auth.uid());
+  END IF;
+END; $$;
+
+REVOKE EXECUTE ON FUNCTION complete_appointment_with_payment FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION complete_appointment_with_payment TO authenticated;
+
+-- 5. Liquidación por barbero y período
+CREATE OR REPLACE FUNCTION get_barber_settlement(
+  p_barber_id UUID, p_from DATE, p_to DATE
+) RETURNS JSONB
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_comp RECORD;
+  v_model compensation_model;
+  v_services NUMERIC := 0;
+  v_tips NUMERIC := 0;
+  v_count BIGINT := 0;
+  v_barber_total NUMERIC := 0;
+  v_house_total NUMERIC := 0;
+  v_rental_due NUMERIC := 0;
+BEGIN
+  IF NOT (is_admin() OR p_barber_id = current_barber_id()) THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+
+  SELECT * INTO v_comp FROM barber_compensation
+  WHERE barber_id = p_barber_id AND effective_from <= p_to
+  ORDER BY effective_from DESC LIMIT 1;
+  v_model := COALESCE(v_comp.model, 'commission'::compensation_model);
+
+  SELECT COALESCE(SUM(amount) FILTER (WHERE category = 'service'), 0),
+         COALESCE(SUM(amount) FILTER (WHERE category = 'tip'), 0),
+         COUNT(*) FILTER (WHERE category = 'service')
+  INTO v_services, v_tips, v_count
+  FROM cash_movements
+  WHERE barber_id = p_barber_id AND type = 'income'
+    AND (created_at AT TIME ZONE 'America/Montevideo')::date BETWEEN p_from AND p_to;
+
+  IF v_model = 'commission' THEN
+    v_barber_total := round(v_services * COALESCE(v_comp.commission_pct, 0) / 100, 2);
+    v_house_total := v_services - v_barber_total;
+  ELSIF v_model = 'chair_rental' THEN
+    v_barber_total := v_services;
+    v_house_total := 0;
+    v_rental_due := COALESCE(v_comp.rental_amount, 0);
+  ELSIF v_model = 'hybrid' THEN
+    v_barber_total := round(v_services * COALESCE(v_comp.commission_pct, 0) / 100, 2);
+    v_house_total := v_services - v_barber_total;
+    v_rental_due := COALESCE(v_comp.rental_amount, 0);
+  ELSE -- employee
+    v_barber_total := 0;
+    v_house_total := v_services;
+  END IF;
+
+  v_barber_total := v_barber_total + v_tips;
+
+  RETURN jsonb_build_object(
+    'barber_id', p_barber_id, 'from', p_from, 'to', p_to,
+    'model', v_model, 'commission_pct', v_comp.commission_pct,
+    'rental_amount', v_comp.rental_amount, 'rental_period', v_comp.rental_period,
+    'salary_amount', v_comp.salary_amount,
+    'services_total', v_services, 'tips_total', v_tips,
+    'appointments_count', v_count, 'rental_due', v_rental_due,
+    'barber_total', v_barber_total, 'house_total', v_house_total,
+    'has_compensation', v_comp.id IS NOT NULL
+  );
+END; $$;
+
+REVOKE EXECUTE ON FUNCTION get_barber_settlement FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_barber_settlement TO authenticated;
+
+-- 6. Cierre de liquidación
+CREATE TABLE IF NOT EXISTS barber_settlements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  barber_id UUID NOT NULL REFERENCES barbers(id),
+  period_from DATE NOT NULL,
+  period_to DATE NOT NULL,
+  model compensation_model NOT NULL,
+  services_total NUMERIC(10,2) NOT NULL,
+  tips_total NUMERIC(10,2) NOT NULL,
+  commission_pct NUMERIC(5,2),
+  rental_amount NUMERIC(10,2),
+  barber_total NUMERIC(10,2) NOT NULL,
+  house_total NUMERIC(10,2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'closed' CHECK (status IN ('closed', 'paid')),
+  payout_movement_id UUID REFERENCES cash_movements(id),
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CHECK (period_to >= period_from),
+  EXCLUDE USING gist (barber_id WITH =, daterange(period_from, period_to, '[]') WITH &&)
+);
+ALTER TABLE barber_settlements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins manage settlements" ON barber_settlements;
+CREATE POLICY "Admins manage settlements" ON barber_settlements
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+DROP POLICY IF EXISTS "Barbers view own settlements" ON barber_settlements;
+CREATE POLICY "Barbers view own settlements" ON barber_settlements
+  FOR SELECT USING (barber_id = current_barber_id());
+
+CREATE OR REPLACE FUNCTION close_barber_settlement(
+  p_barber_id UUID, p_from DATE, p_to DATE,
+  p_register_payout BOOLEAN DEFAULT false
+) RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v JSONB;
+  v_settlement_id UUID;
+  v_movement_id UUID;
+BEGIN
+  IF NOT is_admin() THEN RAISE EXCEPTION 'NO_AUTORIZADO'; END IF;
+
+  v := get_barber_settlement(p_barber_id, p_from, p_to);
+
+  IF p_register_payout AND (v->>'barber_total')::numeric > 0 THEN
+    INSERT INTO cash_movements (type, category, amount, payment_method,
+      description, barber_id, created_by)
+    VALUES ('expense', 'settlement', (v->>'barber_total')::numeric, 'cash',
+      'Liquidación ' || p_from || ' a ' || p_to, p_barber_id, auth.uid())
+    RETURNING id INTO v_movement_id;
+  END IF;
+
+  BEGIN
+    INSERT INTO barber_settlements (barber_id, period_from, period_to, model,
+      services_total, tips_total, commission_pct, rental_amount,
+      barber_total, house_total, status, payout_movement_id, created_by)
+    VALUES (p_barber_id, p_from, p_to, (v->>'model')::compensation_model,
+      (v->>'services_total')::numeric, (v->>'tips_total')::numeric,
+      (v->>'commission_pct')::numeric, (v->>'rental_amount')::numeric,
+      (v->>'barber_total')::numeric, (v->>'house_total')::numeric,
+      CASE WHEN p_register_payout THEN 'paid' ELSE 'closed' END,
+      v_movement_id, auth.uid())
+    RETURNING id INTO v_settlement_id;
+  EXCEPTION WHEN exclusion_violation THEN
+    RAISE EXCEPTION 'PERIODO_YA_LIQUIDADO';
+  END;
+
+  RETURN v_settlement_id;
+END; $$;
+
+REVOKE EXECUTE ON FUNCTION close_barber_settlement FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION close_barber_settlement TO authenticated;
+
+-- =============================================================
+-- 013 — Configuración de la aplicación y feature flags.
+-- =============================================================
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value JSONB NOT NULL,
+  description TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by UUID REFERENCES auth.users(id)
+);
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read feature flags" ON app_settings;
+CREATE POLICY "Public read feature flags" ON app_settings
+  FOR SELECT USING (key LIKE 'feature.%' OR is_admin());
+DROP POLICY IF EXISTS "Admins manage settings" ON app_settings;
+CREATE POLICY "Admins manage settings" ON app_settings
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+INSERT INTO app_settings (key, value, description) VALUES
+  ('feature.tienda',        'true'::jsonb, 'Tienda online: /tienda, /checkout, carrito y link en navbar'),
+  ('feature.suscripciones', 'true'::jsonb, 'Turnos fijos semanales (wizard paso 6, mi-cuenta, generación automática)'),
+  ('feature.contabilidad',  'true'::jsonb, 'Cobro al completar cita, caja avanzada y liquidaciones'),
+  ('feature.propinas',      'true'::jsonb, 'Campo propina en el diálogo de cobro'),
+  ('feature.mensajes_crm',  'true'::jsonb, 'Mensajes y recordatorios por WhatsApp')
+ON CONFLICT (key) DO NOTHING;
+
 
