@@ -36,20 +36,11 @@ export const metadata: Metadata = {
     type: "website",
     locale: "es_UY",
     siteName: "New Brothers",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "New Brothers | Barbería Premium en Uruguay",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "New Brothers | Barbería Premium en Uruguay",
     description: "Reservá tu experiencia premium de barbería online.",
-    images: ["/og-image.png"],
   },
 };
 
@@ -58,7 +49,7 @@ const jsonLd = {
   "@type": "Barbershop",
   name: BUSINESS_CONFIG.name,
   description: "New Brothers: barbería premium en Uruguay. Reservá tu turno online para corte de cabello, barba y cuidado personal masculino.",
-  image: `${SITE_URL}/og-image.png`,
+  image: `${SITE_URL}/opengraph-image`,
   telephone: BUSINESS_CONFIG.phone,
   address: {
     "@type": "PostalAddress",
