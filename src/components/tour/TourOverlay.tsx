@@ -14,43 +14,67 @@ export function TourOverlay() {
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
     const prefersReducedMotion = useReducedMotion();
     const currentStep = steps[currentStepIndex];
+    // Dirección de navegación, para saltar pasos con target invisible hacia el lado correcto.
+    const skipDirection = useRef<1 | -1>(1);
+    const handleNext = () => { skipDirection.current = 1; nextStep(); };
+    const handlePrev = () => { skipDirection.current = -1; prevStep(); };
 
-    // Re-calculate position on step change or resize
+    // Re-calculate position on step change, scroll or resize.
+    // El spotlight SIGUE al elemento durante y después del scroll suave (antes se leía
+    // una sola vez tras un timeout, y quedaba desalineado si el scroll no había terminado).
     useEffect(() => {
         if (!isOpen || !currentStep) return;
-        let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-        const findTarget = () => {
-            // Special case for centered modal style steps
-            if (currentStep.target === 'body') {
-                setTargetRect(null);
-                return;
-            }
+        // Paso tipo modal centrado (sin target concreto)
+        if (currentStep.target === 'body') {
+            setTargetRect(null);
+            return;
+        }
 
-            const element = document.querySelector(currentStep.target);
-            if (element) {
-                // Scroll element into view smoothly
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const element = document.querySelector(currentStep.target);
 
-                // Wait a bit for scroll to finish then get rect (or resize observer)
-                timeoutId = setTimeout(() => {
-                    const rect = element.getBoundingClientRect();
-                    setTargetRect(rect);
-                }, prefersReducedMotion ? 0 : 420);
-            } else {
-                // Fallback if target not found
-                console.warn(`Target ${currentStep.target} not found`);
-                setTargetRect(null);
-            }
+        // Target ausente o no visible en este breakpoint (ej. nav de escritorio oculto en mobile):
+        // saltamos al paso vecino con un target real en vez de mostrar un card apuntando a la nada.
+        const rect0 = element?.getBoundingClientRect();
+        const notVisible = !element || !rect0 || (rect0.width === 0 && rect0.height === 0);
+        if (notVisible) {
+            if (skipDirection.current >= 0 && currentStepIndex < steps.length - 1) { nextStep(); return; }
+            if (skipDirection.current < 0 && currentStepIndex > 0) { prevStep(); return; }
+            setTargetRect(null); // sin paso vecino disponible → centrado sin spotlight
+            return;
+        }
+
+        const el = element;
+        const update = () => {
+            const rect = el.getBoundingClientRect();
+            // Si el elemento se oculta luego (resize) → sin spotlight fantasma
+            setTargetRect(rect.width === 0 && rect.height === 0 ? null : rect);
         };
 
-        findTarget();
-        window.addEventListener('resize', findTarget);
+        // Llevar el elemento al centro y leer su posición al instante
+        el.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+        update();
+
+        // Acompañar el scroll suave por ~900ms para que el recuadro termine alineado
+        let rafId = 0;
+        let elapsed = 0;
+        const tick = () => {
+            update();
+            elapsed += 16;
+            if (elapsed < 900) rafId = requestAnimationFrame(tick);
+        };
+        rafId = requestAnimationFrame(tick);
+
+        // Mantener el spotlight pegado al elemento ante cualquier scroll/resize posterior
+        window.addEventListener('scroll', update, { passive: true, capture: true });
+        window.addEventListener('resize', update);
+
         return () => {
-            window.removeEventListener('resize', findTarget);
-            if (timeoutId) clearTimeout(timeoutId);
+            cancelAnimationFrame(rafId);
+            window.removeEventListener('scroll', update, { capture: true } as EventListenerOptions);
+            window.removeEventListener('resize', update);
         };
-    }, [isOpen, currentStepIndex, currentStep, prefersReducedMotion]);
+    }, [isOpen, currentStepIndex, currentStep, steps.length, nextStep, prevStep, prefersReducedMotion]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -106,8 +130,8 @@ export function TourOverlay() {
                     total={steps.length}
                     targetRect={targetRect}
                     tourKey={currentTourKey}
-                    onNext={nextStep}
-                    onPrev={prevStep}
+                    onNext={handleNext}
+                    onPrev={handlePrev}
                     onClose={closeTour}
                 />
             </div>
