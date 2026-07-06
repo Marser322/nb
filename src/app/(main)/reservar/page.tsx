@@ -11,13 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Header, Footer } from "@/components/layout";
-import { cn, formatPrice, generateTimeSlots, calculateEndTime } from "@/lib/utils";
+import { cn, formatPrice, generateTimeSlots, generateTimeSlotsFromRange, calculateEndTime } from "@/lib/utils";
 import { BUSINESS_CONFIG, BRANCHES } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
-import type { Service, Barber } from "@/types/database.types";
+import type { Service, Barber, DayAvailability } from "@/types/database.types";
 import { toast } from "sonner";
 import { STATIC_STYLES, getBarberAvatarUrl, STATIC_SERVICES, STATIC_BARBERS } from "@/lib/static-data";
-import { fetchActiveAppointments, computeBookedSlots, hasOverlap, bookAppointment } from "@/lib/booking";
+import { fetchActiveAppointments, computeBookedSlots, hasOverlap, bookAppointment, fetchAvailability } from "@/lib/booking";
+import { useFeatures } from "@/lib/features";
 
 interface Branch {
   id: string | number;
@@ -32,6 +33,7 @@ interface Branch {
 const STEPS = ["Sucursal", "Servicio", "Referencia (Opcional)", "Barbero", "Fecha y Hora", "Confirmar"];
 
 function ReservarPageContent() {
+  const { features } = useFeatures();
   const searchParams = useSearchParams();
   const router = useRouter();
   const paramStyleId = searchParams.get("styleId");
@@ -53,7 +55,7 @@ function ReservarPageContent() {
   const [services, setServices] = useState<Service[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [availability, setAvailability] = useState<DayAvailability[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,7 +71,7 @@ function ReservarPageContent() {
       const [servicesRes, barbersRes, branchesRes] = await Promise.all([
         supabase.from("services").select("*").eq("is_active", true).order("sort_order"),
         supabase.from("barbers").select("*").eq("is_active", true),
-        supabase.from("branches").select("*").eq("active", true).order("name"),
+        supabase.from("branches").select("*").eq("is_active", true).order("name"),
       ]);
 
       const loadedServices = servicesRes?.data && servicesRes.data.length > 0 ? servicesRes.data : STATIC_SERVICES;
@@ -174,37 +176,59 @@ function ReservarPageContent() {
     );
   }, [barbers, selectedBranch]);
 
-  // Generar slots de tiempo
-  const timeSlots = generateTimeSlots(
-    BUSINESS_CONFIG.workingHours.start,
-    BUSINESS_CONFIG.workingHours.end,
-    30
-  );
+  // Obtener la configuración del día seleccionado
+  const selectedDayConfig = useMemo(() => {
+    if (!selectedDate || availability.length === 0) return null;
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    return availability.find((day) => day.day === dateStr) || null;
+  }, [selectedDate, availability]);
 
-  // Cargar slots ocupados cuando cambia barbero o fecha
+  // Generar slots de tiempo dinámicos para el día seleccionado
+  const timeSlots = useMemo(() => {
+    if (!selectedDayConfig || !selectedDayConfig.is_open || !selectedDayConfig.open_time || !selectedDayConfig.close_time) {
+      return [];
+    }
+    const startStr = selectedDayConfig.open_time.slice(0, 5);
+    const endStr = selectedDayConfig.close_time.slice(0, 5);
+    return generateTimeSlotsFromRange(startStr, endStr, selectedDayConfig.slot_minutes || 30);
+  }, [selectedDayConfig]);
+
+  // Cargar disponibilidad completa de 14 días cuando cambia el barbero
   useEffect(() => {
-    async function loadBookedSlots() {
-      if (!selectedBarber || !selectedDate) return;
+    async function loadAvailability() {
+      if (!selectedBarber) {
+        setAvailability([]);
+        return;
+      }
 
       setIsLoadingSlots(true);
-      const dateStr = format(selectedDate, "yyyy-MM-dd");
-      const appointments = await fetchActiveAppointments(supabase, selectedBarber.id, dateStr);
-      setBookedSlots(computeBookedSlots(appointments));
-      setIsLoadingSlots(false);
+      try {
+        const todayStr = format(startOfToday(), "yyyy-MM-dd");
+        const toStr = format(addDays(startOfToday(), 13), "yyyy-MM-dd");
+        const data = await fetchAvailability(supabase, selectedBarber.id, todayStr, toStr);
+        setAvailability(data);
+      } catch (err) {
+        console.error("Error loading availability:", err);
+        toast.error("Error al cargar la disponibilidad del barbero.");
+      } finally {
+        setIsLoadingSlots(false);
+      }
     }
-    loadBookedSlots();
-  }, [selectedBarber, selectedDate]);
+    loadAvailability();
+  }, [selectedBarber, supabase]);
 
-  // Generar próximos 14 días disponibles
-  const availableDates = Array.from({ length: 14 }, (_, i) => addDays(startOfToday(), i)).filter(
-    (date) => BUSINESS_CONFIG.workingDays.includes(date.getDay())
-  );
+  // Generar próximos 14 días disponibles a partir de la respuesta del RPC
+  const availableDates = useMemo(() => {
+    return availability
+      .filter((day) => day.is_open)
+      .map((day) => new Date(day.day + "T00:00:00"));
+  }, [availability]);
 
-  // Verificar si un slot está disponible
+  // Verificar si un slot está disponible en el cliente
   const isSlotAvailable = (time: string): boolean => {
-    if (!selectedService) return false;
+    if (!selectedService || !selectedDayConfig) return false;
 
-    // Verificar que no esté en el pasado si es hoy
+    // 1. Verificar que no esté en el pasado si es hoy
     if (selectedDate && isToday(selectedDate)) {
       const [hours, minutes] = time.split(":").map(Number);
       const slotTime = new Date();
@@ -212,21 +236,47 @@ function ReservarPageContent() {
       if (isBefore(slotTime, new Date())) return false;
     }
 
-    // Verificar todos los slots que ocupa el servicio
-    const slotsNeeded = Math.ceil(selectedService.duration_minutes / 30);
+    const slotDuration = selectedDayConfig.slot_minutes || 30;
+    const slotsNeeded = Math.ceil(selectedService.duration_minutes / slotDuration);
     const startIdx = timeSlots.indexOf(time);
 
+    // Calcular hora de fin
+    const endTime = calculateEndTime(time, selectedService.duration_minutes);
+
+    // 2. Verificar que no exceda el horario de cierre
+    const closeTimeStr = selectedDayConfig.close_time!.slice(0, 5);
+    if (endTime > closeTimeStr) return false;
+
+    // Verificar superposiciones para todos los slots consecutivos requeridos
     for (let i = 0; i < slotsNeeded; i++) {
       const slotToCheck = timeSlots[startIdx + i];
-      if (!slotToCheck || bookedSlots.includes(slotToCheck)) {
-        return false;
-      }
-    }
+      if (!slotToCheck) return false;
 
-    // Verificar que no exceda el horario de cierre
-    const endTime = calculateEndTime(time, selectedService.duration_minutes);
-    const [endHour] = endTime.split(":").map(Number);
-    if (endHour > BUSINESS_CONFIG.workingHours.end) return false;
+      const slotEndToCheck = calculateEndTime(slotToCheck, slotDuration);
+
+      // A. Citas existentes (booked)
+      const isBooked = selectedDayConfig.booked.some((apt) => {
+        const aptStart = apt.start.slice(0, 5);
+        const aptEnd = apt.end.slice(0, 5);
+        return slotToCheck < aptEnd && aptStart < slotEndToCheck;
+      });
+      if (isBooked) return false;
+
+      // B. Descanso (break_start, break_end)
+      if (selectedDayConfig.break_start && selectedDayConfig.break_end) {
+        const breakStart = selectedDayConfig.break_start.slice(0, 5);
+        const breakEnd = selectedDayConfig.break_end.slice(0, 5);
+        if (slotToCheck < breakEnd && breakStart < slotEndToCheck) return false;
+      }
+
+      // C. Bloqueos de agenda
+      const isBlocked = selectedDayConfig.blocks.some((block) => {
+        const blockStart = block.start.slice(0, 5);
+        const blockEnd = block.end.slice(0, 5);
+        return slotToCheck < blockEnd && blockStart < slotEndToCheck;
+      });
+      if (isBlocked) return false;
+    }
 
     return true;
   };
@@ -260,6 +310,7 @@ function ReservarPageContent() {
   const handleSubmit = async () => {
     if (!selectedService || !selectedBarber || !selectedDate || !selectedTime) return;
 
+    const isRecurringVal = isRecurring && features.suscripciones;
     setIsSubmitting(true);
 
     const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
@@ -274,7 +325,7 @@ function ReservarPageContent() {
       const mockAppointmentId = Math.random().toString(36).substring(2, 9);
       let mockSubscriptionId = null;
 
-      if (isRecurring) {
+      if (isRecurringVal) {
         mockSubscriptionId = "sub-" + Math.random().toString(36).substring(2, 9);
         const localSubs = JSON.parse(localStorage.getItem("nb-subscriptions") || "[]");
         const newSub = {
@@ -310,7 +361,7 @@ function ReservarPageContent() {
       localStorage.setItem("nb-appointments", JSON.stringify(localAppointments));
 
       toast.success(
-        isRecurring
+        isRecurringVal
           ? "¡Suscripción y primera cita confirmadas en modo local!"
           : "¡Reserva confirmada en modo local! Te esperamos."
       );
@@ -338,7 +389,7 @@ function ReservarPageContent() {
         barberId: selectedBarber?.id,
         dateISO: selectedDate?.toISOString(),
         time: selectedTime,
-        isRecurring,
+        isRecurring: isRecurringVal,
         savedAt: Date.now()
       };
       sessionStorage.setItem("nb-reserva-draft", JSON.stringify(draft));
@@ -356,17 +407,23 @@ function ReservarPageContent() {
       serviceId: selectedService.id,
       date: dateStr,
       startTime: selectedTime,
-      isRecurring,
+      isRecurring: isRecurringVal,
       styleReference: styleRef,
       notes: null,
     });
 
     if (!res.ok) {
       toast.error(res.message);
-      if (res.code === "SLOT_OCUPADO" || res.code === "23P01") {
-        // Volver al paso de Fecha y Hora y recargar slots
-        const refreshed = await fetchActiveAppointments(supabase, selectedBarber.id, dateStr);
-        setBookedSlots(computeBookedSlots(refreshed));
+      if (res.code === "SLOT_OCUPADO" || res.code === "23P01" || res.code === "FUERA_DE_HORARIO") {
+        // Volver al paso de Fecha y Hora y recargar disponibilidad completa
+        try {
+          const todayStr = format(startOfToday(), "yyyy-MM-dd");
+          const toStr = format(addDays(startOfToday(), 13), "yyyy-MM-dd");
+          const data = await fetchAvailability(supabase, selectedBarber.id, todayStr, toStr);
+          setAvailability(data);
+        } catch (err) {
+          console.error("Error refreshing availability:", err);
+        }
         setSelectedTime(null);
         setCurrentStep(4);
       }
@@ -375,7 +432,7 @@ function ReservarPageContent() {
     }
 
     toast.success(
-      isRecurring
+      isRecurringVal
         ? "¡Suscripción de Turno Fijo y cita confirmadas!"
         : "¡Reserva confirmada! Te esperamos."
     );
@@ -926,28 +983,30 @@ function ReservarPageContent() {
                 </Card>
 
                 {/* Toggle de Suscripción Recurrente */}
-                <div className="mt-6 p-5 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 backdrop-blur-md">
-                  <div className="flex items-start gap-4 justify-between">
-                    <div className="space-y-1">
-                      <h3 className="font-bold text-sm md:text-base text-white flex items-center gap-2">
-                        <Repeat className="h-5 w-5 text-primary animate-pulse" />
-                        ¿Querés reservar este turno de forma fija semanal?
-                      </h3>
-                      <p className="text-xs text-zinc-400 leading-relaxed max-w-lg">
-                        Activá una suscripción para asegurar automáticamente este horario ({selectedTime} todos los {selectedDate && format(selectedDate, "EEEE", { locale: es })}) con {selectedBarber?.name}. Podrás cancelarla en cualquier momento desde tu perfil.
-                      </p>
-                    </div>
-                    <div className="flex items-center pt-1">
-                      <input
-                        type="checkbox"
-                        id="recurring-toggle"
-                        checked={isRecurring}
-                        onChange={(e) => setIsRecurring(e.target.checked)}
-                        className="w-10 h-6 bg-zinc-800 checked:bg-primary border-zinc-700 rounded-full cursor-pointer appearance-none relative before:content-[''] before:absolute before:w-4 before:h-4 before:rounded-full before:bg-zinc-400 before:top-1 before:left-1 checked:before:left-5 checked:before:bg-black before:transition-all duration-300"
-                      />
+                {features.suscripciones && (
+                  <div className="mt-6 p-5 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 backdrop-blur-md">
+                    <div className="flex items-start gap-4 justify-between">
+                      <div className="space-y-1">
+                        <h3 className="font-bold text-sm md:text-base text-white flex items-center gap-2">
+                          <Repeat className="h-5 w-5 text-primary animate-pulse" />
+                          ¿Querés reservar este turno de forma fija semanal?
+                        </h3>
+                        <p className="text-xs text-zinc-400 leading-relaxed max-w-lg">
+                          Activá una suscripción para asegurar automáticamente este horario ({selectedTime} todos los {selectedDate && format(selectedDate, "EEEE", { locale: es })}) con {selectedBarber?.name}. Podrás cancelarla en cualquier momento desde tu perfil.
+                        </p>
+                      </div>
+                      <div className="flex items-center pt-1">
+                        <input
+                          type="checkbox"
+                          id="recurring-toggle"
+                          checked={isRecurring}
+                          onChange={(e) => setIsRecurring(e.target.checked)}
+                          className="w-10 h-6 bg-zinc-800 checked:bg-primary border-zinc-700 rounded-full cursor-pointer appearance-none relative before:content-[''] before:absolute before:w-4 before:h-4 before:rounded-full before:bg-zinc-400 before:top-1 before:left-1 checked:before:left-5 checked:before:bg-black before:transition-all duration-300"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 

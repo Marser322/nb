@@ -20,10 +20,12 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogFooter,
 } from "@/components/ui/dialog";
-import { Building2, Plus, Loader2, MapPin, Phone, Edit2 } from "lucide-react";
+import { Building2, Plus, Loader2, MapPin, Phone, Edit2, CalendarRange, Trash2, Calendar, Clock } from "lucide-react";
 import { toast } from "sonner";
-import type { Branch } from "@/types/database.types";
+import type { Branch, WorkingHours, ScheduleBlock } from "@/types/database.types";
+import { WorkingHoursEditor } from "@/components/admin/WorkingHoursEditor";
 
 export default function AdminSucursalesPage() {
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -34,7 +36,23 @@ export default function AdminSucursalesPage() {
         name: "",
         address: "",
         phone: "",
+        working_hours: null as WorkingHours | null,
     });
+    
+    // Estado para la gestión de bloqueos (feriados, etc.)
+    const [activeBranchForBlocks, setActiveBranchForBlocks] = useState<Branch | null>(null);
+    const [blocks, setBlocks] = useState<ScheduleBlock[]>([]);
+    const [isBlocksLoading, setIsBlocksLoading] = useState(false);
+    const [blockForm, setBlockForm] = useState({
+        startDate: "",
+        endDate: "",
+        isFullDay: true,
+        startTime: "09:00",
+        endTime: "18:00",
+        reason: "",
+    });
+    const [isCreatingBlock, setIsCreatingBlock] = useState(false);
+
     const supabase = useMemo(() => createClient(), []);
 
     const loadBranches = useCallback(async (showLoading = true) => {
@@ -48,23 +66,45 @@ export default function AdminSucursalesPage() {
         setIsLoading(false);
     }, [supabase]);
 
+    const loadBlocks = useCallback(async (branchId: string) => {
+        setIsBlocksLoading(true);
+        const { data } = await supabase
+            .from("schedule_blocks")
+            .select("*")
+            .eq("branch_id", branchId)
+            .gte("end_date", new Date().toISOString().split("T")[0])
+            .order("start_date", { ascending: true });
+        
+        if (data) setBlocks(data);
+        setIsBlocksLoading(false);
+    }, [supabase]);
+
     useEffect(() => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
         loadBranches(false);
     }, [loadBranches]);
 
+    useEffect(() => {
+        if (activeBranchForBlocks) {
+            loadBlocks(activeBranchForBlocks.id);
+        }
+    }, [activeBranchForBlocks, loadBlocks]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        const dataToSave = {
+            name: formData.name,
+            address: formData.address,
+            phone: formData.phone || null,
+            working_hours: formData.working_hours,
+        };
 
         if (editingBranch) {
             // Update
             const { error } = await supabase
                 .from("branches")
-                .update({
-                    name: formData.name,
-                    address: formData.address,
-                    phone: formData.phone || null,
-                })
+                .update(dataToSave)
                 .eq("id", editingBranch.id);
 
             if (error) {
@@ -78,9 +118,7 @@ export default function AdminSucursalesPage() {
             const { error } = await supabase
                 .from("branches")
                 .insert({
-                    name: formData.name,
-                    address: formData.address,
-                    phone: formData.phone || null,
+                    ...dataToSave,
                     is_active: true,
                 });
 
@@ -94,7 +132,7 @@ export default function AdminSucursalesPage() {
 
         setIsDialogOpen(false);
         setEditingBranch(null);
-        setFormData({ name: "", address: "", phone: "" });
+        setFormData({ name: "", address: "", phone: "", working_hours: null });
     };
 
     const toggleActive = async (branch: Branch) => {
@@ -110,19 +148,84 @@ export default function AdminSucursalesPage() {
         }
     };
 
+    const handleCreateBlock = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!activeBranchForBlocks) return;
+
+        if (!blockForm.startDate || !blockForm.endDate) {
+            toast.error("Ingresá fechas de inicio y fin válidas");
+            return;
+        }
+
+        if (blockForm.endDate < blockForm.startDate) {
+            toast.error("La fecha de fin debe ser posterior o igual a la de inicio");
+            return;
+        }
+
+        if (!blockForm.isFullDay && blockForm.endTime <= blockForm.startTime) {
+            toast.error("La hora de fin debe ser posterior al inicio");
+            return;
+        }
+
+        setIsCreatingBlock(true);
+        const { error } = await supabase
+            .from("schedule_blocks")
+            .insert({
+                branch_id: activeBranchForBlocks.id,
+                start_date: blockForm.startDate,
+                end_date: blockForm.endDate,
+                start_time: blockForm.isFullDay ? null : blockForm.startTime,
+                end_time: blockForm.isFullDay ? null : blockForm.endTime,
+                reason: blockForm.reason || null,
+            });
+
+        setIsCreatingBlock(false);
+        if (error) {
+            toast.error("Error al registrar bloqueo");
+        } else {
+            toast.success("Bloqueo registrado con éxito");
+            setBlockForm({
+                startDate: "",
+                endDate: "",
+                isFullDay: true,
+                startTime: "09:00",
+                endTime: "18:00",
+                reason: "",
+            });
+            loadBlocks(activeBranchForBlocks.id);
+        }
+    };
+
+    const handleDeleteBlock = async (blockId: string) => {
+        const { error } = await supabase
+            .from("schedule_blocks")
+            .delete()
+            .eq("id", blockId);
+
+        if (error) {
+            toast.error("Error al eliminar bloqueo");
+        } else {
+            toast.success("Bloqueo eliminado");
+            if (activeBranchForBlocks) {
+                loadBlocks(activeBranchForBlocks.id);
+            }
+        }
+    };
+
     const openEditDialog = (branch: Branch) => {
         setEditingBranch(branch);
         setFormData({
             name: branch.name,
             address: branch.address,
             phone: branch.phone || "",
+            working_hours: branch.working_hours,
         });
         setIsDialogOpen(true);
     };
 
     const openNewDialog = () => {
         setEditingBranch(null);
-        setFormData({ name: "", address: "", phone: "" });
+        setFormData({ name: "", address: "", phone: "", working_hours: null });
         setIsDialogOpen(true);
     };
 
@@ -142,7 +245,7 @@ export default function AdminSucursalesPage() {
                             Nueva Sucursal
                         </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
                         <DialogHeader>
                             <DialogTitle>
                                 {editingBranch ? "Editar Sucursal" : "Nueva Sucursal"}
@@ -173,6 +276,12 @@ export default function AdminSucursalesPage() {
                                     placeholder="+598 99 123 456"
                                     value={formData.phone}
                                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                />
+                            </div>
+                            <div className="pt-2">
+                                <WorkingHoursEditor
+                                    value={formData.working_hours}
+                                    onChange={(val) => setFormData({ ...formData, working_hours: val })}
                                 />
                             </div>
                             <div className="flex justify-end gap-2 pt-4">
@@ -249,13 +358,25 @@ export default function AdminSucursalesPage() {
                                         />
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => openEditDialog(branch)}
-                                        >
-                                            <Edit2 className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex items-center justify-center gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => openEditDialog(branch)}
+                                                title="Editar"
+                                            >
+                                                <Edit2 className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setActiveBranchForBlocks(branch)}
+                                                title="Bloqueos de Agenda"
+                                                className="text-primary hover:text-primary-foreground hover:bg-primary/20"
+                                            >
+                                                <CalendarRange className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -263,6 +384,180 @@ export default function AdminSucursalesPage() {
                     </TableBody>
                 </Table>
             </div>
+
+            {/* Diálogo para Gestionar Bloqueos */}
+            <Dialog open={activeBranchForBlocks !== null} onOpenChange={(open) => !open && setActiveBranchForBlocks(null)}>
+                <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <CalendarRange className="h-5 w-5 text-primary" />
+                            Bloqueos de Agenda: {activeBranchForBlocks?.name}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-6 mt-4">
+                        {/* Lista de bloqueos actuales */}
+                        <div>
+                            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">
+                                Bloqueos Activos o Futuros
+                            </h3>
+                            {isBlocksLoading ? (
+                                <div className="flex justify-center p-4">
+                                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                </div>
+                            ) : blocks.length === 0 ? (
+                                <p className="text-sm text-muted-foreground italic">
+                                    No hay bloqueos activos ni programados para esta sucursal.
+                                </p>
+                            ) : (
+                                <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                                    {blocks.map((block) => (
+                                        <div
+                                            key={block.id}
+                                            className="flex items-center justify-between p-3 rounded-lg border border-white/5 bg-zinc-900/50 text-xs"
+                                        >
+                                            <div className="space-y-1">
+                                                <div className="font-semibold text-white">
+                                                    {block.reason || "Sin motivo especificado"}
+                                                </div>
+                                                <div className="text-muted-foreground flex items-center gap-3">
+                                                    <span className="flex items-center gap-1">
+                                                        <Calendar className="h-3 w-3" />
+                                                        {block.start_date === block.end_date
+                                                            ? block.start_date
+                                                            : `${block.start_date} al ${block.end_date}`}
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock className="h-3 w-3" />
+                                                        {block.start_time && block.end_time
+                                                            ? `${block.start_time.slice(0, 5)} - ${block.end_time.slice(0, 5)}`
+                                                            : "Día completo"}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleDeleteBlock(block.id)}
+                                                className="text-red-400 hover:text-red-300 hover:bg-red-950/20"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Formulario de alta */}
+                        <form onSubmit={handleCreateBlock} className="space-y-4 border-t border-white/5 pt-4">
+                            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">
+                                Nuevo Bloqueo (Feriado, Reforma, etc.)
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                        Fecha de Inicio
+                                    </label>
+                                    <Input
+                                        type="date"
+                                        value={blockForm.startDate}
+                                        onChange={(e) => setBlockForm({ ...blockForm, startDate: e.target.value })}
+                                        required
+                                        className="bg-background/50 border-input/50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                        Fecha de Fin
+                                    </label>
+                                    <Input
+                                        type="date"
+                                        value={blockForm.endDate}
+                                        onChange={(e) => setBlockForm({ ...blockForm, endDate: e.target.value })}
+                                        required
+                                        className="bg-background/50 border-input/50"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    id="branch-is-fullday"
+                                    checked={blockForm.isFullDay}
+                                    onCheckedChange={(checked) => setBlockForm({ ...blockForm, isFullDay: checked })}
+                                    className="data-[state=checked]:bg-primary"
+                                />
+                                <label htmlFor="branch-is-fullday" className="text-xs font-medium text-white cursor-pointer select-none">
+                                    Bloquear todo el día
+                                </label>
+                            </div>
+
+                            {!blockForm.isFullDay && (
+                                <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-200">
+                                    <div>
+                                        <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                            Hora de Inicio
+                                        </label>
+                                        <Input
+                                            type="time"
+                                            value={blockForm.startTime}
+                                            onChange={(e) => setBlockForm({ ...blockForm, startTime: e.target.value })}
+                                            required
+                                            className="bg-background/50 border-input/50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                            Hora de Fin
+                                        </label>
+                                        <Input
+                                            type="time"
+                                            value={blockForm.endTime}
+                                            onChange={(e) => setBlockForm({ ...blockForm, endTime: e.target.value })}
+                                            required
+                                            className="bg-background/50 border-input/50"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                    Motivo
+                                </label>
+                                <Input
+                                    placeholder="Feriado por carnaval, reformas en local, etc."
+                                    value={blockForm.reason}
+                                    onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
+                                    required
+                                    className="bg-background/50 border-input/50"
+                                />
+                            </div>
+
+                            <DialogFooter className="pt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setActiveBranchForBlocks(null)}
+                                >
+                                    Cerrar
+                                </Button>
+                                <Button type="submit" disabled={isCreatingBlock}>
+                                    {isCreatingBlock ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Creando...
+                                        </>
+                                    ) : (
+                                        "Crear Bloqueo"
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

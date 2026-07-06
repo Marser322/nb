@@ -1,7 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { generateTimeSlots } from "@/lib/utils";
 import { BUSINESS_CONFIG } from "@/lib/constants";
-import { Database } from "@/types/database.types";
+import { Database, DayAvailability } from "@/types/database.types";
 
 /**
  * Citas que bloquean la agenda (pendientes o confirmadas) de un barbero en una fecha.
@@ -115,6 +115,13 @@ export async function bookAppointment(
                     code: "HORARIO_PASADO",
                 };
             }
+            if (errorMsg.includes("FUERA_DE_HORARIO")) {
+                return {
+                    ok: false,
+                    message: "El horario seleccionado está fuera de la disponibilidad de la barbería.",
+                    code: "FUERA_DE_HORARIO",
+                };
+            }
             if (errorMsg.includes("SERVICIO_NO_DISPONIBLE")) {
                 return {
                     ok: false,
@@ -159,5 +166,115 @@ export async function bookAppointment(
             message: "Ocurrió un error inesperado al procesar tu reserva.",
         };
     }
+}
+
+/**
+ * Obtiene la disponibilidad diaria efectiva de un barbero en un rango de fechas.
+ * Soporta un fallback / mock si se está en modo interactivo de pruebas local (isDummy).
+ */
+export async function fetchAvailability(
+    supabase: SupabaseClient<Database>,
+    barberId: string,
+    fromISO: string, // YYYY-MM-DD
+    toISO: string    // YYYY-MM-DD
+): Promise<DayAvailability[]> {
+    const isDummy =
+        typeof window !== "undefined" &&
+        (process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") ||
+            !process.env.NEXT_PUBLIC_SUPABASE_URL);
+
+    if (isDummy) {
+        // Simular datos de disponibilidad para pruebas locales
+        const start = new Date(fromISO + "T00:00:00");
+        const end = new Date(toISO + "T00:00:00");
+        const list: DayAvailability[] = [];
+
+        // Cargar citas mocks locales
+        const localAppointments = JSON.parse(
+            localStorage.getItem("nb-appointments") || "[]"
+        ) as Array<{
+            barber_id: string;
+            appointment_date: string;
+            status: string;
+            start_time: string;
+            end_time: string;
+        }>;
+
+        const current = new Date(start);
+        while (current <= end) {
+            const dayOfWeek = current.getDay(); // 0 = Domingo, 6 = Sábado
+            const dateStr = current.toISOString().split("T")[0];
+
+            // Abierto de lunes a sábado
+            const isOpen = dayOfWeek !== 0;
+            const openTime = "09:00:00";
+            const closeTime = dayOfWeek === 6 ? "18:00:00" : "20:00:00";
+
+            // Filtrar citas para este barbero en esta fecha
+            const dayApts = localAppointments.filter(
+                (apt) =>
+                    apt.barber_id === barberId &&
+                    apt.appointment_date === dateStr &&
+                    (apt.status === "pending" || apt.status === "confirmed")
+            );
+
+            const bookedSlots = dayApts.map((apt) => ({
+                start: apt.start_time,
+                end: apt.end_time,
+            }));
+
+            list.push({
+                day: dateStr,
+                is_open: isOpen,
+                open_time: isOpen ? openTime : null,
+                close_time: isOpen ? closeTime : null,
+                break_start: null,
+                break_end: null,
+                slot_minutes: 30,
+                booked: bookedSlots,
+                blocks: [],
+            });
+
+            current.setDate(current.getDate() + 1);
+        }
+        return list;
+    }
+
+    const { data, error } = await supabase.rpc("get_availability", {
+        p_barber_id: barberId,
+        p_from: fromISO,
+        p_to: toISO,
+    });
+
+    if (error) {
+        console.error("Error fetching availability:", error);
+        throw error;
+    }
+
+    interface AvailabilityRow {
+        day: string;
+        is_open: boolean;
+        open_time: string | null;
+        close_time: string | null;
+        break_start: string | null;
+        break_end: string | null;
+        slot_minutes: number;
+        booked: string | Array<{ start: string; end: string }> | null;
+        blocks: string | Array<{ start_time: string | null; end_time: string | null }> | null;
+    }
+
+    return (
+        (data as AvailabilityRow[])?.map((row) => ({
+            day: row.day,
+            is_open: row.is_open,
+            open_time: row.open_time,
+            close_time: row.close_time,
+            break_start: row.break_start,
+            break_end: row.break_end,
+            slot_minutes: row.slot_minutes,
+            booked: typeof row.booked === "string" ? JSON.parse(row.booked) : (row.booked || []),
+            blocks: typeof row.blocks === "string" ? JSON.parse(row.blocks) : (row.blocks || []),
+        })) ?? []
+    );
 }
 

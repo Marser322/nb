@@ -46,6 +46,27 @@ export function generateTimeSlots(
   return slots
 }
 
+// Generar slots de tiempo disponibles a partir de un rango en formato string (HH:mm)
+export function generateTimeSlotsFromRange(
+  start: string,
+  end: string,
+  intervalMinutes: number = 30
+): string[] {
+  const slots: string[] = []
+  const [startHour, startMin] = start.split(":").map(Number)
+  const [endHour, endMin] = end.split(":").map(Number)
+
+  let current = setMinutes(setHours(new Date(), startHour), startMin)
+  const limit = setMinutes(setHours(new Date(), endHour), endMin)
+
+  while (isBefore(current, limit)) {
+    slots.push(format(current, "HH:mm"))
+    current = addMinutes(current, intervalMinutes)
+  }
+
+  return slots
+}
+
 // Verificar si una cita puede ser cancelada (2 horas antes)
 export function canCancelAppointment(appointmentDate: string, startTime: string): boolean {
   const appointmentDateTime = parseISO(`${appointmentDate}T${startTime}`)

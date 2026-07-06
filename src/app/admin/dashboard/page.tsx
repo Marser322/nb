@@ -99,7 +99,7 @@ export default function AdminDashboardPage() {
         ] = await Promise.all([
             supabase.from("appointments").select("*, service:services(*), barber:barbers(*)").eq("appointment_date", today).order("start_time"),
             supabase.from("barbers").select("*").eq("is_active", true).order("name"),
-            supabase.from("branches").select("*").eq("active", true).order("name"),
+            supabase.from("branches").select("*").eq("is_active", true).order("name"),
             supabase.from("appointments").select("*", { count: "exact", head: true }).gte("appointment_date", monthStart).lte("appointment_date", monthEnd),
             supabase.from("products").select("*", { count: "exact", head: true }).lte("stock", 5).eq("is_active", true),
             supabase.from("appointments").select("service:services(price)").eq("status", "completed").gte("appointment_date", monthStart).lte("appointment_date", monthEnd),
