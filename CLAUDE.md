@@ -61,8 +61,7 @@ Plan activo de mejoras (auditoría 2026-07): ver historial.
 
 ### CRM y Próximas Fases
 
-- **Mini-CRM (Fases 0-4) y F7 Agendado sólido: completadas** (auditadas 2026-07-05; migraciones 007-010 aplicadas, RPCs `book_appointment`/`cancel_appointment`, wizard integrado, cancelación en Mi Cuenta, `?next=` en login).
-- **Pista GPT-5.5** (`briefs/GPT_assets_fase5_fase6.md`): retratos de barberos faltantes (martin/lucas/facundo.jpg) → **F5 Dashboard CRM** → **F6 Producción** (backup script, .env.example, DEPLOY.md; la DB fresca se levanta con `999_FULL_SETUP.sql`, ya consolidado 001→010).
-- **Pista Gemini** (secuencial, briefs en `briefs/`): **F8 Disponibilidad en vivo** (working_hours + schedule_blocks + RPC `get_availability`, migración 011) → **F9 Contabilidad** (compensación por barbero, cobro con propina, liquidaciones, 012) → **F10 Módulos** (feature flags en `app_settings` + `/admin/configuracion`, 013).
-- **Drift conocido schema/código**: `branches.active` es el nombre real en DB (todo el código ya lo usa; la 011 de F8 renombra a `is_active`); CHECKs de `cash_movements` en inglés vs inserts en español desde `/admin/caja` (lo normaliza la 012 de F9); tabla `cash_register` legacy sin referencias.
+- **TODAS las fases (0-10) completadas en código** (auditadas 2026-07-05): mini-CRM, agendado sólido (RPCs `book_appointment`/`cancel_appointment`, anti-solapes), dashboard CRM, disponibilidad en vivo (`get_availability` como fuente única del wizard, `working_hours`, `schedule_blocks`, editor en admin), contabilidad (compensación por barbero, `ChargeDialog` con propina, `/admin/liquidaciones`) y feature flags (`src/lib/features.ts` + `/admin/configuracion`).
+- **Drift resuelto**: `branches.is_active` es el nombre vigente (renombrado por la 011); CHECKs de `cash_movements` normalizados a códigos EN con labels ES en `constants.ts` (012); `cash_register` legacy migrada/eliminada (012).
+- **Pendiente (operativo, no código)**: ejecutar la Fase 6 según `DEPLOY.md` — crear proyecto Supabase de producción (sa-east-1), pegar `999_FULL_SETUP.sql` (equivale a 001→013 en DB fresca; en DB existente correr 011→013 en orden), cron de backup en el VPS, deploy en Vercel/VPS.
 - **Fases futuras**: Integración Mercado Pago, recordatorios automáticos por WhatsApp/Email (reminders_config / communication_logs).

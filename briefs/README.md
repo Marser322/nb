@@ -2,22 +2,14 @@
 
 Plan aprobado el 2026-07-05 (auditoría post-integración de imágenes). Segunda tanda (Fases 7–10, agendado sólido + disponibilidad + contabilidad + módulos) aprobada el 2026-07-05. Cada archivo es un brief **autocontenido** para ejecutar en una sesión independiente.
 
-## Estado (actualizado 2026-07-05, post-auditoría)
+## Estado (actualizado 2026-07-05, cierre de la segunda tanda)
 
-- **Hechas**: FASE_0, 1, 2, 3, 4 y **7** (commiteadas; remates de auditoría aplicados por Fable: fix `branches.active` en admin/citas y `999_FULL_SETUP.sql` consolidado 001→010).
-- **Pista GPT-5.5** (paralela): `GPT_assets_fase5_fase6.md` — retratos de barberos faltantes → FASE_5 → FASE_6.
-- **Pista Gemini** (secuencial): FASE_8 → FASE_9 → FASE_10.
+**TODAS las fases (0-10) están ejecutadas, auditadas y commiteadas.** Estos briefs quedan como documentación histórica del plan.
 
-## Orden de ejecución
-
-```
-Pista GPT-5.5:  assets → FASE_5 → FASE_6
-Pista Gemini:   FASE_8 → FASE_9 → FASE_10
-```
-
-- Las pistas no comparten archivos (territorios delimitados en cada brief). Si Gemini llega a FASE_10 antes de que GPT termine la 5, FASE_10 gatea los módulos existentes y no espera.
-- **FASE_9 es independiente de la 8**; FASE_10 va última (gatea módulos de las anteriores).
-- **Riesgo n.º 1 de la segunda tanda**: el EXCLUDE de 009 (ya aplicado) falla si hay citas solapadas en producción — correr SIEMPRE el query de diagnóstico del brief F7 antes de migrar una DB con datos. Verificar además el schema real desplegado (drift conocido: `branches.active` es el nombre real — la 011 de F8 lo renombra a `is_active`; CHECKs de `cash_movements` en inglés vs inserts en español — lo normaliza la 012 de F9).
+Pendiente operativo (manual, runbook en `DEPLOY.md`):
+1. Crear el proyecto Supabase de producción (sa-east-1) y pegar `999_FULL_SETUP.sql` (DB fresca = 001→013 en un solo script). En una DB existente: correr `011` → `012` → `013` en orden en el SQL Editor.
+2. **Antes de correr 009/011 sobre una DB con datos**: ejecutar el query de diagnóstico de solapes del brief F7 (el EXCLUDE falla si hay citas solapadas).
+3. Backup diario desde el VPS (`scripts/backup-supabase.sh` + cron) y deploy del front (Vercel o VPS).
 
 ## Reglas transversales (aplican a TODOS los briefs)
 
