@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Header, Footer } from "@/components/layout";
 import { CartDrawer } from "@/components/shop/CartDrawer";
+import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
 import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/stores/cartStore";
 import type { Product } from "@/types/database.types";
@@ -25,6 +26,42 @@ import { FeaturedProductsCarousel } from "@/components/shop/feature-carousel";
 import { STATIC_PRODUCTS } from "@/lib/static-data";
 import { useFeatures } from "@/lib/features";
 import { createClient } from "@/lib/supabase/client";
+
+const CATEGORY_BANNERS: Record<string, { title: string; description: string; image?: string; alt: string }> = {
+    cabello: {
+        title: "Cabello",
+        description: "Textura, limpieza y control para el corte de todos los días.",
+        image: "/images/tienda/cat-cabello.webp",
+        alt: "Productos premium para cuidado del cabello en New Brothers",
+    },
+    barba: {
+        title: "Barba",
+        description: "Aceites, bálsamos y terminaciones para una barba cuidada.",
+        image: "/images/tienda/cat-barba.webp",
+        alt: "Productos premium para barba en New Brothers",
+    },
+    styling: {
+        title: "Styling",
+        description: "Fijación profesional con acabado natural y elegante.",
+        image: "/images/tienda/cat-styling.webp",
+        alt: "Productos de styling profesional para cabello masculino",
+    },
+    afeitado: {
+        title: "Afeitado",
+        description: "Ritual clásico con precisión, confort y piel prolija.",
+        image: "/images/tienda/cat-afeitado.webp",
+        alt: "Productos premium para afeitado clásico",
+    },
+};
+
+function getCategoryBanner(category: string) {
+    const key = category.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return CATEGORY_BANNERS[key] ?? {
+        title: category,
+        description: "Selección curada para completar tu rutina NB.",
+        alt: `Categoría ${category} en la tienda New Brothers`,
+    };
+}
 
 export default function TiendaPage() {
     const { features, isLoaded } = useFeatures();
@@ -97,7 +134,7 @@ export default function TiendaPage() {
     };
 
     // Obtener categorías únicas de los productos
-    const availableCategories = [...new Set(products.map((p) => p.category))];
+    const availableCategories = [...new Set(products.map((p) => p.category).filter(Boolean))] as string[];
 
     return (
         <div className="min-h-screen bg-background">
@@ -139,13 +176,63 @@ export default function TiendaPage() {
                                 <SelectContent>
                                     <SelectItem value="all">Todas</SelectItem>
                                     {availableCategories.map((cat) => (
-                                        <SelectItem key={cat} value={cat || ""}>
+                                        <SelectItem key={cat} value={cat}>
                                             {cat}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
+                    </div>
+
+                    <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                        <button
+                            type="button"
+                            onClick={() => handleSelectCategory("all")}
+                            aria-pressed={selectedCategory === "all"}
+                            className={`group relative min-h-36 overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300 ${selectedCategory === "all" ? "border-primary bg-primary/10 shadow-lg shadow-primary/10" : "border-border bg-card/50 hover:border-primary/40"}`}
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-transparent to-transparent opacity-70" />
+                            <div className="relative flex h-full flex-col justify-end">
+                                <ShoppingBag className="mb-4 h-7 w-7 text-primary" />
+                                <span className="font-display text-xl font-bold text-foreground">Todo NB</span>
+                                <span className="mt-1 text-xs leading-relaxed text-muted-foreground">Catálogo completo de cuidado profesional.</span>
+                            </div>
+                        </button>
+                        {availableCategories.map((category) => {
+                            const banner = getCategoryBanner(category);
+                            const isActive = selectedCategory === category;
+
+                            return (
+                                <button
+                                    key={category}
+                                    type="button"
+                                    onClick={() => handleSelectCategory(category)}
+                                    aria-pressed={isActive}
+                                    className={`group relative min-h-36 overflow-hidden rounded-2xl border bg-card text-left transition-all duration-300 ${isActive ? "border-primary shadow-lg shadow-primary/10" : "border-border hover:border-primary/40"}`}
+                                >
+                                    {banner.image ? (
+                                        <Image
+                                            src={banner.image}
+                                            alt={banner.alt}
+                                            fill
+                                            unoptimized
+                                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 20vw"
+                                            className="object-cover transition-transform duration-700 group-hover:scale-105"
+                                        />
+                                    ) : (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                                            <ShoppingBag className="h-10 w-10 text-primary/35" />
+                                        </div>
+                                    )}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-transparent" />
+                                    <div className="relative flex min-h-36 flex-col justify-end p-4">
+                                        <span className="font-display text-xl font-bold text-foreground">{banner.title}</span>
+                                        <span className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{banner.description}</span>
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>
 
                     {/* Grid de productos */}
@@ -164,10 +251,22 @@ export default function TiendaPage() {
                             ))}
                         </div>
                     ) : filteredProducts.length === 0 ? (
-                        <div className="text-center py-20 bg-card/45 rounded-2xl border border-border">
-                            <ShoppingBag className="h-16 w-16 mx-auto text-muted-foreground/30 mb-4" />
-                            <h3 className="text-xl font-bold mb-2">No encontramos productos</h3>
-                            <p className="text-muted-foreground">Probá buscando con otros términos.</p>
+                        <div className="rounded-2xl border border-border bg-card/45">
+                            <IllustratedEmptyState
+                                icon={ShoppingBag}
+                                imageSrc="/images/empty/no-productos.webp"
+                                imageAlt="Estantería premium de productos NB sin resultados visibles"
+                                title="No encontramos productos"
+                                description="Probá con otra categoría o ajustá la búsqueda para volver al catálogo."
+                                action={
+                                    <Button variant="outline" size="sm" onClick={() => {
+                                        setSearchQuery("");
+                                        setSelectedCategory("all");
+                                    }}>
+                                        Ver todo el catálogo
+                                    </Button>
+                                }
+                            />
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -194,17 +293,17 @@ export default function TiendaPage() {
                                             )}
 
                                             {/* Gradient Overlay */}
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-transparent opacity-70 transition-opacity group-hover:opacity-50" />
 
                                             {/* Top Badges */}
                                             <div className="absolute top-3 left-3 right-3 flex justify-between items-start">
-                                                <Badge variant="secondary" className="bg-black/60 backdrop-blur-md border-border text-[10px] uppercase tracking-wider">
+                                                <Badge variant="secondary" className="border-border bg-background/70 text-[10px] uppercase tracking-wider backdrop-blur-md">
                                                     {product.category}
                                                 </Badge>
                                                 {product.stock <= 0 ? (
                                                     <Badge variant="destructive">AGOTADO</Badge>
                                                 ) : product.stock <= 5 ? (
-                                                    <Badge className="bg-amber-500 text-black border-none animate-pulse">
+                                                    <Badge variant="outline" className="animate-pulse border-primary/40 bg-primary/10 text-primary">
                                                         Últimos {product.stock}
                                                     </Badge>
                                                 ) : null}

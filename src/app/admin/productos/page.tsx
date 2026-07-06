@@ -37,6 +37,7 @@ import { formatPrice } from "@/lib/utils";
 import { PRODUCT_CATEGORIES } from "@/lib/constants";
 import type { Product } from "@/types/database.types";
 import { ImageUpload } from "@/components/admin/image-upload";
+import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
 
 export default function AdminProductsPage() {
     const { features, isLoaded } = useFeatures();
@@ -402,22 +403,26 @@ export default function AdminProductsPage() {
                                 ))
                             ) : filteredProducts.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
-                                        <Package className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
-                                        <p className="font-semibold text-lg text-foreground/80">No se encontraron productos</p>
-                                        <p className="text-sm mt-1 mb-4">
-                                            {searchQuery ? "Intenta ajustando el término de búsqueda." : "Registra un producto para que aparezca en la tienda."}
-                                        </p>
-                                        {searchQuery ? (
-                                            <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
-                                                Limpiar búsqueda
-                                            </Button>
-                                        ) : (
-                                            <Button variant="outline" size="sm" onClick={openNewDialog}>
-                                                <Plus className="h-4 w-4 mr-2" />
-                                                Agregar primer producto
-                                            </Button>
-                                        )}
+                                    <TableCell colSpan={6} className="py-4 text-center text-muted-foreground">
+                                        <IllustratedEmptyState
+                                            icon={Package}
+                                            imageSrc="/images/empty/no-productos.webp"
+                                            imageAlt="Estantería premium de productos New Brothers sin inventario visible"
+                                            title="No se encontraron productos"
+                                            description={searchQuery ? "Ajustá el término de búsqueda para ubicar el producto correcto." : "Registrá el primer producto para que aparezca en la tienda y el inventario."}
+                                            action={
+                                                searchQuery ? (
+                                                    <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
+                                                        Limpiar búsqueda
+                                                    </Button>
+                                                ) : (
+                                                    <Button variant="outline" size="sm" onClick={openNewDialog}>
+                                                        <Plus className="mr-2 h-4 w-4" />
+                                                        Agregar primer producto
+                                                    </Button>
+                                                )
+                                            }
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -458,7 +463,7 @@ export default function AdminProductsPage() {
                                             >
                                                 <Minus className="h-3 w-3" />
                                             </Button>
-                                            <span className={`w-8 text-center font-mono ${product.stock <= 5 ? 'text-amber-500 font-bold' : ''}`}>
+                                            <span className={`w-8 text-center font-mono ${product.stock <= 5 ? 'text-primary font-bold' : ''}`}>
                                                 {product.stock}
                                             </span>
                                             <Button

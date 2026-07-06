@@ -1,20 +1,24 @@
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { TourStep, useTourStore } from '@/lib/store/tour-store';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, ArrowLeft, X } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Sparkles, X } from 'lucide-react';
 
 export function TourOverlay() {
-    const { isOpen, steps, currentStepIndex, nextStep, prevStep, closeTour } = useTourStore();
+    const { isOpen, currentTourKey, steps, currentStepIndex, nextStep, prevStep, closeTour } = useTourStore();
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+    const prefersReducedMotion = useReducedMotion();
     const currentStep = steps[currentStepIndex];
 
     // Re-calculate position on step change or resize
     useEffect(() => {
         if (!isOpen || !currentStep) return;
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
         const findTarget = () => {
             // Special case for centered modal style steps
@@ -29,10 +33,10 @@ export function TourOverlay() {
                 element.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
                 // Wait a bit for scroll to finish then get rect (or resize observer)
-                setTimeout(() => {
+                timeoutId = setTimeout(() => {
                     const rect = element.getBoundingClientRect();
                     setTargetRect(rect);
-                }, 500);
+                }, prefersReducedMotion ? 0 : 420);
             } else {
                 // Fallback if target not found
                 console.warn(`Target ${currentStep.target} not found`);
@@ -42,8 +46,24 @@ export function TourOverlay() {
 
         findTarget();
         window.addEventListener('resize', findTarget);
-        return () => window.removeEventListener('resize', findTarget);
-    }, [isOpen, currentStepIndex, currentStep]);
+        return () => {
+            window.removeEventListener('resize', findTarget);
+            if (timeoutId) clearTimeout(timeoutId);
+        };
+    }, [isOpen, currentStepIndex, currentStep, prefersReducedMotion]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                closeTour();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [closeTour, isOpen]);
 
     if (!isOpen || !currentStep) return null;
 
@@ -55,27 +75,23 @@ export function TourOverlay() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-black/60 backdrop-blur-[2px] transition-colors duration-500 pointer-events-auto"
+                transition={{ duration: prefersReducedMotion ? 0 : 0.28, ease: [0.16, 1, 0.3, 1] }}
+                className="pointer-events-auto absolute inset-0 bg-background/70 backdrop-blur-[3px] transition-colors duration-500"
             >
-                {/* If we have a target, clip it out? Or just use SVG overlay. 
-            For simplicity and elegance, just dim background and highlight the card.
-            But user asked for "nice effects". Let's do a spotlight using SVG clipPath if possible,
-            or just 4 div masks. The simplest robust way is a huge border or box-shadow. */}
-
                 {targetRect && (
                     <motion.div
                         layoutId="spotlight"
                         initial={false}
-                        transition={{ type: "spring", stiffness: 200, damping: 30 }}
+                        transition={{ type: "spring", stiffness: 160, damping: 26, mass: 0.9 }}
                         style={{
                             position: 'absolute',
                             top: targetRect.top - 10,
                             left: targetRect.left - 10,
                             width: targetRect.width + 20,
                             height: targetRect.height + 20,
-                            borderRadius: '12px',
-                            boxShadow: '0 0 0 9999px rgba(0,0,0,0.7), 0 0 30px rgba(251, 191, 36, 0.4)', // Amber glow
-                            border: '2px solid rgba(251, 191, 36, 0.5)', // Amber border
+                            borderRadius: '16px',
+                            boxShadow: '0 0 0 9999px color-mix(in oklab, var(--background) 78%, transparent), 0 0 44px color-mix(in oklab, var(--primary) 45%, transparent)',
+                            border: '1px solid color-mix(in oklab, var(--primary) 62%, transparent)',
                             zIndex: 10
                         }}
                     />
@@ -89,6 +105,7 @@ export function TourOverlay() {
                     index={currentStepIndex}
                     total={steps.length}
                     targetRect={targetRect}
+                    tourKey={currentTourKey}
                     onNext={nextStep}
                     onPrev={prevStep}
                     onClose={closeTour}
@@ -104,79 +121,156 @@ interface TooltipProps {
     index: number;
     total: number;
     targetRect: DOMRect | null;
+    tourKey: string | null;
     onNext: () => void;
     onPrev: () => void;
     onClose: () => void;
 }
 
-function Tooltip({ step, index, total, targetRect, onNext, onPrev, onClose }: TooltipProps) {
-    // Calculate tooltip position relative to target
-    // If targetRect is null (center), we center it.
+function Tooltip({ step, index, total, targetRect, tourKey, onNext, onPrev, onClose }: TooltipProps) {
+    const router = useRouter();
+    const cardRef = useRef<HTMLDivElement>(null);
+    const prefersReducedMotion = useReducedMotion();
+    const isFinalStep = index === total - 1;
+    const progress = ((index + 1) / total) * 100;
+    const StepIcon = step.icon;
+    const isAdminTour = tourKey?.startsWith('/admin');
 
-    let style: React.CSSProperties = {};
+    useEffect(() => {
+        cardRef.current?.focus();
+    }, [index]);
+
+    const finishTour = () => {
+        onClose();
+        router.push(isAdminTour ? '/admin/dashboard' : '/reservar');
+    };
+
+    let style: CSSProperties = {};
     const SPACING = 20;
+    const CARD_WIDTH = 384;
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : CARD_WIDTH + 32;
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 720;
+    const centerX = targetRect ? targetRect.left + targetRect.width / 2 : viewportWidth / 2;
+    const centerY = targetRect ? targetRect.top + targetRect.height / 2 : viewportHeight / 2;
+    const clampedCenterX = Math.min(Math.max(centerX, CARD_WIDTH / 2 + 16), viewportWidth - CARD_WIDTH / 2 - 16);
+    const clampedCenterY = Math.min(Math.max(centerY, 160), viewportHeight - 160);
 
-    if (targetRect) {
+    if (targetRect && viewportWidth < 640) {
+        style = { position: 'fixed', left: 16, right: 16, bottom: 16, width: 'auto', transform: 'none' };
+    } else if (targetRect) {
         if (step.position === 'top') {
-            style = { top: targetRect.top - SPACING, left: targetRect.left + targetRect.width / 2, transform: 'translate(-50%, -100%)' };
+            style = { position: 'fixed', top: targetRect.top - SPACING, left: clampedCenterX, transform: 'translate(-50%, -100%)' };
         } else if (step.position === 'bottom') {
-            style = { top: targetRect.bottom + SPACING, left: targetRect.left + targetRect.width / 2, transform: 'translate(-50%, 0)' };
+            style = { position: 'fixed', top: targetRect.bottom + SPACING, left: clampedCenterX, transform: 'translate(-50%, 0)' };
         } else if (step.position === 'left') {
-            style = { top: targetRect.top + targetRect.height / 2, left: targetRect.left - SPACING, transform: 'translate(-100%, -50%)' };
+            style = { position: 'fixed', top: clampedCenterY, left: targetRect.left - SPACING, transform: 'translate(-100%, -50%)' };
         } else if (step.position === 'right') {
-            style = { top: targetRect.top + targetRect.height / 2, left: targetRect.right + SPACING, transform: 'translate(0, -50%)' };
+            style = { position: 'fixed', top: clampedCenterY, left: targetRect.right + SPACING, transform: 'translate(0, -50%)' };
+        } else {
+            style = { position: 'fixed', left: clampedCenterX, top: clampedCenterY, transform: 'translate(-50%, -50%)' };
         }
     } else {
         style = { position: 'relative' }; // Centered by parent flex
     }
 
     return (
-        <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            key={index} // Re-animate on step change
-            transition={{ type: "spring", duration: 0.5 }}
-            className="pointer-events-auto absolute max-w-sm w-full"
-            style={targetRect ? style : undefined}
-        >
-            <div className="bg-card/90 backdrop-blur-xl border border-primary/30 p-6 rounded-2xl shadow-2xl shadow-foreground/10 overflow-hidden relative">
-                {/* Decoration */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
+        <AnimatePresence mode="wait">
+            <motion.div
+                ref={cardRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="tour-step-title"
+                aria-describedby="tour-step-content"
+                tabIndex={-1}
+                initial={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.96, y: prefersReducedMotion ? 0 : 14 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.98, y: prefersReducedMotion ? 0 : -8 }}
+                key={index}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.32, ease: [0.16, 1, 0.3, 1] }}
+                className="pointer-events-auto absolute w-full max-w-[min(calc(100vw-2rem),24rem)] outline-none"
+                style={style}
+            >
+                <div className="relative overflow-hidden rounded-2xl border border-primary/25 bg-card/95 p-5 text-card-foreground shadow-2xl shadow-foreground/10 backdrop-blur-xl sm:p-6">
+                    <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-transparent via-primary to-transparent opacity-70" />
 
-                <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
-                    <X size={18} />
-                </button>
-
-                <div className="mb-4">
-                    <span className="text-xs font-semibold text-primary uppercase tracking-wider mb-2 block">
-                        Paso {index + 1} de {total}
-                    </span>
-                    <h3 className="text-xl font-bold text-foreground mb-2">{step.title}</h3>
-                    <p className="text-muted-foreground text-sm leading-relaxed">
-                        {step.content}
-                    </p>
-                </div>
-
-                <div className="flex items-center justify-between mt-6">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onPrev}
-                        disabled={index === 0}
-                        className="text-muted-foreground hover:text-foreground hover:bg-accent"
+                    <button
+                        onClick={onClose}
+                        className="absolute right-4 top-4 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        aria-label="Cerrar tour"
                     >
-                        Anterior
-                    </Button>
-                    <Button
-                        size="sm"
-                        onClick={onNext}
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-full px-6"
-                    >
-                        {index === total - 1 ? 'Finalizar' : 'Siguiente'}
-                        {index !== total - 1 && <ArrowRight size={16} className="ml-2" />}
-                    </Button>
+                        <X size={18} />
+                    </button>
+
+                    <div className="mb-5 pr-8">
+                        <div className="mb-3 flex items-center gap-3">
+                            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary">
+                                {step.image ? (
+                                    <span className="relative h-full w-full overflow-hidden rounded-full">
+                                        <Image
+                                            src={step.image}
+                                            alt={step.imageAlt || step.title}
+                                            fill
+                                            unoptimized
+                                            sizes="40px"
+                                            className="object-cover"
+                                        />
+                                    </span>
+                                ) : StepIcon ? (
+                                    <StepIcon className="h-5 w-5" />
+                                ) : isFinalStep ? (
+                                    <CheckCircle2 className="h-5 w-5" />
+                                ) : (
+                                    <Sparkles className="h-5 w-5" />
+                                )}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                                <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                                    Paso {index + 1} de {total}
+                                </span>
+                                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                                    <motion.div
+                                        className="h-full rounded-full bg-primary"
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${progress}%` }}
+                                        transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: [0.16, 1, 0.3, 1] }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <h3 id="tour-step-title" className="text-xl font-bold text-foreground">
+                            {step.title}
+                        </h3>
+                        <p id="tour-step-content" className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                            {step.content}
+                        </p>
+                        {isFinalStep && (
+                            <p className="mt-3 rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-medium text-foreground">
+                                Listo. Ya tenés el mapa para moverte con seguridad por la experiencia NB.
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onPrev}
+                            disabled={index === 0}
+                            className="text-muted-foreground hover:bg-accent hover:text-foreground"
+                        >
+                            Anterior
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={isFinalStep ? finishTour : onNext}
+                            className="rounded-full px-5 font-semibold"
+                        >
+                            {isFinalStep ? (isAdminTour ? 'Ir al dashboard' : 'Reservá tu primer turno') : 'Siguiente'}
+                            <ArrowRight size={16} className="ml-2" />
+                        </Button>
+                    </div>
                 </div>
-            </div>
-        </motion.div>
+            </motion.div>
+        </AnimatePresence>
     );
 }

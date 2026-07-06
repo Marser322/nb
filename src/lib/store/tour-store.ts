@@ -1,10 +1,14 @@
 import { create } from 'zustand';
+import type { LucideIcon } from 'lucide-react';
 
 export type TourStep = {
     target: string; // CSS selector ID or Class
     title: string;
     content: string;
     position?: 'top' | 'bottom' | 'left' | 'right' | 'center';
+    icon?: LucideIcon;
+    image?: string;
+    imageAlt?: string;
 };
 
 export type TourData = {

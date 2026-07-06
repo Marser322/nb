@@ -12,6 +12,7 @@ import { BeforeAfterSlider } from "@/components/ui/before-after-slider";
 import { WhyChooseUsContent } from "@/components/home/WhyChooseUsContent";
 import { useFeatures } from "@/lib/features";
 import { buildWaLink } from "@/lib/whatsapp";
+import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 
 // Servicios destacados (luego vendrán de la BD)
 const services = [
@@ -50,6 +51,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <WelcomeModal role="cliente" />
       <Header />
 
       <section className="relative min-h-screen overflow-hidden pt-28 pb-16 flex items-center">

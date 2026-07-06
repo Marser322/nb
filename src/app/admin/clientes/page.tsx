@@ -14,8 +14,8 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Search, User, Calendar, DollarSign, Contact, ArrowLeft, MessageCircle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Search, Contact, ArrowLeft, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils";
 import { INACTIVE_DAYS } from "@/lib/constants";
@@ -24,6 +24,7 @@ import { format, parseISO, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
 import { useFeatures } from "@/lib/features";
+import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
 
 function ClientesList() {
     const { features } = useFeatures();
@@ -62,7 +63,6 @@ function ClientesList() {
     };
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadClients();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -146,7 +146,7 @@ function ClientesList() {
                         placeholder="Buscar por nombre o teléfono..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 bg-background/50 border-input/50 focus:border-amber-500/50"
+                        className="pl-10 bg-background/50 border-input/50 focus:border-primary/50"
                     />
                 </div>
             </div>
@@ -168,20 +168,20 @@ function ClientesList() {
                             ))}
                         </div>
                     ) : filteredClients.length === 0 ? (
-                        <div className="text-center py-16 text-muted-foreground">
-                            <User className="h-12 w-12 mx-auto mb-3 text-muted-foreground/20" />
-                            <p className="font-semibold text-lg text-foreground/80">
-                                {searchQuery ? "No se encontraron clientes" : "No hay clientes registrados"}
-                            </p>
-                            <p className="text-sm mt-1 mb-4">
-                                {searchQuery ? "Intentá ajustando el término de búsqueda." : "Los clientes aparecerán aquí una vez que se registren."}
-                            </p>
-                            {searchQuery && (
-                                <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
-                                    Limpiar búsqueda
-                                </Button>
-                            )}
-                        </div>
+                        <IllustratedEmptyState
+                            icon={Contact}
+                            imageSrc="/images/empty/no-clientes.webp"
+                            imageAlt="Ficha premium de clientes New Brothers sin registros visibles"
+                            title={searchQuery ? "No se encontraron clientes" : "Tu cartera de clientes empieza acá"}
+                            description={searchQuery ? "Ajustá el término de búsqueda para volver a encontrar el perfil correcto." : "Los clientes aparecerán acá cuando se registren o completen su primera reserva."}
+                            action={
+                                searchQuery ? (
+                                    <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
+                                        Limpiar búsqueda
+                                    </Button>
+                                ) : null
+                            }
+                        />
                     ) : (
                         <>
                             <div className="overflow-x-auto">
@@ -214,7 +214,7 @@ function ClientesList() {
                                                                 <span className="text-foreground font-semibold flex items-center gap-2">
                                                                     {client.full_name || "Sin nombre"}
                                                                     {inactive && (
-                                                                        <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] font-normal px-2 py-0">
+                                                                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px] font-normal px-2 py-0">
                                                                             Inactivo
                                                                         </Badge>
                                                                     )}
@@ -225,10 +225,10 @@ function ClientesList() {
                                                             </div>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 font-mono text-sm">
+                                                    <TableCell className="text-muted-foreground font-mono text-sm">
                                                         {client.phone || "—"}
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 text-sm">
+                                                    <TableCell className="text-muted-foreground text-sm">
                                                         {formatLastVisit(client.last_visit)}
                                                     </TableCell>
                                                     <TableCell className="text-center font-semibold text-foreground">

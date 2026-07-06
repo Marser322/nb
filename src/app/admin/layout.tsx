@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import { logoutAdmin } from "./actions";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 
 const sidebarLinks = [
     {
@@ -198,6 +199,7 @@ export default function AdminLayout({
             <main className="md:ml-64 pt-16 min-h-screen">
                 <div className="p-6 md:p-8">{children}</div>
             </main>
+            <WelcomeModal role="admin" />
         </div>
     );
 }

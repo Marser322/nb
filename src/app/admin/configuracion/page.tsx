@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +37,52 @@ const FEATURE_TITLES: Record<string, string> = {
     "feature.reservas_online": "Reservas Online (Wizard)",
     "feature.portal_barbero": "Portal de Barberos (Agenda)",
 };
+
+const FEATURE_IMAGES: Record<string, string> = {
+    "feature.tienda": "/images/modulos/tienda.webp",
+    "feature.suscripciones": "/images/modulos/suscripciones.webp",
+    "feature.contabilidad": "/images/modulos/contabilidad.webp",
+    "feature.propinas": "/images/modulos/propinas.webp",
+    "feature.mensajes_crm": "/images/modulos/mensajes.webp",
+    "feature.lookbook": "/images/modulos/lookbook.webp",
+    "feature.reservas_online": "/images/modulos/reservas.webp",
+    "feature.portal_barbero": "/images/modulos/portal-barbero.webp",
+};
+
+function FeatureModuleArtwork({
+    imageSrc,
+    imageAlt,
+    Icon,
+}: {
+    imageSrc?: string;
+    imageAlt: string;
+    Icon: typeof ShoppingBag;
+}) {
+    const [imageFailed, setImageFailed] = useState(false);
+    const showImage = imageSrc && !imageFailed;
+
+    return (
+        <div className="relative min-h-40 overflow-hidden border-b border-border bg-muted sm:min-h-full sm:border-b-0 sm:border-r">
+            {showImage ? (
+                <Image
+                    src={imageSrc}
+                    alt={imageAlt}
+                    fill
+                    unoptimized
+                    sizes="(max-width: 640px) 100vw, 180px"
+                    className="object-cover transition-transform duration-700 group-hover:scale-105"
+                    onError={() => setImageFailed(true)}
+                />
+            ) : (
+                <div className="flex h-full min-h-40 items-center justify-center bg-primary/10">
+                    <Icon className="h-12 w-12 text-primary/70" />
+                </div>
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent sm:bg-gradient-to-r" />
+            <div className="absolute inset-x-5 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
+        </div>
+    );
+}
 
 export default function AdminConfiguracionPage() {
     const supabase = useMemo(() => createClient(), []);
@@ -139,8 +186,8 @@ export default function AdminConfiguracionPage() {
             </div>
 
             {/* Advertencia de Caché */}
-            <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-400 text-sm flex items-start gap-3 backdrop-blur-md">
-                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground backdrop-blur-md">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                 <div>
                     <span className="font-semibold block text-foreground">Importante sobre la sincronización</span>
                     Los cambios pueden tardar hasta 5 minutos en reflejarse para visitantes externos que tengan la página abierta en este momento, debido a la caché de rendimiento.
@@ -156,46 +203,49 @@ export default function AdminConfiguracionPage() {
                     {settings.map((item) => {
                         const Icon = FEATURE_ICONS[item.key] || Settings;
                         const title = FEATURE_TITLES[item.key] || item.key;
+                        const imageSrc = FEATURE_IMAGES[item.key];
                         const isUpdating = updatingKeys.has(item.key);
 
                         return (
-                            <Card key={item.key} className="border-border bg-card/50 backdrop-blur-md relative overflow-hidden group hover:border-primary/20 transition-all duration-300">
-                                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                                    <Icon className="h-24 w-24 text-primary" />
+                            <Card key={item.key} className="group relative overflow-hidden border-border bg-card/50 backdrop-blur-md transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10">
+                                <div className="grid h-full sm:grid-cols-[170px_1fr]">
+                                    <FeatureModuleArtwork imageSrc={imageSrc} imageAlt={`Miniatura del módulo ${title}`} Icon={Icon} />
+                                    <div className="flex flex-col">
+                                        <CardHeader className="flex flex-row items-center gap-4 pb-2">
+                                            <div className="rounded-xl border border-primary/20 bg-primary/10 p-3 text-primary">
+                                                <Icon className="h-6 w-6" />
+                                            </div>
+                                            <div className="space-y-0.5">
+                                                <CardTitle className="text-lg font-bold text-foreground">{title}</CardTitle>
+                                                <CardDescription className="font-mono text-xs text-muted-foreground">
+                                                    {item.key}
+                                                </CardDescription>
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="flex flex-1 flex-col pt-2">
+                                            <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+                                                {item.description}
+                                            </p>
+                                            <div className="mt-auto flex items-center justify-between border-t border-border pt-4">
+                                                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                                    Estado del módulo
+                                                </span>
+                                                <div className="flex items-center gap-3">
+                                                    {isUpdating && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                                                    <span className={`text-xs font-bold transition-colors ${item.value ? "text-primary text-glow" : "text-muted-foreground"}`}>
+                                                        {item.value ? "ACTIVO" : "INACTIVO"}
+                                                    </span>
+                                                    <Switch
+                                                        checked={item.value}
+                                                        onCheckedChange={() => handleToggle(item.key, item.value)}
+                                                        disabled={isUpdating}
+                                                        className="data-[state=checked]:bg-primary"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </div>
                                 </div>
-                                <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                                    <div className="p-3 bg-primary/10 rounded-xl text-primary border border-primary/20">
-                                        <Icon className="h-6 w-6" />
-                                    </div>
-                                    <div className="space-y-0.5">
-                                        <CardTitle className="text-lg text-foreground font-bold">{title}</CardTitle>
-                                        <CardDescription className="text-xs text-zinc-500 font-mono">
-                                            {item.key}
-                                        </CardDescription>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="pt-2">
-                                    <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
-                                        {item.description}
-                                    </p>
-                                    <div className="flex items-center justify-between border-t border-border pt-4">
-                                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                            Estado del módulo
-                                        </span>
-                                        <div className="flex items-center gap-3">
-                                            {isUpdating && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                                            <span className={`text-xs font-bold transition-colors ${item.value ? "text-primary text-glow" : "text-zinc-500"}`}>
-                                                {item.value ? "ACTIVO" : "INACTIVO"}
-                                            </span>
-                                            <Switch
-                                                checked={item.value}
-                                                onCheckedChange={() => handleToggle(item.key, item.value)}
-                                                disabled={isUpdating}
-                                                className="data-[state=checked]:bg-primary"
-                                            />
-                                        </div>
-                                    </div>
-                                </CardContent>
                             </Card>
                         );
                     })}

@@ -25,7 +25,7 @@ export function HelpFab() {
             <Button
                 onClick={() => startTour(tourKey!, APP_TOURS[tourKey!])}
                 size="icon"
-                className="h-12 w-12 rounded-full bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20 transition-all hover:scale-110"
+                className="h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-110 hover:bg-primary/90"
             >
                 <HelpCircle className="h-6 w-6" />
                 <span className="sr-only">Ayuda</span>
@@ -33,8 +33,8 @@ export function HelpFab() {
 
             {/* Pulse effect hint */}
             <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-primary"></span>
             </span>
         </motion.div>
     );

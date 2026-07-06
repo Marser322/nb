@@ -45,6 +45,7 @@ import { toast } from "sonner";
 import { normalizeUyPhone } from "@/lib/whatsapp";
 import { fetchActiveAppointments, computeBookedSlots, hasOverlap } from "@/lib/booking";
 import ChargeDialog from "@/components/shared/ChargeDialog";
+import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
 import { useFeatures } from "@/lib/features";
 
 type AppointmentWithRelations = Appointment & {
@@ -619,7 +620,7 @@ export default function AdminCitasPage() {
                             placeholder="Buscar cliente/teléfono..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 bg-background/50 border-input/50 focus:border-amber-500/50"
+                            className="pl-9 bg-background/50 border-input/50 focus:border-primary/50"
                         />
                     </div>
 
@@ -695,14 +696,19 @@ export default function AdminCitasPage() {
                             ))}
                         </div>
                     ) : filteredAppointments.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                            <Calendar className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
-                            <p>No hay citas para este día</p>
-                            <Button variant="outline" className="mt-4" onClick={() => setIsDialogOpen(true)}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Crear primera cita
-                            </Button>
-                        </div>
+                        <IllustratedEmptyState
+                            icon={Calendar}
+                            imageSrc="/images/empty/no-citas.webp"
+                            imageAlt="Agenda premium de New Brothers sin citas para el día"
+                            title="Agenda impecable para este día"
+                            description="No hay citas con los filtros seleccionados. Creá una reserva manual o ajustá la fecha para ver el movimiento del equipo."
+                            action={
+                                <Button variant="outline" onClick={() => setIsDialogOpen(true)}>
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Crear primera cita
+                                </Button>
+                            }
+                        />
                     ) : (
                         <div className="space-y-3">
                             {filteredAppointments.map((cita) => (
