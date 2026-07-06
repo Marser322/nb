@@ -23,7 +23,11 @@ Toggle funcionando: ThemeProvider, `theme-toggle.tsx`, paleta `:root` crema/dora
 Terminar limpieza de colores (modo claro sin parches), optimizar imágenes (<400 KB; hoy productos 512 KB), y crear/documentar el bucket `media`.
 
 ### A✅. Imágenes de tarjetas (GPT) — HECHO
-GPT regeneró barberos, sucursales, lookbook y 8 productos. Falta solo optimizarlas (ver FASE 13).
+GPT regeneró barberos, sucursales, lookbook y 8 productos; FASE 13 las pasó a WebP <400 KB.
+
+### E. Onboarding premium + imágenes en módulos — EN CURSO
+- **GPT** — `GPT_imagenes_modulos_onboarding.md`: héroes de bienvenida, banners de categoría de tienda, miniaturas por módulo y empty states (WebP).
+- **Gemini** — `FASE_14_onboarding_premium.md`: modal de bienvenida por rol (1ª visita), tarjetas de tour con progreso/ícono/CTA, e integración de las imágenes en tienda, /admin/configuracion y empty states. Objetivo: que el onboarding "marque la diferencia".
 
 ### D. Nuevas funciones / operativa (próximas fases, aprovechando bajo costo)
 Prioridad sugerida (cada una = un brief cuando se active):
