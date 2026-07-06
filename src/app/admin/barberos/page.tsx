@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Image from "next/image";
+import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,10 +21,11 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogFooter,
 } from "@/components/ui/dialog";
-import { Users, Plus, Loader2, Edit2 } from "lucide-react";
+import { Users, Plus, Loader2, Edit2, CalendarRange, Trash2, Calendar, Clock, DollarSign } from "lucide-react";
 import { toast } from "sonner";
-import type { Barber, Branch } from "@/types/database.types";
+import type { Barber, Branch, WorkingHours, ScheduleBlock, BarberCompensation } from "@/types/database.types";
 import {
     Select,
     SelectContent,
@@ -31,6 +33,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { WorkingHoursEditor } from "@/components/admin/WorkingHoursEditor";
+import { COMPENSATION_MODEL_LABELS } from "@/lib/constants";
+import { formatPrice } from "@/lib/utils";
 
 export default function AdminBarberosPage() {
     const [barbers, setBarbers] = useState<Barber[]>([]);
@@ -38,12 +43,47 @@ export default function AdminBarberosPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingBarber, setEditingBarber] = useState<Barber | null>(null);
+
+    // States para compensación
+    const [activeBarberForCompensation, setActiveBarberForCompensation] = useState<Barber | null>(null);
+    const [compensationHistory, setCompensationHistory] = useState<BarberCompensation[]>([]);
+    const [isCompLoading, setIsCompLoading] = useState(false);
+    const [isCreatingComp, setIsCreatingComp] = useState(false);
+    const [compForm, setCompForm] = useState({
+        model: "commission",
+        commissionPct: "",
+        rentalAmount: "",
+        rentalPeriod: "weekly",
+        salaryAmount: "",
+        effectiveFrom: new Date().toISOString().split("T")[0],
+        notes: "",
+    });
+    
     const [formData, setFormData] = useState({
         name: "",
         bio: "",
         avatar_url: "",
         branch_id: "",
+        working_hours: null as WorkingHours | null,
     });
+    
+    // Si usa horario personalizado (en caso contrario, guarda null y hereda de sucursal)
+    const [useCustomHours, setUseCustomHours] = useState(false);
+
+    // Estado para la gestión de bloqueos
+    const [activeBarberForBlocks, setActiveBarberForBlocks] = useState<Barber | null>(null);
+    const [blocks, setBlocks] = useState<ScheduleBlock[]>([]);
+    const [isBlocksLoading, setIsBlocksLoading] = useState(false);
+    const [blockForm, setBlockForm] = useState({
+        startDate: "",
+        endDate: "",
+        isFullDay: true,
+        startTime: "09:00",
+        endTime: "18:00",
+        reason: "",
+    });
+    const [isCreatingBlock, setIsCreatingBlock] = useState(false);
+
     const supabase = useMemo(() => createClient(), []);
 
     const canRenderAvatar = (url: string | null) =>
@@ -69,12 +109,111 @@ export default function AdminBarberosPage() {
         if (data) setBranches(data);
     }, [supabase]);
 
+    const loadBlocks = useCallback(async (barberId: string) => {
+        setIsBlocksLoading(true);
+        const { data } = await supabase
+            .from("schedule_blocks")
+            .select("*")
+            .eq("barber_id", barberId)
+            .gte("end_date", new Date().toISOString().split("T")[0])
+            .order("start_date", { ascending: true });
+        
+        if (data) setBlocks(data);
+        setIsBlocksLoading(false);
+    }, [supabase]);
+
+    const loadCompensations = useCallback(async (barberId: string) => {
+        setIsCompLoading(true);
+        const { data } = await supabase
+            .from("barber_compensation")
+            .select("*")
+            .eq("barber_id", barberId)
+            .order("effective_from", { ascending: false });
+        setCompensationHistory(data || []);
+        setIsCompLoading(false);
+    }, [supabase]);
+
+    useEffect(() => {
+        if (activeBarberForCompensation) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            loadCompensations(activeBarberForCompensation.id);
+            setCompForm({
+                model: "commission",
+                commissionPct: "",
+                rentalAmount: "",
+                rentalPeriod: "weekly",
+                salaryAmount: "",
+                effectiveFrom: new Date().toISOString().split("T")[0],
+                notes: "",
+            });
+        }
+    }, [activeBarberForCompensation, loadCompensations]);
+
+    const handleCreateCompensation = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!activeBarberForCompensation) return;
+
+        const model = compForm.model;
+        const pct = model === "commission" || model === "hybrid" ? parseFloat(compForm.commissionPct) : null;
+        const rental = model === "chair_rental" || model === "hybrid" ? parseFloat(compForm.rentalAmount) : null;
+        const period = model === "chair_rental" || model === "hybrid" ? compForm.rentalPeriod : null;
+        const salary = model === "employee" ? parseFloat(compForm.salaryAmount) : null;
+
+        if ((model === "commission" || model === "hybrid") && (isNaN(pct!) || pct! < 0 || pct! > 100)) {
+            toast.error("Porcentaje de comisión debe estar entre 0 y 100");
+            return;
+        }
+
+        if ((model === "chair_rental" || model === "hybrid") && (isNaN(rental!) || rental! < 0)) {
+            toast.error("Monto de renta debe ser mayor o igual a 0");
+            return;
+        }
+
+        if (model === "employee" && (isNaN(salary!) || salary! < 0)) {
+            toast.error("Monto de sueldo debe ser mayor o igual a 0");
+            return;
+        }
+
+        setIsCreatingComp(true);
+        const { error } = await supabase
+            .from("barber_compensation")
+            .insert({
+                barber_id: activeBarberForCompensation.id,
+                model,
+                commission_pct: pct,
+                rental_amount: rental,
+                rental_period: period,
+                salary_amount: salary,
+                effective_from: compForm.effectiveFrom,
+                notes: compForm.notes || null,
+            });
+
+        setIsCreatingComp(false);
+        if (error) {
+            if (error.code === '23505') {
+                toast.error("Ya existe una configuración de compensación para este barbero en la misma fecha.");
+            } else {
+                toast.error("Error al registrar compensación: " + error.message);
+            }
+        } else {
+            toast.success("Compensación registrada con éxito");
+            loadCompensations(activeBarberForCompensation.id);
+        }
+    };
+
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         loadBarbers(true);
         // eslint-disable-next-line react-hooks/set-state-in-effect
         loadBranches();
     }, [loadBarbers, loadBranches]);
+
+    useEffect(() => {
+        if (activeBarberForBlocks) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            loadBlocks(activeBarberForBlocks.id);
+        }
+    }, [activeBarberForBlocks, loadBlocks]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -84,6 +223,7 @@ export default function AdminBarberosPage() {
             bio: formData.bio || null,
             avatar_url: formData.avatar_url || null,
             branch_id: formData.branch_id || null,
+            working_hours: useCustomHours ? formData.working_hours : null,
         };
 
         if (editingBarber) {
@@ -116,7 +256,8 @@ export default function AdminBarberosPage() {
 
         setIsDialogOpen(false);
         setEditingBarber(null);
-        setFormData({ name: "", bio: "", avatar_url: "", branch_id: "" });
+        setFormData({ name: "", bio: "", avatar_url: "", branch_id: "", working_hours: null });
+        setUseCustomHours(false);
     };
 
     const toggleActive = async (barber: Barber) => {
@@ -132,6 +273,70 @@ export default function AdminBarberosPage() {
         }
     };
 
+    const handleCreateBlock = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!activeBarberForBlocks) return;
+
+        if (!blockForm.startDate || !blockForm.endDate) {
+            toast.error("Ingresá fechas de inicio y fin válidas");
+            return;
+        }
+
+        if (blockForm.endDate < blockForm.startDate) {
+            toast.error("La fecha de fin debe ser posterior o igual a la de inicio");
+            return;
+        }
+
+        if (!blockForm.isFullDay && blockForm.endTime <= blockForm.startTime) {
+            toast.error("La hora de fin debe ser posterior al inicio");
+            return;
+        }
+
+        setIsCreatingBlock(true);
+        const { error } = await supabase
+            .from("schedule_blocks")
+            .insert({
+                barber_id: activeBarberForBlocks.id,
+                start_date: blockForm.startDate,
+                end_date: blockForm.endDate,
+                start_time: blockForm.isFullDay ? null : blockForm.startTime,
+                end_time: blockForm.isFullDay ? null : blockForm.endTime,
+                reason: blockForm.reason || null,
+            });
+
+        setIsCreatingBlock(false);
+        if (error) {
+            toast.error("Error al registrar bloqueo de agenda");
+        } else {
+            toast.success("Bloqueo registrado con éxito");
+            setBlockForm({
+                startDate: "",
+                endDate: "",
+                isFullDay: true,
+                startTime: "09:00",
+                endTime: "18:00",
+                reason: "",
+            });
+            loadBlocks(activeBarberForBlocks.id);
+        }
+    };
+
+    const handleDeleteBlock = async (blockId: string) => {
+        const { error } = await supabase
+            .from("schedule_blocks")
+            .delete()
+            .eq("id", blockId);
+
+        if (error) {
+            toast.error("Error al eliminar bloqueo");
+        } else {
+            toast.success("Bloqueo eliminado");
+            if (activeBarberForBlocks) {
+                loadBlocks(activeBarberForBlocks.id);
+            }
+        }
+    };
+
     const openEditDialog = (barber: Barber) => {
         setEditingBarber(barber);
         setFormData({
@@ -139,13 +344,16 @@ export default function AdminBarberosPage() {
             bio: barber.bio || "",
             avatar_url: barber.avatar_url || "",
             branch_id: barber.branch_id || "",
+            working_hours: barber.working_hours,
         });
+        setUseCustomHours(barber.working_hours !== null);
         setIsDialogOpen(true);
     };
 
     const openNewDialog = () => {
         setEditingBarber(null);
-        setFormData({ name: "", bio: "", avatar_url: "", branch_id: "" });
+        setFormData({ name: "", bio: "", avatar_url: "", branch_id: "", working_hours: null });
+        setUseCustomHours(false);
         setIsDialogOpen(true);
     };
 
@@ -165,7 +373,7 @@ export default function AdminBarberosPage() {
                             Nuevo Barbero
                         </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
                         <DialogHeader>
                             <DialogTitle>
                                 {editingBarber ? "Editar Barbero" : "Nuevo Barbero"}
@@ -216,6 +424,38 @@ export default function AdminBarberosPage() {
                                     </SelectContent>
                                 </Select>
                             </div>
+
+                            <div className="space-y-3 pt-2">
+                                <div className="flex items-center gap-2">
+                                    <Switch
+                                        id="use-custom-hours"
+                                        checked={useCustomHours}
+                                        onCheckedChange={(checked) => {
+                                            setUseCustomHours(checked);
+                                            if (!checked) {
+                                                setFormData(prev => ({ ...prev, working_hours: null }));
+                                            } else {
+                                                setFormData(prev => ({ ...prev, working_hours: prev.working_hours || {} }));
+                                            }
+                                        }}
+                                        className="data-[state=checked]:bg-primary"
+                                    />
+                                    <label htmlFor="use-custom-hours" className="text-sm font-medium text-white cursor-pointer select-none">
+                                        Horario personalizado
+                                    </label>
+                                </div>
+                                {!useCustomHours ? (
+                                    <p className="text-xs text-muted-foreground italic pl-7">
+                                        Hereda automáticamente el horario de la sucursal asignada.
+                                    </p>
+                                ) : (
+                                    <WorkingHoursEditor
+                                        value={formData.working_hours}
+                                        onChange={(val) => setFormData({ ...formData, working_hours: val })}
+                                    />
+                                )}
+                            </div>
+
                             <div className="flex justify-end gap-2 pt-4">
                                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                                     Cancelar
@@ -290,13 +530,34 @@ export default function AdminBarberosPage() {
                                         />
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => openEditDialog(barber)}
-                                        >
-                                            <Edit2 className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex items-center justify-center gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => openEditDialog(barber)}
+                                                title="Editar"
+                                            >
+                                                <Edit2 className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setActiveBarberForBlocks(barber)}
+                                                title="Bloqueos de Agenda"
+                                                className="text-primary hover:text-primary-foreground hover:bg-primary/20"
+                                            >
+                                                <CalendarRange className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setActiveBarberForCompensation(barber)}
+                                                title="Compensación"
+                                                className="text-amber-400 hover:text-amber-500 hover:bg-amber-500/10"
+                                            >
+                                                <DollarSign className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -304,6 +565,376 @@ export default function AdminBarberosPage() {
                     </TableBody>
                 </Table>
             </div>
+
+            {/* Diálogo para Gestionar Bloqueos */}
+            <Dialog open={activeBarberForBlocks !== null} onOpenChange={(open) => !open && setActiveBarberForBlocks(null)}>
+                <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <CalendarRange className="h-5 w-5 text-primary" />
+                            Bloqueos de Agenda: {activeBarberForBlocks?.name}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-6 mt-4">
+                        {/* Lista de bloqueos actuales */}
+                        <div>
+                            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">
+                                Bloqueos Activos o Futuros
+                            </h3>
+                            {isBlocksLoading ? (
+                                <div className="flex justify-center p-4">
+                                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                </div>
+                            ) : blocks.length === 0 ? (
+                                <p className="text-sm text-muted-foreground italic">
+                                    No hay bloqueos activos ni programados para este barbero.
+                                </p>
+                            ) : (
+                                <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                                    {blocks.map((block) => (
+                                        <div
+                                            key={block.id}
+                                            className="flex items-center justify-between p-3 rounded-lg border border-white/5 bg-zinc-900/50 text-xs"
+                                        >
+                                            <div className="space-y-1">
+                                                <div className="font-semibold text-white">
+                                                    {block.reason || "Sin motivo especificado"}
+                                                </div>
+                                                <div className="text-muted-foreground flex items-center gap-3">
+                                                    <span className="flex items-center gap-1">
+                                                        <Calendar className="h-3 w-3" />
+                                                        {block.start_date === block.end_date
+                                                            ? block.start_date
+                                                            : `${block.start_date} al ${block.end_date}`}
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock className="h-3 w-3" />
+                                                        {block.start_time && block.end_time
+                                                            ? `${block.start_time.slice(0, 5)} - ${block.end_time.slice(0, 5)}`
+                                                            : "Día completo"}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleDeleteBlock(block.id)}
+                                                className="text-red-400 hover:text-red-300 hover:bg-red-950/20"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Formulario de alta */}
+                        <form onSubmit={handleCreateBlock} className="space-y-4 border-t border-white/5 pt-4">
+                            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">
+                                Nuevo Bloqueo (Vacaciones, Día libre, etc.)
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                        Fecha de Inicio
+                                    </label>
+                                    <Input
+                                        type="date"
+                                        value={blockForm.startDate}
+                                        onChange={(e) => setBlockForm({ ...blockForm, startDate: e.target.value })}
+                                        required
+                                        className="bg-background/50 border-input/50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                        Fecha de Fin
+                                    </label>
+                                    <Input
+                                        type="date"
+                                        value={blockForm.endDate}
+                                        onChange={(e) => setBlockForm({ ...blockForm, endDate: e.target.value })}
+                                        required
+                                        className="bg-background/50 border-input/50"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    id="barber-is-fullday"
+                                    checked={blockForm.isFullDay}
+                                    onCheckedChange={(checked) => setBlockForm({ ...blockForm, isFullDay: checked })}
+                                    className="data-[state=checked]:bg-primary"
+                                />
+                                <label htmlFor="barber-is-fullday" className="text-xs font-medium text-white cursor-pointer select-none">
+                                    Bloquear todo el día
+                                </label>
+                            </div>
+
+                            {!blockForm.isFullDay && (
+                                <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-200">
+                                    <div>
+                                        <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                            Hora de Inicio
+                                        </label>
+                                        <Input
+                                            type="time"
+                                            value={blockForm.startTime}
+                                            onChange={(e) => setBlockForm({ ...blockForm, startTime: e.target.value })}
+                                            required
+                                            className="bg-background/50 border-input/50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                            Hora de Fin
+                                        </label>
+                                        <Input
+                                            type="time"
+                                            value={blockForm.endTime}
+                                            onChange={(e) => setBlockForm({ ...blockForm, endTime: e.target.value })}
+                                            required
+                                            className="bg-background/50 border-input/50"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                    Motivo
+                                </label>
+                                <Input
+                                    placeholder="Licencia médica, vacaciones, etc."
+                                    value={blockForm.reason}
+                                    onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
+                                    required
+                                    className="bg-background/50 border-input/50"
+                                />
+                            </div>
+
+                            <DialogFooter className="pt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setActiveBarberForBlocks(null)}
+                                >
+                                    Cerrar
+                                </Button>
+                                <Button type="submit" disabled={isCreatingBlock}>
+                                    {isCreatingBlock ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Creando...
+                                        </>
+                                    ) : (
+                                        "Crear Bloqueo"
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Diálogo para Gestionar Compensaciones */}
+            <Dialog open={activeBarberForCompensation !== null} onOpenChange={(open) => !open && setActiveBarberForCompensation(null)}>
+                <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl bg-black border-zinc-800 text-white">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                            <DollarSign className="h-5 w-5 text-primary text-glow" />
+                            Compensación de Barberos: {activeBarberForCompensation?.name}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-6 mt-4">
+                        {/* Historial */}
+                        <div>
+                            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">
+                                Historial de Configuraciones
+                            </h3>
+                            {isCompLoading ? (
+                                <div className="flex justify-center p-4">
+                                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                </div>
+                            ) : compensationHistory.length === 0 ? (
+                                <p className="text-sm text-muted-foreground italic">
+                                    No hay compensaciones configuradas. El barbero operará al 0% por defecto.
+                                </p>
+                            ) : (
+                                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                                    {compensationHistory.map((c) => (
+                                        <div
+                                            key={c.id}
+                                            className="flex items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-950 text-xs"
+                                        >
+                                            <div className="space-y-1">
+                                                <div className="font-semibold text-white text-sm">
+                                                    {COMPENSATION_MODEL_LABELS[c.model]}
+                                                </div>
+                                                <div className="text-muted-foreground">
+                                                    {c.model === "commission" && `Comisión: ${c.commission_pct}%`}
+                                                    {c.model === "chair_rental" && `Renta: ${formatPrice(c.rental_amount || 0)} (${c.rental_period === "weekly" ? "Semanal" : "Mensual"})`}
+                                                    {c.model === "hybrid" && `Comisión: ${c.commission_pct}% + Renta: ${formatPrice(c.rental_amount || 0)} (${c.rental_period === "weekly" ? "Semanal" : "Mensual"})`}
+                                                    {c.model === "employee" && `Sueldo: ${formatPrice(c.salary_amount || 0)}`}
+                                                </div>
+                                                {c.notes && (
+                                                    <div className="text-[10px] text-muted-foreground italic">
+                                                        Nota: {c.notes}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-white font-mono">
+                                                    Desde: {format(new Date(c.effective_from + "T12:00:00"), "dd/MM/yyyy")}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Nueva Compensación */}
+                        <div className="border-t border-zinc-800 pt-4">
+                            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-4">
+                                Configurar Nueva Compensación
+                            </h3>
+                            <form onSubmit={handleCreateCompensation} className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs font-semibold mb-1 block text-muted-foreground">Modelo</label>
+                                        <Select
+                                            value={compForm.model}
+                                            onValueChange={(v) => setCompForm({ ...compForm, model: v })}
+                                        >
+                                            <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-zinc-950 border-zinc-800 text-white">
+                                                <SelectItem value="commission">Comisión</SelectItem>
+                                                <SelectItem value="chair_rental">Renta de sillón</SelectItem>
+                                                <SelectItem value="hybrid">Híbrido</SelectItem>
+                                                <SelectItem value="employee">Empleado (Sueldo Fijo)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-semibold mb-1 block text-muted-foreground">Vigencia desde</label>
+                                        <Input
+                                            type="date"
+                                            value={compForm.effectiveFrom}
+                                            onChange={(e) => setCompForm({ ...compForm, effectiveFrom: e.target.value })}
+                                            required
+                                            className="bg-zinc-950 border-zinc-800 text-white"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    {(compForm.model === "commission" || compForm.model === "hybrid") && (
+                                        <div>
+                                            <label className="text-xs font-semibold mb-1 block text-muted-foreground">Comisión Barbero (%)</label>
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                placeholder="60"
+                                                value={compForm.commissionPct}
+                                                onChange={(e) => setCompForm({ ...compForm, commissionPct: e.target.value })}
+                                                required
+                                                className="bg-zinc-950 border-zinc-800 text-white"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {(compForm.model === "chair_rental" || compForm.model === "hybrid") && (
+                                        <>
+                                            <div>
+                                                <label className="text-xs font-semibold mb-1 block text-muted-foreground">Monto de Renta (UYU)</label>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    placeholder="3500"
+                                                    value={compForm.rentalAmount}
+                                                    onChange={(e) => setCompForm({ ...compForm, rentalAmount: e.target.value })}
+                                                    required
+                                                    className="bg-zinc-950 border-zinc-800 text-white"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-semibold mb-1 block text-muted-foreground">Periodo de Renta</label>
+                                                <Select
+                                                    value={compForm.rentalPeriod}
+                                                    onValueChange={(v) => setCompForm({ ...compForm, rentalPeriod: v })}
+                                                >
+                                                    <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-zinc-950 border-zinc-800 text-white">
+                                                        <SelectItem value="weekly">Semanal</SelectItem>
+                                                        <SelectItem value="monthly">Mensual</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {compForm.model === "employee" && (
+                                        <div>
+                                            <label className="text-xs font-semibold mb-1 block text-muted-foreground">Monto de Sueldo (UYU)</label>
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                placeholder="25000"
+                                                value={compForm.salaryAmount}
+                                                onChange={(e) => setCompForm({ ...compForm, salaryAmount: e.target.value })}
+                                                required
+                                                className="bg-zinc-950 border-zinc-800 text-white"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-semibold mb-1 block text-muted-foreground">Notas internas</label>
+                                    <Input
+                                        placeholder="Comisiones especiales o detalles del acuerdo"
+                                        value={compForm.notes}
+                                        onChange={(e) => setCompForm({ ...compForm, notes: e.target.value })}
+                                        className="bg-zinc-950 border-zinc-800 text-white"
+                                    />
+                                </div>
+
+                                <DialogFooter className="pt-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setActiveBarberForCompensation(null)}
+                                        disabled={isCreatingComp}
+                                        className="border-zinc-800 text-white hover:bg-zinc-900"
+                                    >
+                                        Cancelar
+                                    </Button>
+                                    <Button type="submit" disabled={isCreatingComp} className="bg-primary text-black hover:bg-primary/90 font-bold">
+                                        {isCreatingComp ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Registrando...
+                                            </>
+                                        ) : (
+                                            "Guardar Compensación"
+                                        )}
+                                    </Button>
+                                </DialogFooter>
+                            </form>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

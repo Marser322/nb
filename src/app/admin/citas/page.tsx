@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     Calendar,
     Search,
@@ -44,6 +44,8 @@ import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { normalizeUyPhone } from "@/lib/whatsapp";
 import { fetchActiveAppointments, computeBookedSlots, hasOverlap } from "@/lib/booking";
+import ChargeDialog from "@/components/shared/ChargeDialog";
+import { useFeatures } from "@/lib/features";
 
 type AppointmentWithRelations = Appointment & {
     service?: Service;
@@ -52,6 +54,7 @@ type AppointmentWithRelations = Appointment & {
 };
 
 export default function AdminCitasPage() {
+    const { features } = useFeatures();
     const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
     const [filteredAppointments, setFilteredAppointments] = useState<AppointmentWithRelations[]>([]);
     const [selectedDate, setSelectedDate] = useState(format(startOfToday(), "yyyy-MM-dd"));
@@ -60,6 +63,7 @@ export default function AdminCitasPage() {
     const [barberFilter, setBarberFilter] = useState<string>("all");
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [chargeApt, setChargeApt] = useState<AppointmentWithRelations | null>(null);
 
     // Form state for new appointment
     const [services, setServices] = useState<Service[]>([]);
@@ -81,20 +85,21 @@ export default function AdminCitasPage() {
     const supabase = createClient();
 
     // Cargar citas
-    useEffect(() => {
-        async function loadAppointments() {
-            setIsLoading(true);
-            const { data } = await supabase
-                .from("appointments")
-                .select("*, service:services(*), barber:barbers(*), client:profiles(*)")
-                .eq("appointment_date", selectedDate)
-                .order("start_time");
+    const loadAppointments = useCallback(async () => {
+        setIsLoading(true);
+        const { data } = await supabase
+            .from("appointments")
+            .select("*, service:services(*), barber:barbers(*), client:profiles(*)")
+            .eq("appointment_date", selectedDate)
+            .order("start_time");
 
-            setAppointments(data || []);
-            setIsLoading(false);
-        }
+        setAppointments(data || []);
+        setIsLoading(false);
+    }, [selectedDate, supabase]);
+
+    useEffect(() => {
         loadAppointments();
-    }, [selectedDate]);
+    }, [loadAppointments]);
 
     // Cargar servicios, barberos y sucursales para el formulario/filtros
     useEffect(() => {
@@ -102,8 +107,8 @@ export default function AdminCitasPage() {
             const [{ data: servicesData }, { data: barbersData }, { data: branchesData }] = await Promise.all([
                 supabase.from("services").select("*").eq("is_active", true).order("name"),
                 supabase.from("barbers").select("*").eq("is_active", true).order("name"),
-                // branches usa "active" en la DB real (la migración 011 de F8 lo renombra a is_active)
-                supabase.from("branches").select("*").eq("active", true).order("name"),
+                // branches ya está normalizado a is_active
+                supabase.from("branches").select("*").eq("is_active", true).order("name"),
             ]);
             setServices(servicesData || []);
             setBarbers(barbersData || []);
@@ -618,7 +623,13 @@ export default function AdminCitasPage() {
                                                 <Button
                                                     size="sm"
                                                     className="bg-green-500 hover:bg-green-600"
-                                                    onClick={() => updateStatus(cita.id, "completed")}
+                                                    onClick={() => {
+                                                        if (features.contabilidad) {
+                                                            setChargeApt(cita);
+                                                        } else {
+                                                            updateStatus(cita.id, "completed");
+                                                        }
+                                                    }}
                                                 >
                                                     <CheckCircle className="h-4 w-4 mr-1" />
                                                     Completar
@@ -641,6 +652,15 @@ export default function AdminCitasPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {chargeApt && (
+                <ChargeDialog
+                    appointment={chargeApt}
+                    isOpen={chargeApt !== null}
+                    onOpenChange={(open) => !open && setChargeApt(null)}
+                    onSuccess={loadAppointments}
+                />
+            )}
         </div>
     );
 }

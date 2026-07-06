@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     Calendar,
     Clock,
@@ -23,6 +23,8 @@ import type { Appointment, Service, Profile } from "@/types/database.types";
 import { format, startOfToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import ChargeDialog from "@/components/shared/ChargeDialog";
+import { useFeatures } from "@/lib/features";
 
 type AppointmentWithRelations = Appointment & {
     service?: Service;
@@ -30,78 +32,99 @@ type AppointmentWithRelations = Appointment & {
 };
 
 export default function BarberoAgendaPage() {
+    const { features } = useFeatures();
     const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [barberName, setBarberName] = useState<string | null>(null);
     const [accessError, setAccessError] = useState<string | null>(null);
+    const [chargeApt, setChargeApt] = useState<AppointmentWithRelations | null>(null);
+    const [ingresosReales, setIngresosReales] = useState(0);
+
     const supabase = createClient();
     const today = format(startOfToday(), "yyyy-MM-dd");
 
-    useEffect(() => {
-        async function loadAgenda() {
-            setIsLoading(true);
+    const loadAgenda = useCallback(async () => {
+        setIsLoading(true);
 
-            // Invocación oportunista del generador de turnos fijos (fire-and-forget)
-            const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
-            if (!isDummy) {
-                (async () => {
-                    try {
-                        await supabase.rpc("generate_subscription_appointments");
-                    } catch (err) {
-                        console.error("Error generating subscription appointments:", err);
-                    }
-                })();
+        // Invocación oportunista del generador de turnos fijos (fire-and-forget)
+        const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
+        if (!isDummy) {
+            try {
+                await supabase.rpc("generate_subscription_appointments");
+            } catch (err) {
+                console.error("Error generating subscription appointments:", err);
             }
-
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                setAccessError("Iniciá sesión para ver tu agenda.");
-                setIsLoading(false);
-                return;
-            }
-
-            // Resolver el barbero vinculado al usuario logueado:
-            // auth user → profiles → barbers.profile_id
-            const { data: profile } = await supabase
-                .from("profiles")
-                .select("id")
-                .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
-                .limit(1)
-                .maybeSingle();
-
-            const { data: barber } = profile
-                ? await supabase
-                    .from("barbers")
-                    .select("id, name")
-                    .eq("profile_id", profile.id)
-                    .eq("is_active", true)
-                    .limit(1)
-                    .maybeSingle()
-                : { data: null };
-
-            if (!barber) {
-                setAccessError(
-                    "Tu usuario no está vinculado a un perfil de barbero. Pedile al administrador que te vincule desde el panel de Barberos."
-                );
-                setIsLoading(false);
-                return;
-            }
-
-            setBarberName(barber.name);
-
-            const { data } = await supabase
-                .from("appointments")
-                .select("*, service:services(*), client:profiles(*)")
-                .eq("barber_id", barber.id)
-                .eq("appointment_date", today)
-                .not("status", "eq", "cancelled")
-                .order("start_time");
-
-            setAppointments(data || []);
-            setIsLoading(false);
         }
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            setAccessError("Iniciá sesión para ver tu agenda.");
+            setIsLoading(false);
+            return;
+        }
+
+        // Resolver el barbero vinculado al usuario logueado:
+        // auth user → profiles → barbers.profile_id
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("id")
+            .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+            .limit(1)
+            .maybeSingle();
+
+        const { data: barber } = profile
+            ? await supabase
+                .from("barbers")
+                .select("id, name")
+                .eq("profile_id", profile.id)
+                .eq("is_active", true)
+                .limit(1)
+                .maybeSingle()
+            : { data: null };
+
+        if (!barber) {
+            setAccessError(
+                "Tu usuario no está vinculado a un perfil de barbero. Pedile al administrador que te vincule desde el panel de Barberos."
+            );
+            setIsLoading(false);
+            return;
+        }
+
+        setBarberName(barber.name);
+
+        // Cargar citas
+        const { data: appointmentsData } = await supabase
+            .from("appointments")
+            .select("*, service:services(*), client:profiles(*)")
+            .eq("barber_id", barber.id)
+            .eq("appointment_date", today)
+            .not("status", "eq", "cancelled")
+            .order("start_time");
+
+        setAppointments(appointmentsData || []);
+
+        // Cargar ingresos reales del día para este barbero (cargos de servicios y propinas)
+        const { data: movements } = await supabase
+            .from("cash_movements")
+            .select("amount")
+            .eq("barber_id", barber.id)
+            .eq("type", "income")
+            .gte("created_at", `${today}T00:00:00`)
+            .lte("created_at", `${today}T23:59:59`);
+
+        const totalReales = (movements || []).reduce(
+            (sum, m) => sum + Number(m.amount),
+            0
+        );
+        setIngresosReales(totalReales);
+
+        setIsLoading(false);
+    }, [today, supabase]);
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadAgenda();
-    }, [today]);
+    }, [loadAgenda]);
 
     const updateStatus = async (id: string, newStatus: string) => {
         const { error } = await supabase
@@ -115,12 +138,7 @@ export default function BarberoAgendaPage() {
         }
 
         toast.success(`Cita ${APPOINTMENT_STATUS_LABELS[newStatus].toLowerCase()}`);
-
-        setAppointments((prev) =>
-            prev.map((a) =>
-                a.id === id ? { ...a, status: newStatus as Appointment["status"] } : a
-            )
-        );
+        loadAgenda(); // Recargar todo para actualizar estadísticas e ingresos si corresponde
     };
 
     // Estadísticas del día
@@ -130,10 +148,6 @@ export default function BarberoAgendaPage() {
         confirmadas: appointments.filter((a) => a.status === "confirmed").length,
         completadas: appointments.filter((a) => a.status === "completed").length,
     };
-
-    const ingresosPotenciales = appointments
-        .filter((a) => a.status !== "cancelled")
-        .reduce((sum, a) => sum + (a.service?.price || 0), 0);
 
     if (!isLoading && accessError) {
         return (
@@ -183,7 +197,7 @@ export default function BarberoAgendaPage() {
                 </Card>
                 <Card className="border-border/50">
                     <CardContent className="p-4">
-                        <p className="text-3xl font-bold text-primary">{formatPrice(ingresosPotenciales)}</p>
+                        <p className="text-3xl font-bold text-primary">{formatPrice(ingresosReales)}</p>
                         <p className="text-sm text-muted-foreground">Ingresos del Día</p>
                     </CardContent>
                 </Card>
@@ -294,7 +308,13 @@ export default function BarberoAgendaPage() {
                                                 <Button
                                                     size="sm"
                                                     className="bg-green-500 hover:bg-green-600"
-                                                    onClick={() => updateStatus(cita.id, "completed")}
+                                                    onClick={() => {
+                                                        if (features.contabilidad) {
+                                                            setChargeApt(cita);
+                                                        } else {
+                                                            updateStatus(cita.id, "completed");
+                                                        }
+                                                    }}
                                                 >
                                                     <CheckCircle className="h-4 w-4 mr-1" />
                                                     Completar
@@ -323,6 +343,15 @@ export default function BarberoAgendaPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {chargeApt && (
+                <ChargeDialog
+                    appointment={chargeApt}
+                    isOpen={chargeApt !== null}
+                    onOpenChange={(open) => !open && setChargeApt(null)}
+                    onSuccess={loadAgenda}
+                />
+            )}
         </div>
     );
 }

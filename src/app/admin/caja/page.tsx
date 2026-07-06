@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatPrice } from "@/lib/utils";
 import { CalendarDateRangePicker } from "@/components/admin/date-range-picker";
-import { addDays, format } from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
     DollarSign,
@@ -39,7 +39,6 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from "@/components/ui/dialog";
 import {
     Select,
@@ -49,6 +48,11 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import {
+    PAYMENT_METHOD_LABELS,
+    CASH_MOVEMENT_TYPE_LABELS,
+    CASH_CATEGORY_LABELS,
+} from "@/lib/constants";
 
 interface CashSummary {
     totalIncome: number;
@@ -72,15 +76,6 @@ interface Transaction {
     method: string;
 }
 
-interface CashMovement {
-    id: string;
-    type: 'ingreso' | 'egreso';
-    amount: number;
-    description: string;
-    payment_method: string;
-    created_at: string;
-}
-
 export default function AdminCajaPage() {
     const [date, setDate] = useState<DateRange | undefined>({
         from: new Date(),
@@ -99,14 +94,20 @@ export default function AdminCajaPage() {
         expenses: 0,
     });
 
+    const [tipsTotal, setTipsTotal] = useState(0);
+    const [barbersIncome, setBarbersIncome] = useState<{ id: string; name: string; services: number; tips: number; total: number }[]>([]);
+    const [barbers, setBarbers] = useState<{ id: string; name: string }[]>([]);
+
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false);
-    const [movementType, setMovementType] = useState<'ingreso' | 'egreso'>('ingreso');
+    const [movementType, setMovementType] = useState<'income' | 'expense'>('income');
     const [movementForm, setMovementForm] = useState({
         amount: "",
         description: "",
-        payment_method: "efectivo",
+        payment_method: "cash",
+        category: "other",
+        barber_id: "",
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -118,27 +119,24 @@ export default function AdminCajaPage() {
         }
     }, [date]);
 
+    useEffect(() => {
+        async function loadBarbers() {
+            const { data } = await supabase
+                .from('barbers')
+                .select('id, name')
+                .eq('is_active', true)
+                .order('name');
+            setBarbers(data || []);
+        }
+        loadBarbers();
+    }, [supabase]);
+
     const loadCajaData = async () => {
         setIsLoading(true);
         const startDate = date?.from ? format(date.from, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
         const endDate = date?.to ? format(date.to, 'yyyy-MM-dd') : startDate;
 
-        // 1. Obtener Citas Completadas (Ingresos por Servicios)
-        const { data: appointments } = await supabase
-            .from('appointments')
-            .select(`
-                id,
-                appointment_date,
-                start_time,
-                service:services(name, price),
-                barber:barbers(name)
-            `)
-            .eq('status', 'completed')
-            .gte('appointment_date', startDate)
-            .lte('appointment_date', endDate)
-            .order('appointment_date', { ascending: false });
-
-        // 2. Obtener Órdenes (Ingresos por Productos)
+        // 1. Obtener Órdenes (Ingresos por Productos)
         const { data: orders } = await supabase
             .from('orders')
             .select(`
@@ -153,10 +151,10 @@ export default function AdminCajaPage() {
             .lte('created_at', `${endDate}T23:59:59`)
             .order('created_at', { ascending: false });
 
-        // 3. Obtener Movimientos de Caja (gastos, ingresos extra)
+        // 2. Obtener Movimientos de Caja (gastos, cobros de servicios y propinas reales, ingresos manuales)
         const { data: movements } = await supabase
             .from('cash_movements')
-            .select('*')
+            .select('*, barber:barbers(name)')
             .gte('created_at', `${startDate}T00:00:00`)
             .lte('created_at', `${endDate}T23:59:59`)
             .order('created_at', { ascending: false });
@@ -169,38 +167,21 @@ export default function AdminCajaPage() {
         let transferPay = 0;
         let cardPay = 0;
         let totalExpenses = 0;
+        let totalTips = 0;
+        let totalServicesCount = 0;
         const trans: Transaction[] = [];
+        const barberBreakdown: Record<string, { name: string; services: number; tips: number }> = {};
 
-        // Servicios
-        if (appointments) {
-            appointments.forEach(apt => {
-                const service = apt.service as unknown as { name: string; price: number } | null;
-                const barber = apt.barber as unknown as { name: string } | null;
-                const price = service?.price || 0;
-                sIncome += Number(price);
-                cashPay += Number(price); // Asumimos efectivo por defecto
-                trans.push({
-                    id: apt.id,
-                    type: 'servicio',
-                    description: `${service?.name || 'Servicio'} con ${barber?.name || 'Barbero'}`,
-                    amount: Number(price),
-                    date: `${apt.appointment_date}T${apt.start_time}`,
-                    status: 'Completado',
-                    method: 'Efectivo'
-                });
-            });
-        }
-
-        // Productos
+        // Productos de la tienda
         if (orders) {
             orders.forEach(ord => {
                 pIncome += Number(ord.total);
-                const itemsCount = ord.order_items.reduce((acc: number, item: { quantity: number }) => acc + item.quantity, 0);
+                const itemsCount = ord.order_items?.reduce((acc: number, item: { quantity: number }) => acc + item.quantity, 0) || 0;
                 pSold += itemsCount;
 
                 // Clasificar por método de pago
-                if (ord.payment_method === 'efectivo') cashPay += Number(ord.total);
-                else if (ord.payment_method === 'transferencia') transferPay += Number(ord.total);
+                if (ord.payment_method === 'cash' || ord.payment_method === 'efectivo') cashPay += Number(ord.total);
+                else if (ord.payment_method === 'transfer' || ord.payment_method === 'transferencia') transferPay += Number(ord.total);
                 else cardPay += Number(ord.total);
 
                 trans.push({
@@ -210,37 +191,68 @@ export default function AdminCajaPage() {
                     amount: Number(ord.total),
                     date: ord.created_at,
                     status: ord.status === 'pending' ? 'Pendiente' : 'Pagado',
-                    method: ord.payment_method || 'N/A'
+                    method: PAYMENT_METHOD_LABELS[ord.payment_method || ''] || ord.payment_method || 'N/A'
                 });
             });
         }
 
-        // Movimientos de caja
+        // Movimientos de caja (incluyendo servicios, propinas, etc.)
         if (movements) {
-            movements.forEach((mov: CashMovement) => {
-                if (mov.type === 'egreso') {
-                    totalExpenses += Number(mov.amount);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            movements.forEach((mov: any) => {
+                const amount = Number(mov.amount);
+
+                // Acumular por barbero (para el desglose de ingresos del período)
+                if (mov.barber_id && mov.type === 'income') {
+                    const bName = mov.barber?.name || 'Desconocido';
+                    if (!barberBreakdown[mov.barber_id]) {
+                        barberBreakdown[mov.barber_id] = { name: bName, services: 0, tips: 0 };
+                    }
+                    if (mov.category === 'service') {
+                        barberBreakdown[mov.barber_id].services += amount;
+                    } else if (mov.category === 'tip') {
+                        barberBreakdown[mov.barber_id].tips += amount;
+                    }
+                }
+
+                if (mov.type === 'expense') {
+                    totalExpenses += amount;
                     trans.push({
                         id: mov.id,
                         type: 'egreso',
-                        description: mov.description,
-                        amount: -Number(mov.amount),
+                        description: mov.description || 'Gasto registrado',
+                        amount: -amount,
                         date: mov.created_at,
                         status: 'Registrado',
-                        method: mov.payment_method
+                        method: PAYMENT_METHOD_LABELS[mov.payment_method] || mov.payment_method
                     });
                 } else {
-                    // Ingresos extra
-                    if (mov.payment_method === 'efectivo') cashPay += Number(mov.amount);
-                    else if (mov.payment_method === 'transferencia') transferPay += Number(mov.amount);
+                    // Ingreso (income)
+                    if (mov.category === 'service') {
+                        sIncome += amount;
+                        totalServicesCount++;
+                    } else if (mov.category === 'tip') {
+                        totalTips += amount;
+                    }
+
+                    // Clasificar por método de pago ('other' no entra en ningún desglose)
+                    if (mov.payment_method === 'cash' || mov.payment_method === 'efectivo') cashPay += amount;
+                    else if (mov.payment_method === 'transfer' || mov.payment_method === 'transferencia') transferPay += amount;
+                    else if (mov.payment_method === 'card' || mov.payment_method === 'tarjeta') cardPay += amount;
+
+                    const catLabel = CASH_CATEGORY_LABELS[mov.category] || mov.category;
+                    const barberNameSuffix = mov.barber?.name ? ` con ${mov.barber.name}` : '';
+
                     trans.push({
                         id: mov.id,
-                        type: 'ingreso',
-                        description: mov.description,
-                        amount: Number(mov.amount),
+                        type: mov.category === 'service' ? 'servicio' : 'ingreso',
+                        description: mov.category === 'service'
+                            ? `${catLabel}${barberNameSuffix}`
+                            : mov.description || catLabel,
+                        amount: amount,
                         date: mov.created_at,
                         status: 'Registrado',
-                        method: mov.payment_method
+                        method: PAYMENT_METHOD_LABELS[mov.payment_method] || mov.payment_method
                     });
                 }
             });
@@ -249,17 +261,27 @@ export default function AdminCajaPage() {
         // Ordenar transacciones por fecha desc
         trans.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+        // Armar el desglose de ingresos por barbero
+        const breakdownArray = Object.entries(barberBreakdown).map(([id, data]) => ({
+            id,
+            ...data,
+            total: data.services + data.tips
+        }));
+
         setSummary({
-            totalIncome: sIncome + pIncome - totalExpenses,
+            totalIncome: sIncome + pIncome + totalTips - totalExpenses,
             servicesIncome: sIncome,
             productsIncome: pIncome,
-            totalServices: appointments?.length || 0,
+            totalServices: totalServicesCount,
             totalProductsSold: pSold,
             cashPayments: cashPay,
             transferPayments: transferPay,
             cardPayments: cardPay,
             expenses: totalExpenses,
         });
+
+        setTipsTotal(totalTips);
+        setBarbersIncome(breakdownArray);
         setTransactions(trans);
         setIsLoading(false);
     };
@@ -267,27 +289,30 @@ export default function AdminCajaPage() {
     // Registrar movimiento de caja
     const handleAddMovement = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (movementType === 'income' && movementForm.category === 'chair_rental' && !movementForm.barber_id) {
+            toast.error("Debe seleccionar al barbero asociado a la renta");
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
             const { error } = await supabase.from('cash_movements').insert({
                 type: movementType,
+                category: movementType === 'expense' ? 'other' : movementForm.category,
                 amount: parseFloat(movementForm.amount),
-                description: movementForm.description,
+                description: movementForm.description || (movementForm.category === 'chair_rental' ? "Cobro de renta de sillón" : ""),
                 payment_method: movementForm.payment_method,
+                barber_id: (movementType === 'income' && movementForm.category === 'chair_rental') ? movementForm.barber_id : null,
             });
 
             if (error) {
-                // Si la tabla no existe, crearla
-                if (error.code === '42P01') {
-                    toast.error("La tabla de movimientos no existe. Contacta al administrador.");
-                } else {
-                    toast.error("Error al registrar movimiento: " + error.message);
-                }
+                toast.error("Error al registrar movimiento: " + error.message);
             } else {
-                toast.success(movementType === 'ingreso' ? "Ingreso registrado" : "Egreso registrado");
+                toast.success(movementType === 'income' ? "Ingreso registrado" : "Egreso registrado");
                 setIsMovementDialogOpen(false);
-                setMovementForm({ amount: "", description: "", payment_method: "efectivo" });
+                setMovementForm({ amount: "", description: "", payment_method: "cash", category: "other", barber_id: "" });
                 loadCajaData();
             }
         } finally {
@@ -295,9 +320,9 @@ export default function AdminCajaPage() {
         }
     };
 
-    const openMovementDialog = (type: 'ingreso' | 'egreso') => {
+    const openMovementDialog = (type: 'income' | 'expense') => {
         setMovementType(type);
-        setMovementForm({ amount: "", description: "", payment_method: "efectivo" });
+        setMovementForm({ amount: "", description: "", payment_method: "cash", category: "other", barber_id: "" });
         setIsMovementDialogOpen(true);
     };
 
@@ -331,30 +356,27 @@ export default function AdminCajaPage() {
 
             {/* Acciones rápidas */}
             <div className="flex gap-2 flex-wrap">
-                <Button onClick={() => openMovementDialog('ingreso')} className="bg-green-600 hover:bg-green-700">
+                <Button onClick={() => openMovementDialog('income')} className="bg-green-600 hover:bg-green-700">
                     <ArrowDownCircle className="h-4 w-4 mr-2" />
                     Registrar Ingreso
                 </Button>
-                <Button onClick={() => openMovementDialog('egreso')} variant="outline" className="text-red-400 border-red-400/30 hover:bg-red-400/10">
+                <Button onClick={() => openMovementDialog('expense')} variant="outline" className="text-red-400 border-red-400/30 hover:bg-red-400/10">
                     <ArrowUpCircle className="h-4 w-4 mr-2" />
                     Registrar Egreso
                 </Button>
             </div>
 
             {/* Tarjetas de Resumen */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
                 <Card className="bg-gradient-to-br from-green-500/10 to-green-500/5 border-green-500/20">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">
-                            Total del Día
+                            Total del Periodo
                         </CardTitle>
                         <DollarSign className="h-4 w-4 text-green-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-green-400">{formatPrice(summary.totalIncome)}</div>
-                        <p className="text-xs text-muted-foreground">
-                            {summary.totalServices + transactions.filter(t => t.type === 'producto').length} transacciones
-                        </p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -367,7 +389,7 @@ export default function AdminCajaPage() {
                     <CardContent>
                         <div className="text-2xl font-bold">{formatPrice(summary.servicesIncome)}</div>
                         <p className="text-xs text-muted-foreground">
-                            {summary.totalServices} cortes realizados
+                            {summary.totalServices} cobros de cortes
                         </p>
                     </CardContent>
                 </Card>
@@ -385,6 +407,20 @@ export default function AdminCajaPage() {
                         </p>
                     </CardContent>
                 </Card>
+                <Card className="bg-amber-500/5 border-amber-500/15">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">
+                            Propinas
+                        </CardTitle>
+                        <DollarSign className="h-4 w-4 text-amber-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-amber-400">{formatPrice(tipsTotal)}</div>
+                        <p className="text-xs text-muted-foreground">
+                            100% de los barberos
+                        </p>
+                    </CardContent>
+                </Card>
                 <Card className={summary.expenses > 0 ? "bg-red-500/5 border-red-500/20" : ""}>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">
@@ -395,53 +431,57 @@ export default function AdminCajaPage() {
                     <CardContent>
                         <div className="text-2xl font-bold text-red-400">-{formatPrice(summary.expenses)}</div>
                         <p className="text-xs text-muted-foreground">
-                            Gastos y retiros
+                            Gastos, retiros y pagos
                         </p>
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Desglose por método de pago */}
-            <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                                <Banknote className="h-5 w-5 text-green-500" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Efectivo</p>
-                                <p className="text-xl font-bold">{formatPrice(summary.cashPayments)}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                                <Receipt className="h-5 w-5 text-blue-500" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Transferencia</p>
-                                <p className="text-xl font-bold">{formatPrice(summary.transferPayments)}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center">
-                                <CreditCard className="h-5 w-5 text-purple-500" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Tarjeta</p>
-                                <p className="text-xl font-bold">{formatPrice(summary.cardPayments)}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+            {/* Desglose por Barbero */}
+            <div className="rounded-md border bg-card">
+                <div className="p-4 border-b">
+                    <h3 className="font-semibold flex items-center gap-2">
+                        <Scissors className="h-4 w-4 text-primary" />
+                        Ingresos por Barbero
+                    </h3>
+                </div>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Barbero</TableHead>
+                            <TableHead className="text-right">Servicios</TableHead>
+                            <TableHead className="text-right">Propinas</TableHead>
+                            <TableHead className="text-right font-semibold">Total</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {isLoading ? (
+                            <TableRow>
+                                <TableCell colSpan={4} className="h-16 text-center">
+                                    <div className="flex justify-center items-center gap-2">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Cargando desglose...
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ) : barbersIncome.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={4} className="h-16 text-center text-muted-foreground text-sm">
+                                    No hay cobros atribuidos a barberos en este periodo.
+                                </TableCell>
+                            </TableRow>
+                        ) : (
+                            barbersIncome.map((b) => (
+                                <TableRow key={b.id}>
+                                    <TableCell className="font-medium text-white">{b.name}</TableCell>
+                                    <TableCell className="text-right">{formatPrice(b.services)}</TableCell>
+                                    <TableCell className="text-right text-amber-400">{formatPrice(b.tips)}</TableCell>
+                                    <TableCell className="text-right font-bold text-primary">{formatPrice(b.total)}</TableCell>
+                                </TableRow>
+                            ))
+                        )}
+                    </TableBody>
+                </Table>
             </div>
 
             {/* Tabla de Movimientos */}
@@ -512,7 +552,7 @@ export default function AdminCajaPage() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>
-                            {movementType === 'ingreso' ? 'Registrar Ingreso' : 'Registrar Egreso'}
+                            {movementType === 'income' ? 'Registrar Ingreso' : 'Registrar Egreso'}
                         </DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleAddMovement} className="space-y-4 mt-4">
@@ -526,13 +566,59 @@ export default function AdminCajaPage() {
                                 required
                             />
                         </div>
+
+                        {movementType === 'income' && (
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Categoría</label>
+                                <Select
+                                    value={movementForm.category}
+                                    onValueChange={(v) => setMovementForm({ ...movementForm, category: v, barber_id: v === 'chair_rental' ? movementForm.barber_id : "" })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="other">Otro ingreso</SelectItem>
+                                        <SelectItem value="chair_rental">Renta de sillón</SelectItem>
+                                        <SelectItem value="product">Venta de producto (manual)</SelectItem>
+                                        <SelectItem value="adjustment">Ajuste de caja</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
+                        {movementType === 'income' && movementForm.category === 'chair_rental' && (
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Barbero</label>
+                                <Select
+                                    value={movementForm.barber_id}
+                                    onValueChange={(v) => setMovementForm({ ...movementForm, barber_id: v })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Seleccioná un barbero" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {barbers.map((b) => (
+                                            <SelectItem key={b.id} value={b.id}>
+                                                {b.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
                         <div>
                             <label className="text-sm font-medium mb-2 block">Descripción</label>
                             <Input
-                                placeholder={movementType === 'ingreso' ? "Propina, adelanto, etc." : "Compra de insumos, retiro, etc."}
+                                placeholder={
+                                    movementType === 'income'
+                                        ? (movementForm.category === 'chair_rental' ? "Alquiler de sillón semanal/mensual" : "Propina, adelanto, etc.")
+                                        : "Compra de insumos, retiro, etc."
+                                }
                                 value={movementForm.description}
                                 onChange={(e) => setMovementForm({ ...movementForm, description: e.target.value })}
-                                required
+                                required={movementForm.category !== 'chair_rental'}
                             />
                         </div>
                         <div>
@@ -542,9 +628,10 @@ export default function AdminCajaPage() {
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="efectivo">Efectivo</SelectItem>
-                                    <SelectItem value="transferencia">Transferencia</SelectItem>
-                                    <SelectItem value="tarjeta">Tarjeta</SelectItem>
+                                    <SelectItem value="cash">Efectivo</SelectItem>
+                                    <SelectItem value="transfer">Transferencia</SelectItem>
+                                    <SelectItem value="card">Tarjeta</SelectItem>
+                                    <SelectItem value="other">Otro</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -555,7 +642,7 @@ export default function AdminCajaPage() {
                             <Button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className={movementType === 'ingreso' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+                                className={movementType === 'income' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
                             >
                                 {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                                 Registrar
