@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Calendar,
     DollarSign,
-    Users,
+    UserPlus,
+    UserRoundX,
     Scissors,
     TrendingUp,
     Package,
@@ -13,10 +14,11 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatPrice, formatDate } from "@/lib/utils";
-import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_COLORS } from "@/lib/constants";
+import { formatPrice } from "@/lib/utils";
+import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_COLORS, INACTIVE_DAYS } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
-import type { Appointment, Service, Barber, Branch } from "@/types/database.types";
+import type { Appointment, Service, Barber, Branch, ClientOverview } from "@/types/database.types";
+import { CrmCards, type RankingItem } from "@/components/admin/crm-cards";
 import {
     Select,
     SelectContent,
@@ -24,88 +26,128 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { format, startOfToday, startOfMonth, endOfMonth } from "date-fns";
+import { differenceInDays, endOfMonth, format, parseISO, startOfMonth, startOfToday, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 
 interface DashboardStats {
-    citasHoy: number;
     citasMes: number;
     ingresosMes: number;
     productosLowStock: number;
+    clientesNuevos: number;
+    clientesInactivos: number;
+}
+
+type ServiceMetric = Pick<Service, "name" | "price">;
+type BarberMetric = Pick<Barber, "name">;
+
+interface CompletedMetricRow {
+    service: ServiceMetric | ServiceMetric[] | null;
+    barber: BarberMetric | BarberMetric[] | null;
 }
 
 export default function AdminDashboardPage() {
     const [stats, setStats] = useState<DashboardStats>({
-        citasHoy: 0,
         citasMes: 0,
         ingresosMes: 0,
         productosLowStock: 0,
+        clientesNuevos: 0,
+        clientesInactivos: 0,
     });
     const [citasHoy, setCitasHoy] = useState<(Appointment & { service?: Service; barber?: Barber })[]>([]);
     const [barbers, setBarbers] = useState<Barber[]>([]);
     const [branches, setBranches] = useState<Branch[]>([]);
+    const [inactiveClients, setInactiveClients] = useState<ClientOverview[]>([]);
+    const [topServices, setTopServices] = useState<RankingItem[]>([]);
+    const [topBarbers, setTopBarbers] = useState<RankingItem[]>([]);
     const [branchFilter, setBranchFilter] = useState<string>("all");
     const [barberFilter, setBarberFilter] = useState<string>("all");
     const [isLoading, setIsLoading] = useState(true);
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
 
-    useEffect(() => {
-        async function loadDashboard() {
-            setIsLoading(true);
+    const loadDashboard = useCallback(async () => {
+        setIsLoading(true);
 
-            // Invocación oportunista del generador de turnos fijos (fire-and-forget)
-            const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
-            if (!isDummy) {
-                (async () => {
-                    try {
-                        await supabase.rpc("generate_subscription_appointments");
-                    } catch (err) {
-                        console.error("Error generating subscription appointments:", err);
-                    }
-                })();
-            }
-
-            const today = format(startOfToday(), "yyyy-MM-dd");
-            const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
-            const monthEnd = format(endOfMonth(new Date()), "yyyy-MM-dd");
-
-            // Citas de hoy, barberos y sucursales
-            const [citasHoyRes, barbersRes, branchesRes, citasMesRes, lowStockRes, completedRes] = await Promise.all([
-                supabase.from("appointments").select("*, service:services(*), barber:barbers(*)").eq("appointment_date", today).order("start_time"),
-                supabase.from("barbers").select("*").eq("is_active", true).order("name"),
-                supabase.from("branches").select("*").eq("active", true).order("name"),
-                supabase.from("appointments").select("*", { count: "exact", head: true }).gte("appointment_date", monthStart).lte("appointment_date", monthEnd),
-                supabase.from("products").select("*", { count: "exact", head: true }).lte("stock", 5).eq("is_active", true),
-                supabase.from("appointments").select("service:services(price)").eq("status", "completed").gte("appointment_date", monthStart).lte("appointment_date", monthEnd)
-            ]);
-
-            const citasHoyData = citasHoyRes.data || [];
-            const barbersData = barbersRes.data || [];
-            const branchesData = branchesRes.data || [];
-            const citasMesCount = citasMesRes.count || 0;
-            const lowStockCount = lowStockRes.count || 0;
-            const completedAppointments = completedRes.data || [];
-
-            const ingresosMes = completedAppointments.reduce((sum, apt) => {
-                const service = Array.isArray(apt.service) ? apt.service[0] : apt.service;
-                return sum + (service?.price || 0);
-            }, 0) || 0;
-
-            setStats({
-                citasHoy: citasHoyData.length,
-                citasMes: citasMesCount,
-                ingresosMes,
-                productosLowStock: lowStockCount,
-            });
-
-            setCitasHoy(citasHoyData);
-            setBarbers(barbersData);
-            setBranches(branchesData);
-            setIsLoading(false);
+        // Invocación oportunista del generador de turnos fijos (fire-and-forget)
+        const isDummy = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("dummy") || false;
+        if (!isDummy) {
+            (async () => {
+                try {
+                    await supabase.rpc("generate_subscription_appointments");
+                } catch (err) {
+                    console.error("Error generating subscription appointments:", err);
+                }
+            })();
         }
 
+        const now = new Date();
+        const today = format(startOfToday(), "yyyy-MM-dd");
+        const monthStartDate = startOfMonth(now);
+        const monthStart = format(monthStartDate, "yyyy-MM-dd");
+        const monthEnd = format(endOfMonth(now), "yyyy-MM-dd");
+        const ninetyDaysAgo = format(subDays(now, 90), "yyyy-MM-dd");
+
+        const [
+            citasHoyRes,
+            barbersRes,
+            branchesRes,
+            citasMesRes,
+            lowStockRes,
+            completedRes,
+            newClientsRes,
+            clientsOverviewRes,
+            topPerformersRes,
+        ] = await Promise.all([
+            supabase.from("appointments").select("*, service:services(*), barber:barbers(*)").eq("appointment_date", today).order("start_time"),
+            supabase.from("barbers").select("*").eq("is_active", true).order("name"),
+            supabase.from("branches").select("*").eq("active", true).order("name"),
+            supabase.from("appointments").select("*", { count: "exact", head: true }).gte("appointment_date", monthStart).lte("appointment_date", monthEnd),
+            supabase.from("products").select("*", { count: "exact", head: true }).lte("stock", 5).eq("is_active", true),
+            supabase.from("appointments").select("service:services(price)").eq("status", "completed").gte("appointment_date", monthStart).lte("appointment_date", monthEnd),
+            supabase.from("profiles").select("*", { count: "exact", head: true }).eq("role", "cliente").gte("created_at", monthStartDate.toISOString()),
+            supabase.rpc("get_clients_overview"),
+            supabase
+                .from("appointments")
+                .select("service:services(name, price), barber:barbers(name)")
+                .eq("status", "completed")
+                .gte("appointment_date", ninetyDaysAgo),
+        ]);
+
+        const citasHoyData = citasHoyRes.data || [];
+        const barbersData = barbersRes.data || [];
+        const branchesData = branchesRes.data || [];
+        const citasMesCount = citasMesRes.count || 0;
+        const lowStockCount = lowStockRes.count || 0;
+        const completedAppointments = completedRes.data || [];
+        const clientsOverview = (clientsOverviewRes.data || []) as ClientOverview[];
+        const inactiveAll = clientsOverview.filter((client) => isInactiveClient(client.last_visit));
+        const { services, barbers: barberRanking } = aggregateRankings((topPerformersRes.data || []) as CompletedMetricRow[]);
+
+        const ingresosMes = completedAppointments.reduce((sum, apt) => {
+            const service = Array.isArray(apt.service) ? apt.service[0] : apt.service;
+            return sum + (service?.price || 0);
+        }, 0) || 0;
+
+        setStats({
+            citasMes: citasMesCount,
+            ingresosMes,
+            productosLowStock: lowStockCount,
+            clientesNuevos: newClientsRes.count || 0,
+            clientesInactivos: inactiveAll.length,
+        });
+
+        setCitasHoy(citasHoyData);
+        setBarbers(barbersData);
+        setBranches(branchesData);
+        setInactiveClients([...inactiveAll].sort(sortInactiveClients).slice(0, 8));
+        setTopServices(services);
+        setTopBarbers(barberRanking);
+        setIsLoading(false);
+    }, [supabase]);
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadDashboard();
-    }, []);
+    }, [loadDashboard]);
 
     // Reset de barbero si ya no es compatible con la sucursal elegida
     useEffect(() => {
@@ -131,13 +173,6 @@ export default function AdminDashboardPage() {
 
     const statCards = [
         {
-            title: "Citas Hoy",
-            value: stats.citasHoy,
-            icon: Calendar,
-            color: "text-blue-400",
-            bgColor: "bg-blue-400/10",
-        },
-        {
             title: "Citas este Mes",
             value: stats.citasMes,
             icon: TrendingUp,
@@ -150,6 +185,20 @@ export default function AdminDashboardPage() {
             icon: DollarSign,
             color: "text-primary",
             bgColor: "bg-primary/10",
+        },
+        {
+            title: "Clientes Nuevos",
+            value: stats.clientesNuevos,
+            icon: UserPlus,
+            color: "text-blue-400",
+            bgColor: "bg-blue-400/10",
+        },
+        {
+            title: "Clientes Inactivos",
+            value: stats.clientesInactivos,
+            icon: UserRoundX,
+            color: stats.clientesInactivos > 0 ? "text-amber-400" : "text-green-400",
+            bgColor: stats.clientesInactivos > 0 ? "bg-amber-400/10" : "bg-green-400/10",
         },
         {
             title: "Productos Bajo Stock",
@@ -171,7 +220,7 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Stats Grid */}
-            <div id="admin-stats" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div id="admin-stats" className="grid grid-cols-2 xl:grid-cols-5 gap-4">
                 {statCards.map((stat) => (
                     <Card key={stat.title} className="border-border/50">
                         <CardContent className="p-4 md:p-6">
@@ -186,6 +235,14 @@ export default function AdminDashboardPage() {
                     </Card>
                 ))}
             </div>
+
+            <CrmCards
+                inactiveClients={inactiveClients}
+                topServices={topServices}
+                topBarbers={topBarbers}
+                isLoading={isLoading}
+                onLogAdded={loadDashboard}
+            />
 
             {/* Citas de Hoy */}
             <Card className="border-border/50">
@@ -292,4 +349,64 @@ export default function AdminDashboardPage() {
             </Card>
         </div>
     );
+}
+
+function isInactiveClient(lastVisit: string | null) {
+    if (!lastVisit) return true;
+    return differenceInDays(new Date(), parseISO(lastVisit)) > INACTIVE_DAYS;
+}
+
+function sortInactiveClients(a: ClientOverview, b: ClientOverview) {
+    if (!a.last_visit && !b.last_visit) {
+        return Number(b.total_spent) - Number(a.total_spent);
+    }
+    if (!a.last_visit) return 1;
+    if (!b.last_visit) return -1;
+
+    return parseISO(b.last_visit).getTime() - parseISO(a.last_visit).getTime();
+}
+
+function aggregateRankings(rows: CompletedMetricRow[]) {
+    const serviceMap = new Map<string, RankingItem>();
+    const barberMap = new Map<string, RankingItem>();
+
+    rows.forEach((row) => {
+        const service = getRelation(row.service);
+        const barber = getRelation(row.barber);
+        const price = Number(service?.price || 0);
+
+        if (service?.name) {
+            addRankingItem(serviceMap, service.name, price);
+        }
+
+        if (barber?.name) {
+            addRankingItem(barberMap, barber.name, price);
+        }
+    });
+
+    return {
+        services: sortRankings(serviceMap),
+        barbers: sortRankings(barberMap),
+    };
+}
+
+function getRelation<T>(relation: T | T[] | null | undefined) {
+    if (Array.isArray(relation)) return relation[0] || null;
+    return relation || null;
+}
+
+function addRankingItem(map: Map<string, RankingItem>, name: string, revenue: number) {
+    const current = map.get(name) || { name, count: 0, revenue: 0 };
+
+    map.set(name, {
+        name,
+        count: current.count + 1,
+        revenue: current.revenue + revenue,
+    });
+}
+
+function sortRankings(map: Map<string, RankingItem>) {
+    return Array.from(map.values())
+        .sort((a, b) => b.revenue - a.revenue || b.count - a.count || a.name.localeCompare(b.name))
+        .slice(0, 5);
 }
