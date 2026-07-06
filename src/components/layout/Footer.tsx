@@ -86,6 +86,14 @@ export function Footer() {
                                     Contacto
                                 </Link>
                             </li>
+                            <li>
+                                <Link
+                                    href={ROUTES.ADMIN_LOGIN}
+                                    className="text-muted-foreground/70 hover:text-primary transition-colors text-xs"
+                                >
+                                    Acceso staff
+                                </Link>
+                            </li>
                         </ul>
                     </div>
 

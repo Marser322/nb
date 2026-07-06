@@ -12,6 +12,8 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
 
+const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+
 function LoginPageContent() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -31,13 +33,13 @@ function LoginPageContent() {
 
         setIsLoading(true);
 
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: { user }, error } = await supabase.auth.signInWithPassword({
             email,
             password,
         });
 
-        if (error) {
-            if (error.message.includes("Invalid login credentials")) {
+        if (error || !user) {
+            if (error?.message.includes("Invalid login credentials")) {
                 toast.error("Email o contraseña incorrectos");
             } else {
                 toast.error("Error al iniciar sesión");
@@ -47,11 +49,56 @@ function LoginPageContent() {
         }
 
         toast.success("¡Bienvenido de nuevo!");
-        
+
         // Validar que el parámetro next empiece con '/' para evitar open redirect
-        const redirectTo = nextParam && nextParam.startsWith("/") ? nextParam : ROUTES.HOME;
-        
-        router.push(redirectTo);
+        if (nextParam && nextParam.startsWith("/")) {
+            router.push(nextParam);
+            router.refresh();
+            return;
+        }
+
+        // Sin next param: redirigir según el rol del perfil
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+            .limit(1)
+            .maybeSingle();
+
+        if (profile?.role === 'admin') {
+            router.push(ROUTES.ADMIN_DASHBOARD);
+        } else if (profile?.role === 'barbero') {
+            router.push(ROUTES.BARBERO_AGENDA);
+        } else {
+            router.push(ROUTES.HOME);
+        }
+        router.refresh();
+    };
+
+    const handleDemoLogin = async () => {
+        const demoEmail = process.env.NEXT_PUBLIC_DEMO_ADMIN_EMAIL;
+        const demoPassword = process.env.NEXT_PUBLIC_DEMO_ADMIN_PASSWORD;
+        if (!demoEmail || !demoPassword) {
+            toast.error("Credenciales demo no configuradas");
+            return;
+        }
+        setEmail(demoEmail);
+        setPassword(demoPassword);
+        setIsLoading(true);
+
+        const { data: { user }, error } = await supabase.auth.signInWithPassword({
+            email: demoEmail,
+            password: demoPassword,
+        });
+
+        if (error || !user) {
+            toast.error("No se pudo iniciar la demo (¿el usuario demo existe en Supabase?)");
+            setIsLoading(false);
+            return;
+        }
+
+        toast.success("¡Bienvenido, Admin demo!");
+        router.push(ROUTES.ADMIN_DASHBOARD);
         router.refresh();
     };
 
@@ -131,6 +178,19 @@ function LoginPageContent() {
                             Registrate
                         </Link>
                     </p>
+
+                    {isDemoMode && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full text-xs text-muted-foreground hover:text-primary"
+                            disabled={isLoading}
+                            onClick={handleDemoLogin}
+                        >
+                            ¿Querés ver el panel de administración? Entrá como admin demo
+                        </Button>
+                    )}
                 </CardFooter>
             </form>
         </Card>

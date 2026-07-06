@@ -117,7 +117,14 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
                         className="h-10 w-10 object-contain"
                     />
                     <div>
-                        <span className="text-xl font-bold">NB Barber</span>
+                        <span className="text-xl font-bold flex items-center gap-2">
+                            NB Barber
+                            {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && (
+                                <span className="text-[10px] font-semibold tracking-wider text-amber-500 border border-amber-500/40 rounded px-1.5 py-0.5">
+                                    DEMO
+                                </span>
+                            )}
+                        </span>
                         <p className="text-xs text-muted-foreground">Panel Admin</p>
                     </div>
                 </Link>

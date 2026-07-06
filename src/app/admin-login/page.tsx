@@ -12,11 +12,16 @@ import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 
+const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+const demoEmail = process.env.NEXT_PUBLIC_DEMO_ADMIN_EMAIL;
+const demoPassword = process.env.NEXT_PUBLIC_DEMO_ADMIN_PASSWORD;
+
 export default function AdminLoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isDemoLoading, setIsDemoLoading] = useState(false);
     const router = useRouter();
     const supabase = createClient();
 
@@ -29,44 +34,62 @@ export default function AdminLoginPage() {
         }
     }, []);
 
+    const loginWithCredentials = async (loginEmail: string, loginPassword: string) => {
+        const { data: { user }, error } = await supabase.auth.signInWithPassword({
+            email: loginEmail,
+            password: loginPassword
+        });
+
+        if (error || !user) {
+            toast.error("Credenciales inválidas");
+            return false;
+        }
+
+        // Consultar el rol del perfil
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+            .limit(1)
+            .maybeSingle();
+
+        if (profile?.role !== 'admin') {
+            await supabase.auth.signOut();
+            toast.error("No tenés permisos de administrador");
+            return false;
+        }
+
+        toast.success("Bienvenido Administrador");
+        router.push(ROUTES.ADMIN_DASHBOARD);
+        router.refresh();
+        return true;
+    };
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
 
         try {
-            const { data: { user }, error } = await supabase.auth.signInWithPassword({
-                email,
-                password
-            });
-
-            if (error || !user) {
-                toast.error("Credenciales inválidas");
-                setIsLoading(false);
-                return;
-            }
-
-            // Consultar el rol del perfil
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('role')
-                .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
-                .limit(1)
-                .maybeSingle();
-
-            if (profile?.role !== 'admin') {
-                await supabase.auth.signOut();
-                toast.error("No tenés permisos de administrador");
-                setIsLoading(false);
-                return;
-            }
-
-            toast.success("Bienvenido Administrador");
-            router.push(ROUTES.ADMIN_DASHBOARD);
-            router.refresh();
-
+            await loginWithCredentials(email, password);
         } catch (error) {
             toast.error("Ocurrió un error al intentar iniciar sesión");
+        } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleDemoLogin = async () => {
+        if (!demoEmail || !demoPassword) {
+            toast.error("Credenciales demo no configuradas");
+            return;
+        }
+        setIsDemoLoading(true);
+        try {
+            await loginWithCredentials(demoEmail, demoPassword);
+        } catch (error) {
+            toast.error("Ocurrió un error al intentar iniciar sesión");
+        } finally {
+            setIsDemoLoading(false);
         }
     };
 
@@ -156,6 +179,33 @@ export default function AdminLoginPage() {
                         </Button>
                     </CardFooter>
                 </form>
+
+                {isDemoMode && (
+                    <div className="mx-6 mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                        <div>
+                            <p className="text-sm font-semibold text-foreground">Modo demo</p>
+                            <p className="text-xs text-muted-foreground">
+                                Este sitio es una demo pública: entrá al panel sin necesidad de credenciales propias.
+                            </p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                            disabled={isDemoLoading}
+                            onClick={handleDemoLogin}
+                        >
+                            {isDemoLoading ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Ingresando...
+                                </>
+                            ) : (
+                                "Entrar como Admin demo"
+                            )}
+                        </Button>
+                    </div>
+                )}
             </Card>
         </div>
     );
