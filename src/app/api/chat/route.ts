@@ -89,10 +89,9 @@ export async function POST(req: Request) {
     const messages = (body.messages || []) as ChatMessage[];
     const lastMessage = messages[messages.length - 1];
     const userQuery = lastMessage?.content?.toLowerCase() || "";
+    const normalizedUserQuery = userQuery.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
-    const isDemoAdminQuery = ["panel", "admin", "gestión", "gestion", "demo", "crm"].some((term) =>
-      userQuery.includes(term)
-    );
+    const isDemoAdminQuery = /\b(panel|admin|administracion|gestion|demo|crm)\b/.test(normalizedUserQuery);
 
     // Resolve mode / persona / context parameter
     let mode = (body.mode || body.persona || body.context || "client").toLowerCase();
@@ -481,15 +480,7 @@ Estructura JSON permitida en "data":
       }
     } else {
       // Client Local Rules Fallback
-      if (isDemoMode && isDemoAdminQuery) {
-        reply = "Sí, esta demo también tiene un panel de administración para recorrer el CRM de **New Brothers**. Podés entrar con el botón **Entrar como Admin demo** en `/admin-login` o abrirlo desde el botón de ayuda flotante. Por seguridad, no comparto contraseñas por el chat.";
-        dataPayload = {
-          type: "action",
-          label: "Entrar como Admin demo",
-          url: "/admin-login"
-        };
-      }
-      else if (userQuery.includes("hola") || userQuery.includes("buenas") || userQuery.includes("buen dia") || userQuery.includes("buena tarde")) {
+      if (userQuery.includes("hola") || userQuery.includes("buenas") || userQuery.includes("buen dia") || userQuery.includes("buena tarde")) {
         reply = "¡Hola! Bienvenido a **New Brothers**. Soy tu Asesor de Estética Masculina personal. ¿En qué te puedo ayudar hoy? Podés consultarme sobre nuestros servicios, reservar turnos, recomendaciones de cortes o conocer nuestros locales.";
       }
       else if (userQuery.includes("precio") || userQuery.includes("costo") || userQuery.includes("cuanto sale") || userQuery.includes("servicio") || userQuery.includes("menu")) {
@@ -569,11 +560,30 @@ Estructura JSON permitida en "data":
           };
         }
       }
-      else if (userQuery.includes("cancelar") || userQuery.includes("reprogramar") || userQuery.includes("politica")) {
+      else if (
+        normalizedUserQuery.includes("cancelar") ||
+        normalizedUserQuery.includes("reprogramar") ||
+        normalizedUserQuery.includes("politica") ||
+        normalizedUserQuery.includes("tolerancia") ||
+        normalizedUserQuery.includes("demoro") ||
+        normalizedUserQuery.includes("demoras") ||
+        normalizedUserQuery.includes("demora") ||
+        normalizedUserQuery.includes("demorar") ||
+        normalizedUserQuery.includes("retraso") ||
+        normalizedUserQuery.includes("llego tarde")
+      ) {
         reply = `**Políticas de Cancelación:** Podés cancelar o modificar tu turno de forma gratuita hasta 2 horas antes de la cita acordada a través de la sección Mi Cuenta.\n\n**Tolerancia de Retraso:** Agradecemos llegar 5 o 10 minutos antes. Si te demorás más de 10 minutos, es posible que debamos reprogramar el turno para no retrasar a los demás clientes.`;
       }
       else if (userQuery.includes("pago") || userQuery.includes("tarjeta") || userQuery.includes("mercado") || userQuery.includes("efectivo")) {
         reply = `**Medios de Pago:** Aceptamos efectivo en el local, transferencias bancarias y pagos online vía MercadoPago o tarjetas.`;
+      }
+      else if (isDemoMode && isDemoAdminQuery) {
+        reply = "Sí, esta demo también tiene un panel de administración para recorrer el CRM de **New Brothers**. Podés entrar con el botón **Entrar como Admin demo** en `/admin-login` o abrirlo desde el botón de ayuda flotante. Por seguridad, no comparto contraseñas por el chat.";
+        dataPayload = {
+          type: "action",
+          label: "Entrar como Admin demo",
+          url: "/admin-login"
+        };
       }
       else {
         reply = "Entiendo. En **New Brothers** nos enfocamos en brindarte la mejor experiencia de barbería. Si tenés dudas específicas sobre cómo reservar, precios de cortes, ubicaciones de nuestros locales o querés recomendaciones de estilos, ¡preguntame con confianza!";
