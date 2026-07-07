@@ -29,7 +29,7 @@ npm run lint    # eslint
 - `src/components/` — `ui/` (shadcn), `chat/AiAssistant.tsx`, `shop/CartDrawer.tsx`, `layout/`, `home/`, `tour/`
 - `src/lib/constants.ts` — config del negocio, labels de estados, rutas
 - `src/lib/utils.ts` — `formatPrice` (UYU), `generateTimeSlots`, `calculateEndTime`, `canCancelAppointment` (ventana 2 h)
-- `supabase/migrations/001_initial_schema.sql` — schema completo (espejo en `src/lib/supabase_schema.sql`)
+- `supabase/migrations/999_FULL_SETUP.sql` — script maestro para DB fresca 001→018, excepto 017; espejo en `src/lib/supabase_schema.sql`
 
 ## Reglas de negocio
 

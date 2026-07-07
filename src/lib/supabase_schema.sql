@@ -1,12 +1,301 @@
--- NB BARBER - DATABASE SCHEMA
--- Ejecuta este script en el SQL Editor de tu proyecto Supabase
+-- =====================================================
+-- NB BARBER - SCRIPT MAESTRO DE INSTALACIÓN
+-- Copia todo este contenido y pégalo en Supabase > SQL Editor
+-- Actualizado 2026-07-07. Equivale a correr 001 → 018 sobre una DB fresca,
+-- excepto 017_fix_service_images.sql (solo corrige DBs existentes con seeds viejos).
+-- Incluye branches/cash_movements/reminders_config/communication_logs.
+-- pg_cron (PARTE final) requiere habilitar la extensión primero en
+-- Dashboard > Database > Extensions.
+-- =====================================================
 
--- 1. Habilitar extensiones necesarias
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- =====================================================
+-- PARTE 1: ESQUEMA Y TABLAS
+-- =====================================================
 
--- 2. TABLA DE SUCURSALES (Branches)
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM ('cliente', 'barbero', 'admin');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE appointment_status AS ENUM ('pending', 'confirmed', 'completed', 'cancelled', 'no_show');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE order_status AS ENUM ('pending', 'paid', 'shipped', 'delivered', 'cancelled');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE payment_method AS ENUM ('mercadopago', 'efectivo', 'transferencia');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+-- TABLA: PROFILES
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    auth_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+    full_name TEXT,
+    phone TEXT,
+    avatar_url TEXT,
+    role user_role DEFAULT 'cliente',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_profiles_auth_user_id ON profiles(auth_user_id);
+
+-- TABLA: BARBERS
+CREATE TABLE IF NOT EXISTS barbers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    profile_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    bio TEXT,
+    avatar_url TEXT,
+    is_active BOOLEAN DEFAULT true,
+    working_hours JSONB DEFAULT '{"lunes": {"start": "09:00", "end": "20:00"}, "martes": {"start": "09:00", "end": "20:00"}, "miercoles": {"start": "09:00", "end": "20:00"}, "jueves": {"start": "09:00", "end": "20:00"}, "viernes": {"start": "09:00", "end": "20:00"}, "sabado": {"start": "09:00", "end": "18:00"}}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- TABLA: SERVICES
+CREATE TABLE IF NOT EXISTS services (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    price DECIMAL(10,2) NOT NULL,
+    duration_minutes INTEGER NOT NULL DEFAULT 30,
+    image_url TEXT,
+    is_active BOOLEAN DEFAULT true,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- INSERTAR SERVICIOS INICIALES
+INSERT INTO services (name, description, price, duration_minutes, image_url, sort_order) VALUES
+    ('Corte Clásico', 'Corte de precisión adaptado a tu estilo personal', 450, 30, '/images/hero/maquina-clippers.jpg', 1),
+    ('Corte + Barba', 'El combo completo para el caballero moderno', 750, 60, '/images/hero/detalle-corte.jpg', 2),
+    ('Diseño de Barba', 'Perfilado y mantenimiento profesional', 350, 30, '/images/hero/detalle-barba.jpg', 3);
+
+-- TABLA: APPOINTMENTS
+CREATE TABLE IF NOT EXISTS appointments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    barber_id UUID REFERENCES barbers(id) ON DELETE SET NULL,
+    service_id UUID REFERENCES services(id) ON DELETE SET NULL,
+    appointment_date DATE NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    status appointment_status DEFAULT 'pending',
+    notes TEXT,
+    style_reference TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(appointment_date);
+CREATE INDEX IF NOT EXISTS idx_appointments_barber_date ON appointments(barber_id, appointment_date);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_barber_slot
+ON appointments(barber_id, appointment_date, start_time)
+WHERE status NOT IN ('cancelled');
+
+-- TABLA: PRODUCTS
+CREATE TABLE IF NOT EXISTS products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    price DECIMAL(10,2) NOT NULL,
+    stock INTEGER DEFAULT 0,
+    low_stock_threshold INTEGER DEFAULT 5,
+    image_url TEXT,
+    category TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- TABLA: ORDERS
+CREATE TABLE IF NOT EXISTS orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+    total DECIMAL(10,2) NOT NULL DEFAULT 0,
+    status order_status DEFAULT 'pending',
+    payment_method payment_method,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- TABLA: ORDER_ITEMS
+CREATE TABLE IF NOT EXISTS order_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    unit_price DECIMAL(10,2) NOT NULL
+);
+
+-- TABLA: HAIRCUT_HISTORY
+CREATE TABLE IF NOT EXISTS haircut_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    barber_id UUID REFERENCES barbers(id) ON DELETE SET NULL,
+    service_id UUID REFERENCES services(id) ON DELETE SET NULL,
+    appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL,
+    notes TEXT,
+    photo_urls TEXT[] DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- TABLA: CASH_REGISTER
+CREATE TABLE IF NOT EXISTS cash_register (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    barber_id UUID REFERENCES barbers(id) ON DELETE SET NULL,
+    appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    payment_type TEXT CHECK (payment_type IN ('efectivo', 'transferencia')) NOT NULL,
+    register_date DATE DEFAULT CURRENT_DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- TABLA: LOOKBOOK
+CREATE TABLE IF NOT EXISTS lookbook (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    instagram_url TEXT,
+    tags TEXT[] DEFAULT '{}',
+    is_featured BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS (ROW LEVEL SECURITY)
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE barbers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE services ENABLE ROW LEVEL SECURITY;
+ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE haircut_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cash_register ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lookbook ENABLE ROW LEVEL SECURITY;
+
+-- POLICIES (Simplificadas para evitar errores si ya existen)
+DO $$ BEGIN
+    CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = auth_user_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = auth_user_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Allow insert during signup" ON profiles FOR INSERT WITH CHECK (auth.uid() = auth_user_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Anyone can view active barbers" ON barbers FOR SELECT USING (is_active = true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Anyone can view active services" ON services FOR SELECT USING (is_active = true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Clients view own appointments" ON appointments FOR SELECT USING (client_id IN (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Clients can create appointments" ON appointments FOR INSERT WITH CHECK (client_id IN (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Clients can update own appointments" ON appointments FOR UPDATE USING (client_id IN (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Anyone can view active products" ON products FOR SELECT USING (is_active = true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Clients view own orders" ON orders FOR SELECT USING (client_id IN (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Clients can create orders" ON orders FOR INSERT WITH CHECK (client_id IN (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Clients view own order items" ON order_items FOR SELECT USING (order_id IN (SELECT id FROM orders WHERE client_id IN (SELECT id FROM profiles WHERE auth_user_id = auth.uid())));
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Clients view own history" ON haircut_history FOR SELECT USING (client_id IN (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Anyone can view lookbook" ON lookbook FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+
+-- TRIGGER: New User
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.profiles (auth_user_id, full_name, avatar_url)
+    VALUES (
+        NEW.id,
+        NEW.raw_user_meta_data->>'full_name',
+        NEW.raw_user_meta_data->>'avatar_url'
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+
+-- =====================================================
+-- PARTE 2: DATOS DE PRUEBA (BARBEROS Y PRODUCTOS)
+-- =====================================================
+
+INSERT INTO barbers (name, bio, avatar_url, is_active) VALUES
+    ('Carlos', 'Especialista en cortes clásicos y modernos', '/images/barbers/carlos.jpg', true),
+    ('Miguel', 'Experto en diseño de barba y estilos urbanos', '/images/barbers/miguel.jpg', true),
+    ('Diego', 'Barbero con 10 años de experiencia', '/images/barbers/diego.jpg', true);
+
+INSERT INTO products (name, description, price, stock, category, image_url, is_active) VALUES
+    ('NB Matte Clay', 'Fijación fuerte, acabado mate natural', 750, 20, 'Styling', '/products/matte-clay.webp', true),
+    ('Beard Elixir - Sandalwood', 'Hidratación y brillo para tu barba', 600, 15, 'Barba', '/products/beard-elixir.webp', true),
+    ('Classic Pomade', 'Fijación media con brillo elegante', 550, 18, 'Styling', '/products/classic-pomade.webp', true),
+    ('Carbon Daily Shampoo', 'Limpieza profunda sin resecar el cabello', 450, 25, 'Cabello', '/products/shampoo.webp', true),
+    ('Post-Shave Cooling Balm', 'Suavidad y calma después del afeitado', 500, 12, 'Afeitado', '/products/cooling-balm.webp', true);
+
+
+-- =====================================================
+-- PARTE 3: DATOS DE LOOKBOOK
+-- =====================================================
+
+DELETE FROM lookbook;
+
+INSERT INTO lookbook (title, image_url, tags, is_featured, instagram_url) VALUES
+    ('Fade Degradado Alto', '/lookbook/fade-cut.jpg', ARRAY['corte', 'fade', 'moderno'], true, 'https://instagram.com/newbrothers.uy'),
+    ('Perfilado de Barba', '/lookbook/beard-trim.jpg', ARRAY['barba', 'grooming', 'tijera'], true, 'https://instagram.com/newbrothers.uy'),
+    ('Afeitado Hot Towel', '/lookbook/hot-towel.jpg', ARRAY['afeitado', 'spa', 'clásico'], true, NULL),
+    ('Styling Texturizado', '/lookbook/styling-pomade.jpg', ARRAY['styling', 'producto', 'textura'], false, NULL),
+    ('Instrumentos de Precisión', '/lookbook/clipper-detail.jpg', ARRAY['herramientas', 'calidad'], false, NULL),
+    ('Corte a Tijera', '/lookbook/scissor-cut.jpg', ARRAY['corte', 'tijera', 'clásico'], false, NULL),
+    ('Ambiente Industrial', '/lookbook/barber-chair.jpg', ARRAY['local', 'ambiente'], false, NULL),
+    ('Lavado Premium', '/lookbook/hair-wash.jpg', ARRAY['servicio', 'relax'], false, NULL);
+
+-- =====================================================
+-- PARTE 4: SUCURSALES, CAJA Y COMUNICACIONES
+-- (tablas que antes solo existían en src/lib/supabase_schema.sql)
+-- =====================================================
+
 CREATE TABLE IF NOT EXISTS branches (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     address TEXT,
     phone TEXT,
@@ -17,23 +306,21 @@ CREATE TABLE IF NOT EXISTS branches (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. TABLA DE MOVIMIENTOS DE CAJA (Cash Movements)
 CREATE TABLE IF NOT EXISTS cash_movements (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
     category TEXT NOT NULL CHECK (category IN ('service', 'product', 'tip', 'adjustment', 'supply', 'salary', 'rent', 'other')),
     amount DECIMAL(10, 2) NOT NULL,
     payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'card', 'transfer', 'other')),
     description TEXT,
     reference_id UUID, -- ID de la cita o venta si corresponde
-    branch_id UUID REFERENCES branches(id), -- Opcional: si manejas múltiples cajas
+    branch_id UUID REFERENCES branches(id),
     created_by UUID REFERENCES auth.users(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. CONFIGURACIÓN DE RECORDATORIOS (Reminders Config)
 CREATE TABLE IF NOT EXISTS reminders_config (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     days_since_last_visit INTEGER NOT NULL DEFAULT 30,
     message_template TEXT NOT NULL DEFAULT 'Hola {nombre}, hace tiempo no te vemos por NB Barber. ¡Reserva hoy y renueva tu estilo!',
     is_active BOOLEAN DEFAULT false,
@@ -42,9 +329,8 @@ CREATE TABLE IF NOT EXISTS reminders_config (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. LOG DE COMUNICACIONES (Communication Logs)
 CREATE TABLE IF NOT EXISTS communication_logs (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_name TEXT, -- Guardamos nombre por si el usuario no está registrado
     client_phone TEXT,
     message_sent TEXT,
@@ -53,45 +339,274 @@ CREATE TABLE IF NOT EXISTS communication_logs (
     metadata JSONB
 );
 
--- 6. POLÍTICAS DE SEGURIDAD (RLS)
--- Habilitar RLS en todas las tablas nuevas
 ALTER TABLE branches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cash_movements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reminders_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE communication_logs ENABLE ROW LEVEL SECURITY;
+-- (las policies de estas tablas se crean en la PARTE 7, ya endurecidas)
 
--- Políticas 'Abiertas' para desarrolladores (Ajustar en producción para solo admins)
--- Permitir todo acceso a usuarios autenticados (o anon si es necesario para el demo)
-
--- Policies for branches
-CREATE POLICY "Enable all access for authenticated users on branches"
-ON branches FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
-CREATE POLICY "Enable read access for anon on branches"
-ON branches FOR SELECT TO anon USING (true); -- Clientes necesitan ver sucursales
-
--- Policies for cash_movements
-CREATE POLICY "Enable all access for authenticated users on cash_movements"
-ON cash_movements FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
--- Policies for reminders_config
-CREATE POLICY "Enable all access for authenticated users on reminders_config"
-ON reminders_config FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
--- Policies for communication_logs
-CREATE POLICY "Enable all access for authenticated users on communication_logs"
-ON communication_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
--- INSERTAR DATOS INICIALES (Seed Data)
--- Crear una sucursal por defecto si no existe
+-- Seed mínimo
 INSERT INTO branches (name, address, is_active)
 SELECT 'Casa Central', 'Av. Principal 1234', true
 WHERE NOT EXISTS (SELECT 1 FROM branches);
 
--- Configuración de recordatorio por defecto
 INSERT INTO reminders_config (days_since_last_visit, message_template, is_active)
 SELECT 25, '¡Hola! Hace 25 días de tu último corte en NB Barber. ¿Listo para volver? Reserva aquí: https://nbbarber.com', true
 WHERE NOT EXISTS (SELECT 1 FROM reminders_config);
+
+
+-- =====================================================
+-- PARTE 5: CHECKOUT (004 + 005)
+-- =====================================================
+
+DO $$ BEGIN
+    CREATE POLICY "Clients can insert order items"
+      ON order_items
+      FOR INSERT
+      WITH CHECK (
+        order_id IN (
+          SELECT id FROM orders
+          WHERE client_id IN (
+            SELECT id FROM profiles WHERE auth_user_id = auth.uid()
+          )
+        )
+      );
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Función segura para descontar stock (SECURITY DEFINER salta RLS en products)
+CREATE OR REPLACE FUNCTION decrement_stock(p_product_id UUID, p_quantity INT)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE products
+  SET stock = stock - p_quantity
+  WHERE id = p_product_id
+  AND stock >= p_quantity;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Stock insuficiente para el producto %', p_product_id;
+  END IF;
+END;
+$$;
+
+-- Crea la orden, sus items y descuenta el stock en UNA sola transacción.
+-- Los precios se leen de products: no se confía en los montos del cliente.
+CREATE OR REPLACE FUNCTION create_order_with_items(
+  p_payment_method payment_method,
+  p_items JSONB -- [{"product_id": "...", "quantity": 1}, ...]
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_client_id UUID;
+  v_order_id UUID;
+  v_item RECORD;
+  v_product RECORD;
+  v_subtotal NUMERIC(10,2) := 0;
+BEGIN
+  SELECT id INTO v_client_id
+  FROM profiles
+  WHERE auth_user_id = auth.uid() OR id = auth.uid()
+  LIMIT 1;
+
+  IF v_client_id IS NULL THEN
+    RAISE EXCEPTION 'PERFIL_NO_ENCONTRADO';
+  END IF;
+
+  IF p_items IS NULL OR jsonb_array_length(p_items) = 0 THEN
+    RAISE EXCEPTION 'CARRITO_VACIO';
+  END IF;
+
+  -- Validar stock con lock de fila (FOR UPDATE) y calcular subtotal con precios reales
+  FOR v_item IN
+    SELECT (e->>'product_id')::UUID AS product_id, (e->>'quantity')::INT AS quantity
+    FROM jsonb_array_elements(p_items) e
+  LOOP
+    IF v_item.quantity IS NULL OR v_item.quantity <= 0 THEN
+      RAISE EXCEPTION 'CANTIDAD_INVALIDA';
+    END IF;
+
+    SELECT id, name, price, stock INTO v_product
+    FROM products
+    WHERE id = v_item.product_id AND is_active = TRUE
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'PRODUCTO_NO_DISPONIBLE';
+    END IF;
+
+    IF v_product.stock < v_item.quantity THEN
+      RAISE EXCEPTION 'STOCK_INSUFICIENTE:%', v_product.name;
+    END IF;
+
+    v_subtotal := v_subtotal + (v_product.price * v_item.quantity);
+  END LOOP;
+
+  INSERT INTO orders (client_id, subtotal, total, status, payment_method)
+  VALUES (v_client_id, v_subtotal, v_subtotal, 'pending', p_payment_method)
+  RETURNING id INTO v_order_id;
+
+  FOR v_item IN
+    SELECT (e->>'product_id')::UUID AS product_id, (e->>'quantity')::INT AS quantity
+    FROM jsonb_array_elements(p_items) e
+  LOOP
+    INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+    SELECT v_order_id, p.id, v_item.quantity, p.price
+    FROM products p
+    WHERE p.id = v_item.product_id;
+
+    UPDATE products
+    SET stock = stock - v_item.quantity
+    WHERE id = v_item.product_id;
+  END LOOP;
+
+  RETURN v_order_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION create_order_with_items(payment_method, JSONB) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION create_order_with_items(payment_method, JSONB) TO authenticated;
+
+
+-- =====================================================
+-- PARTE 6: FUNCIONES HELPER DE ROLES (006)
+-- =====================================================
+
+-- ¿El usuario actual es admin? (tolera profiles.id == auth.uid() o auth_user_id)
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE (auth_user_id = auth.uid() OR id = auth.uid())
+      AND role = 'admin'
+  );
+$$;
+
+-- Barbero vinculado al usuario actual (NULL si no es barbero)
+CREATE OR REPLACE FUNCTION current_barber_id()
+RETURNS UUID
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT b.id FROM barbers b
+  JOIN profiles p ON b.profile_id = p.id
+  WHERE (p.auth_user_id = auth.uid() OR p.id = auth.uid())
+    AND b.is_active = true
+  LIMIT 1;
+$$;
+
+
+-- =====================================================
+-- PARTE 7: RLS ENDURECIDO PARA PRODUCCIÓN (006)
+-- =====================================================
+
+-- Sucursales: lectura pública, escritura solo admin
+DROP POLICY IF EXISTS "Anyone can view active branches" ON branches;
+CREATE POLICY "Anyone can view active branches" ON branches
+  FOR SELECT USING (is_active = true OR is_admin());
+
+DROP POLICY IF EXISTS "Admins manage branches" ON branches;
+CREATE POLICY "Admins manage branches" ON branches
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+-- Caja y comunicaciones: solo admin
+DROP POLICY IF EXISTS "Admins manage cash movements" ON cash_movements;
+CREATE POLICY "Admins manage cash movements" ON cash_movements
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage reminders config" ON reminders_config;
+CREATE POLICY "Admins manage reminders config" ON reminders_config
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage communication logs" ON communication_logs;
+CREATE POLICY "Admins manage communication logs" ON communication_logs
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage cash register" ON cash_register;
+CREATE POLICY "Admins manage cash register" ON cash_register
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+-- Catálogo: lectura pública de activos, escritura solo admin
+DROP POLICY IF EXISTS "Admins manage services" ON services;
+CREATE POLICY "Admins manage services" ON services
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage products" ON products;
+CREATE POLICY "Admins manage products" ON products
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage barbers" ON barbers;
+CREATE POLICY "Admins manage barbers" ON barbers
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage lookbook" ON lookbook;
+CREATE POLICY "Admins manage lookbook" ON lookbook
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+-- Citas: barbero ve y actualiza las asignadas a él, admin todo
+DROP POLICY IF EXISTS "Barbers view own appointments" ON appointments;
+CREATE POLICY "Barbers view own appointments" ON appointments
+  FOR SELECT USING (barber_id = current_barber_id());
+
+DROP POLICY IF EXISTS "Barbers update own appointments" ON appointments;
+CREATE POLICY "Barbers update own appointments" ON appointments
+  FOR UPDATE USING (barber_id = current_barber_id())
+  WITH CHECK (barber_id = current_barber_id());
+
+DROP POLICY IF EXISTS "Admins manage appointments" ON appointments;
+CREATE POLICY "Admins manage appointments" ON appointments
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+-- Disponibilidad de agenda sin exponer citas de otros clientes
+CREATE OR REPLACE FUNCTION get_booked_slots(p_barber_id UUID, p_date DATE)
+RETURNS TABLE (start_time TIME, end_time TIME)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT a.start_time, a.end_time
+  FROM appointments a
+  WHERE a.barber_id = p_barber_id
+    AND a.appointment_date = p_date
+    AND a.status IN ('pending', 'confirmed');
+$$;
+
+GRANT EXECUTE ON FUNCTION get_booked_slots(UUID, DATE) TO anon, authenticated;
+
+-- Órdenes / items / historial: admin gestiona todo
+DROP POLICY IF EXISTS "Admins manage orders" ON orders;
+CREATE POLICY "Admins manage orders" ON orders
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage order items" ON order_items;
+CREATE POLICY "Admins manage order items" ON order_items
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Admins manage haircut history" ON haircut_history;
+CREATE POLICY "Admins manage haircut history" ON haircut_history
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Barbers manage own haircut history" ON haircut_history;
+CREATE POLICY "Barbers manage own haircut history" ON haircut_history
+  FOR ALL USING (barber_id = current_barber_id())
+  WITH CHECK (barber_id = current_barber_id());
+
+-- Perfiles: admin y barberos pueden ver perfiles de clientes
+DROP POLICY IF EXISTS "Staff can view profiles" ON profiles;
+CREATE POLICY "Staff can view profiles" ON profiles
+  FOR SELECT USING (is_admin() OR current_barber_id() IS NOT NULL);
+
+DROP POLICY IF EXISTS "Admins update profiles" ON profiles;
+CREATE POLICY "Admins update profiles" ON profiles
+  FOR UPDATE USING (is_admin()) WITH CHECK (is_admin());
+
 
 -- =============================================================
 -- 007 — CRM: notas de cliente, logs vinculados, multi-sucursal,
@@ -162,7 +677,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 );
 
 -- 2. Agregar columna en appointments para vincular cita a una suscripción
-ALTER TABLE appointments 
+ALTER TABLE appointments
   ADD COLUMN IF NOT EXISTS subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL;
 
 -- 3. Habilitar Row Level Security (RLS) en la tabla
@@ -173,7 +688,7 @@ DROP POLICY IF EXISTS "Clients view their own subscriptions" ON subscriptions;
 CREATE POLICY "Clients view their own subscriptions" ON subscriptions
   FOR SELECT USING (
     client_id IN (
-      SELECT id FROM profiles 
+      SELECT id FROM profiles
       WHERE auth_user_id = auth.uid() OR id = auth.uid()
     )
   );
@@ -182,7 +697,7 @@ DROP POLICY IF EXISTS "Clients insert their own subscriptions" ON subscriptions;
 CREATE POLICY "Clients insert their own subscriptions" ON subscriptions
   FOR INSERT WITH CHECK (
     client_id IN (
-      SELECT id FROM profiles 
+      SELECT id FROM profiles
       WHERE auth_user_id = auth.uid() OR id = auth.uid()
     )
   );
@@ -191,7 +706,7 @@ DROP POLICY IF EXISTS "Clients update/cancel their own subscriptions" ON subscri
 CREATE POLICY "Clients update/cancel their own subscriptions" ON subscriptions
   FOR UPDATE USING (
     client_id IN (
-      SELECT id FROM profiles 
+      SELECT id FROM profiles
       WHERE auth_user_id = auth.uid() OR id = auth.uid()
     )
   );
@@ -565,9 +1080,6 @@ SELECT cron.schedule(
 );
 
 
-);
-
-
 -- =============================================================
 -- 012 — Contabilidad: compensación por barbero, cobro de citas,
 -- propinas y liquidaciones. Ejecutar a mano en el SQL Editor
@@ -636,7 +1148,7 @@ BEGIN
       'Migrado de cash_register', cr.barber_id,
       COALESCE(cr.created_at, cr.register_date::timestamptz)
     FROM cash_register cr;
-    
+
     DROP POLICY IF EXISTS "Admins manage cash register" ON cash_register;
     DROP TABLE IF EXISTS cash_register;
   END IF;
@@ -667,7 +1179,8 @@ BEGIN
     RAISE EXCEPTION 'METODO_INVALIDO';
   END IF;
 
-  SELECT a.id, a.status, a.barber_id, b.branch_id AS barber_branch_id
+  SELECT a.id, a.status, a.barber_id, a.client_id, a.service_id,
+         b.branch_id AS barber_branch_id
   INTO v_apt
   FROM appointments a
   JOIN barbers b ON b.id = a.barber_id
@@ -700,6 +1213,12 @@ BEGIN
     VALUES ('income', 'tip', p_tip_amount, p_payment_method,
       'Propina', v_apt.barber_id, p_appointment_id,
       v_apt.barber_branch_id, auth.uid());
+  END IF;
+
+  -- Registrar en el historial de cortes (fidelización). Solo clientes con perfil.
+  IF v_apt.client_id IS NOT NULL THEN
+    INSERT INTO haircut_history (client_id, barber_id, service_id, appointment_id)
+    VALUES (v_apt.client_id, v_apt.barber_id, v_apt.service_id, p_appointment_id);
   END IF;
 END; $$;
 
@@ -808,17 +1327,6 @@ DECLARE
   v JSONB;
   v_settlement_id UUID;
   v_movement_id UUID;
-END; $$; -- NOTA: Completamos el cuerpo en el RPC final de abajo.
-
-CREATE OR REPLACE FUNCTION close_barber_settlement(
-  p_barber_id UUID, p_from DATE, p_to DATE,
-  p_register_payout BOOLEAN DEFAULT false
-) RETURNS UUID
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v JSONB;
-  v_settlement_id UUID;
-  v_movement_id UUID;
 BEGIN
   IF NOT is_admin() THEN RAISE EXCEPTION 'NO_AUTORIZADO'; END IF;
 
@@ -880,3 +1388,429 @@ INSERT INTO app_settings (key, value, description) VALUES
   ('feature.mensajes_crm',  'true'::jsonb, 'Mensajes y recordatorios por WhatsApp')
 ON CONFLICT (key) DO NOTHING;
 
+-- =============================================================
+-- 015 — Nuevos feature flags para lookbook, reservas_online y portal_barbero.
+-- =============================================================
+
+INSERT INTO app_settings (key, value, description) VALUES
+  ('feature.lookbook', 'true'::jsonb, 'Galería de estilos (lookbook)'),
+  ('feature.reservas_online', 'true'::jsonb, 'Reservas online (wizard web)'),
+  ('feature.portal_barbero', 'true'::jsonb, 'Portal de agenda para barberos')
+ON CONFLICT (key) DO NOTHING;
+
+-- =====================================================
+-- MIGRACIÓN 016: CONFIGURACIÓN DE STORAGE BUCKET 'MEDIA'
+-- =====================================================
+
+-- 1. Crear el bucket público 'media' si no existe
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('media', 'media', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Eliminar políticas existentes para evitar conflictos
+DROP POLICY IF EXISTS "Public Read Access" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Insert Access" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Update Access" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Delete Access" ON storage.objects;
+
+-- 3. Crear política para permitir lectura pública de los archivos en 'media'
+CREATE POLICY "Public Read Access" ON storage.objects
+  FOR SELECT
+  USING (bucket_id = 'media');
+
+-- 4. Crear política para permitir inserción de archivos en 'media' a admins autenticados
+CREATE POLICY "Admin Insert Access" ON storage.objects
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'media' AND public.is_admin());
+
+-- 5. Crear política para permitir actualización de archivos en 'media' a admins autenticados
+CREATE POLICY "Admin Update Access" ON storage.objects
+  FOR UPDATE
+  TO authenticated
+  USING (bucket_id = 'media' AND public.is_admin())
+  WITH CHECK (bucket_id = 'media' AND public.is_admin());
+
+-- 6. Crear política para permitir borrado de archivos en 'media' a admins autenticados
+CREATE POLICY "Admin Delete Access" ON storage.objects
+  FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'media' AND public.is_admin());
+
+-- =============================================================
+-- 2026-07 — CRM paginado, agenda admin robusta e historial único
+-- =============================================================
+
+-- Una cita completada debe generar a lo sumo una fila de historial.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_haircut_history_appointment_unique
+  ON haircut_history(appointment_id)
+  WHERE appointment_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION record_haircut_history_for_appointment(
+  p_appointment_id UUID
+) RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_apt RECORD;
+BEGIN
+  SELECT id, client_id, barber_id, service_id
+  INTO v_apt
+  FROM appointments
+  WHERE id = p_appointment_id;
+
+  IF NOT FOUND OR v_apt.client_id IS NULL THEN
+    RETURN;
+  END IF;
+
+  INSERT INTO haircut_history (client_id, barber_id, service_id, appointment_id)
+  VALUES (v_apt.client_id, v_apt.barber_id, v_apt.service_id, v_apt.id)
+  ON CONFLICT (appointment_id) WHERE appointment_id IS NOT NULL DO NOTHING;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION record_haircut_history_for_appointment(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION record_haircut_history_for_appointment(UUID) TO authenticated;
+
+CREATE OR REPLACE FUNCTION appointments_completed_history_trigger()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.status = 'completed' AND OLD.status IS DISTINCT FROM NEW.status THEN
+    PERFORM record_haircut_history_for_appointment(NEW.id);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_appointments_completed_history ON appointments;
+CREATE TRIGGER trg_appointments_completed_history
+  AFTER UPDATE OF status ON appointments
+  FOR EACH ROW
+  WHEN (NEW.status = 'completed')
+  EXECUTE FUNCTION appointments_completed_history_trigger();
+
+REVOKE EXECUTE ON FUNCTION appointments_completed_history_trigger() FROM PUBLIC, anon;
+
+-- Reemplaza la versión de 014: el trigger registra el historial con idempotencia.
+CREATE OR REPLACE FUNCTION complete_appointment_with_payment(
+  p_appointment_id UUID,
+  p_final_amount NUMERIC,
+  p_payment_method TEXT,
+  p_tip_amount NUMERIC DEFAULT 0
+) RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_apt RECORD;
+BEGIN
+  IF p_final_amount IS NULL OR p_final_amount < 0 THEN
+    RAISE EXCEPTION 'MONTO_INVALIDO';
+  END IF;
+  IF p_tip_amount IS NULL OR p_tip_amount < 0 THEN
+    RAISE EXCEPTION 'PROPINA_INVALIDA';
+  END IF;
+  IF p_payment_method NOT IN ('cash', 'card', 'transfer', 'other') THEN
+    RAISE EXCEPTION 'METODO_INVALIDO';
+  END IF;
+
+  SELECT a.id, a.status, a.barber_id, b.branch_id AS barber_branch_id
+  INTO v_apt
+  FROM appointments a
+  JOIN barbers b ON b.id = a.barber_id
+  WHERE a.id = p_appointment_id
+  FOR UPDATE OF a;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'CITA_NO_ENCONTRADA'; END IF;
+  IF NOT (is_admin() OR v_apt.barber_id = current_barber_id()) THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+  IF v_apt.status NOT IN ('pending', 'confirmed') THEN
+    RAISE EXCEPTION 'ESTADO_INVALIDO';
+  END IF;
+
+  UPDATE appointments SET status = 'completed' WHERE id = p_appointment_id;
+
+  BEGIN
+    INSERT INTO cash_movements (type, category, amount, payment_method,
+      description, barber_id, appointment_id, branch_id, created_by)
+    VALUES ('income', 'service', p_final_amount, p_payment_method,
+      'Cobro de cita', v_apt.barber_id, p_appointment_id,
+      v_apt.barber_branch_id, auth.uid());
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'YA_COBRADA';
+  END;
+
+  IF p_tip_amount > 0 THEN
+    INSERT INTO cash_movements (type, category, amount, payment_method,
+      description, barber_id, appointment_id, branch_id, created_by)
+    VALUES ('income', 'tip', p_tip_amount, p_payment_method,
+      'Propina', v_apt.barber_id, p_appointment_id,
+      v_apt.barber_branch_id, auth.uid());
+  END IF;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION complete_appointment_with_payment(UUID, NUMERIC, TEXT, NUMERIC) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION complete_appointment_with_payment(UUID, NUMERIC, TEXT, NUMERIC) TO authenticated;
+
+CREATE OR REPLACE FUNCTION admin_update_appointment_status(
+  p_appointment_id UUID,
+  p_status TEXT
+) RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_apt RECORD;
+  v_status appointment_status;
+BEGIN
+  BEGIN
+    v_status := p_status::appointment_status;
+  EXCEPTION WHEN invalid_text_representation THEN
+    RAISE EXCEPTION 'ESTADO_INVALIDO';
+  END;
+
+  SELECT id, barber_id, status
+  INTO v_apt
+  FROM appointments
+  WHERE id = p_appointment_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'CITA_NO_EXISTE'; END IF;
+  IF NOT (is_admin() OR v_apt.barber_id = current_barber_id()) THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+
+  UPDATE appointments
+  SET status = v_status
+  WHERE id = p_appointment_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION admin_update_appointment_status(UUID, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION admin_update_appointment_status(UUID, TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION admin_create_appointment(
+  p_client_name TEXT,
+  p_client_phone TEXT,
+  p_service_id UUID,
+  p_barber_id UUID,
+  p_date DATE,
+  p_start_time TIME,
+  p_notes TEXT DEFAULT NULL
+) RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_client_id UUID;
+  v_duration INT;
+  v_end_time TIME;
+  v_appointment_id UUID;
+  v_client_name TEXT := NULLIF(BTRIM(p_client_name), '');
+  v_client_phone TEXT := NULLIF(BTRIM(p_client_phone), '');
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+  IF v_client_name IS NULL THEN
+    RAISE EXCEPTION 'CLIENTE_INVALIDO';
+  END IF;
+
+  SELECT duration_minutes INTO v_duration
+  FROM services
+  WHERE id = p_service_id AND is_active = true;
+  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICIO_INACTIVO'; END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM barbers WHERE id = p_barber_id AND is_active = true) THEN
+    RAISE EXCEPTION 'BARBERO_INACTIVO';
+  END IF;
+
+  v_end_time := p_start_time + make_interval(mins => v_duration);
+
+  IF (p_date + p_start_time) <= (now() AT TIME ZONE 'America/Montevideo') THEN
+    RAISE EXCEPTION 'HORARIO_PASADO';
+  END IF;
+
+  IF NOT is_slot_bookable(p_barber_id, p_date, p_start_time, v_end_time) THEN
+    RAISE EXCEPTION 'FUERA_DE_HORARIO';
+  END IF;
+
+  IF v_client_phone IS NOT NULL THEN
+    SELECT id INTO v_client_id
+    FROM profiles
+    WHERE phone = v_client_phone
+      AND role = 'cliente'
+    ORDER BY created_at DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_client_id IS NULL THEN
+    INSERT INTO profiles (full_name, phone, role)
+    VALUES (v_client_name, v_client_phone, 'cliente')
+    RETURNING id INTO v_client_id;
+  ELSE
+    UPDATE profiles
+    SET full_name = COALESCE(NULLIF(full_name, ''), v_client_name)
+    WHERE id = v_client_id;
+  END IF;
+
+  BEGIN
+    INSERT INTO appointments (client_id, barber_id, service_id, appointment_date,
+      start_time, end_time, status, notes)
+    VALUES (v_client_id, p_barber_id, p_service_id, p_date,
+      p_start_time, v_end_time, 'confirmed', p_notes)
+    RETURNING id INTO v_appointment_id;
+  EXCEPTION
+    WHEN exclusion_violation OR unique_violation THEN
+      RAISE EXCEPTION 'SLOT_OCUPADO';
+  END;
+
+  RETURN v_appointment_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION admin_create_appointment(TEXT, TEXT, UUID, UUID, DATE, TIME, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION admin_create_appointment(TEXT, TEXT, UUID, UUID, DATE, TIME, TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION admin_reschedule_appointment(
+  p_appointment_id UUID,
+  p_date DATE,
+  p_start_time TIME
+) RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_apt RECORD;
+  v_duration INT;
+  v_end_time TIME;
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+
+  SELECT a.id, a.status, a.barber_id, a.service_id, s.duration_minutes
+  INTO v_apt
+  FROM appointments a
+  JOIN services s ON s.id = a.service_id
+  WHERE a.id = p_appointment_id
+  FOR UPDATE OF a;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'CITA_NO_EXISTE'; END IF;
+  IF v_apt.status NOT IN ('pending', 'confirmed') THEN
+    RAISE EXCEPTION 'ESTADO_INVALIDO';
+  END IF;
+
+  v_duration := v_apt.duration_minutes;
+  v_end_time := p_start_time + make_interval(mins => v_duration);
+
+  IF (p_date + p_start_time) <= (now() AT TIME ZONE 'America/Montevideo') THEN
+    RAISE EXCEPTION 'HORARIO_PASADO';
+  END IF;
+
+  IF NOT is_slot_bookable(v_apt.barber_id, p_date, p_start_time, v_end_time) THEN
+    RAISE EXCEPTION 'FUERA_DE_HORARIO';
+  END IF;
+
+  BEGIN
+    UPDATE appointments
+    SET appointment_date = p_date,
+        start_time = p_start_time,
+        end_time = v_end_time
+    WHERE id = p_appointment_id;
+  EXCEPTION
+    WHEN exclusion_violation OR unique_violation THEN
+      RAISE EXCEPTION 'SLOT_OCUPADO';
+  END;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION admin_reschedule_appointment(UUID, DATE, TIME) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION admin_reschedule_appointment(UUID, DATE, TIME) TO authenticated;
+
+CREATE OR REPLACE FUNCTION get_clients_overview_page(
+  p_search TEXT DEFAULT NULL,
+  p_inactive_only BOOLEAN DEFAULT false,
+  p_inactive_days INT DEFAULT 30,
+  p_limit INT DEFAULT 20,
+  p_offset INT DEFAULT 0
+) RETURNS TABLE (
+  id UUID,
+  full_name TEXT,
+  phone TEXT,
+  avatar_url TEXT,
+  created_at TIMESTAMPTZ,
+  notes TEXT,
+  last_visit DATE,
+  total_appointments BIGINT,
+  total_spent NUMERIC,
+  total_count BIGINT
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_search TEXT := LOWER(BTRIM(COALESCE(p_search, '')));
+  v_limit INT := LEAST(GREATEST(COALESCE(p_limit, 20), 1), 100);
+  v_offset INT := GREATEST(COALESCE(p_offset, 0), 0);
+  v_inactive_days INT := GREATEST(COALESCE(p_inactive_days, 30), 1);
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+
+  RETURN QUERY
+  WITH overview AS (
+    SELECT
+      p.id,
+      p.full_name,
+      p.phone,
+      p.avatar_url,
+      p.created_at,
+      p.notes,
+      MAX(a.appointment_date) FILTER (WHERE a.status = 'completed')::DATE AS last_visit,
+      COUNT(a.id) FILTER (WHERE a.status = 'completed')::BIGINT AS total_appointments,
+      (
+        COALESCE(SUM(s.price) FILTER (WHERE a.status = 'completed'), 0)
+        + COALESCE((
+          SELECT SUM(o.total)
+          FROM orders o
+          WHERE o.client_id = p.id
+            AND o.status IN ('paid', 'shipped', 'delivered')
+        ), 0)
+      )::NUMERIC AS total_spent
+    FROM profiles p
+    LEFT JOIN appointments a ON a.client_id = p.id
+    LEFT JOIN services s ON s.id = a.service_id
+    WHERE p.role = 'cliente'
+    GROUP BY p.id
+  ),
+  filtered AS (
+    SELECT *
+    FROM overview o
+    WHERE (
+        v_search = ''
+        OR LOWER(COALESCE(o.full_name, '')) LIKE '%' || v_search || '%'
+        OR LOWER(COALESCE(o.phone, '')) LIKE '%' || v_search || '%'
+      )
+      AND (
+        NOT p_inactive_only
+        OR o.last_visit IS NULL
+        OR o.last_visit < (CURRENT_DATE - v_inactive_days)
+      )
+  )
+  SELECT
+    f.id,
+    f.full_name,
+    f.phone,
+    f.avatar_url,
+    f.created_at,
+    f.notes,
+    f.last_visit,
+    f.total_appointments,
+    f.total_spent,
+    COUNT(*) OVER()::BIGINT AS total_count
+  FROM filtered f
+  ORDER BY
+    CASE WHEN p_inactive_only THEN f.last_visit END ASC NULLS LAST,
+    CASE WHEN NOT p_inactive_only THEN f.last_visit END DESC NULLS LAST,
+    f.created_at DESC
+  LIMIT v_limit
+  OFFSET v_offset;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION get_clients_overview_page(TEXT, BOOLEAN, INT, INT, INT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_clients_overview_page(TEXT, BOOLEAN, INT, INT, INT) TO authenticated;

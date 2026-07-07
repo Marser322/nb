@@ -4,7 +4,7 @@ Assets generados con IA como demo de alta calidad. Para reemplazo real, mantener
 
 ## Criterios globales
 
-- Estética: fotografía realista, barbería premium, oscuro únicamente, negro/charcoal con acentos dorados `#D4AF37`.
+- Estética: fotografía realista, barbería premium, compatible con tema híbrido claro/oscuro; base negro/charcoal con acentos dorados `#D4AF37`, usable también sobre fondos claros marfil/crema.
 - Luz: cálida, tenue, tipo espejo/sillón/metal, sombras suaves.
 - Evitar: texto dentro de imagen, marcas, logos de terceros, agua, manos deformes, fondos desordenados.
 - Formatos finales: `.jpg` para hero/features/barberos y sucursales; Open Graph sale por `src/app/opengraph-image.tsx` en 1200x630.

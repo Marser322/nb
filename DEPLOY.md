@@ -14,7 +14,8 @@ Runbook para llevar NB Barber a produccion con Supabase Cloud free tier y backup
    - Abrir `supabase/migrations/999_FULL_SETUP.sql`.
    - Copiar todo el archivo y pegarlo una sola vez en Supabase -> SQL Editor.
    - Ejecutar el script completo.
-   - Este archivo equivale al setup consolidado `001 -> 010`; no correr migraciones una por una para una DB nueva.
+   - Este archivo equivale al setup consolidado `001 -> 018`, excepto `017_fix_service_images.sql` porque solo corrige DBs existentes con seeds viejos. No correr migraciones una por una para una DB nueva.
+   - En una DB existente, correr las migraciones pendientes `011 -> 018` en orden manual desde SQL Editor si todavia no fueron aplicadas.
 4. Crear el usuario admin real.
    - Registrar el email del dueño en Supabase Auth.
    - En SQL Editor, asignar rol admin al perfil creado:
@@ -28,7 +29,7 @@ where auth_user_id = (
 ```
 
 5. Cargar datos reales minimos.
-   - Sucursales en `branches` usando la columna real `active`.
+   - Sucursales en `branches` usando la columna real `is_active`.
    - Barberos con `branch_id`.
    - Servicios con precios y `duration_minutes` reales.
    - Productos con stock y umbrales de stock bajo.
@@ -138,13 +139,13 @@ pg_restore -d nbbarber_restore_test /var/backups/nbbarber/nbbarber-YYYY-MM-DD.du
 Opcion recomendada: Vercel.
 
 1. Conectar el repo.
-2. Cargar las variables de entorno del punto 2.
+2. Cargar las variables de entorno del punto 3.
 3. Configurar el dominio custom.
 4. Deploy.
 5. Verificar con el dominio final:
    - `/robots.txt`
    - `/sitemap.xml`
-   - `/og-image.png`
+   - `/opengraph-image`
    - flujo de reset de password hacia `/actualizar-password`
 
 Opcion alternativa: VPS.

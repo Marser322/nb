@@ -29,7 +29,7 @@ npm run lint    # eslint
 - `src/components/` — `ui/` (shadcn), `chat/AiAssistant.tsx`, `shop/CartDrawer.tsx`, `layout/`, `home/`, `tour/`
 - `src/lib/constants.ts` — config del negocio, labels de estados, rutas
 - `src/lib/utils.ts` — `formatPrice` (UYU), `generateTimeSlots`, `calculateEndTime`, `canCancelAppointment` (ventana 2 h)
-- `supabase/migrations/001_initial_schema.sql` — schema completo (espejo en `src/lib/supabase_schema.sql`)
+- `supabase/migrations/999_FULL_SETUP.sql` — script maestro para DB fresca 001→018, excepto 017; espejo en `src/lib/supabase_schema.sql`
 
 ## Reglas de negocio
 
@@ -41,7 +41,7 @@ npm run lint    # eslint
 
 ## Estilo visual
 
-"Lujo minimalista": tema **oscuro únicamente** (html con `className="dark"`), negro profundo con acentos dorados/ámbar (`#D4AF37`, primary en OKLCH en `globals.css`). Utilidades propias: `.glass-card`, `.text-glow`, `.bg-noise`. Animaciones con framer-motion (entrance, `whileInView`, hover). Mantener esta estética en todo lo nuevo.
+"Lujo minimalista": tema **híbrido claro/oscuro** con oscuro por defecto, negro profundo con acentos dorados/ámbar (`#D4AF37`) y variante clara premium boutique en tonos marfil, crema y acentos dorados. No fijar `className="dark"` ni `forcedTheme="dark"` en el layout. Utilidades propias: `.glass-card`, `.text-glow`, `.bg-noise`, reactivas al tema activo. Animaciones con framer-motion (entrance, `whileInView`, hover). Mantener esta estética en todo lo nuevo.
 
 ## Convenciones
 

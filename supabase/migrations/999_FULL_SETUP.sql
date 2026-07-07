@@ -94,8 +94,8 @@ CREATE TABLE IF NOT EXISTS appointments (
 CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(appointment_date);
 CREATE INDEX IF NOT EXISTS idx_appointments_barber_date ON appointments(barber_id, appointment_date);
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_barber_slot 
-ON appointments(barber_id, appointment_date, start_time) 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_barber_slot
+ON appointments(barber_id, appointment_date, start_time)
 WHERE status NOT IN ('cancelled');
 
 -- TABLA: PRODUCTS
@@ -677,7 +677,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 );
 
 -- 2. Agregar columna en appointments para vincular cita a una suscripción
-ALTER TABLE appointments 
+ALTER TABLE appointments
   ADD COLUMN IF NOT EXISTS subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL;
 
 -- 3. Habilitar Row Level Security (RLS) en la tabla
@@ -688,7 +688,7 @@ DROP POLICY IF EXISTS "Clients view their own subscriptions" ON subscriptions;
 CREATE POLICY "Clients view their own subscriptions" ON subscriptions
   FOR SELECT USING (
     client_id IN (
-      SELECT id FROM profiles 
+      SELECT id FROM profiles
       WHERE auth_user_id = auth.uid() OR id = auth.uid()
     )
   );
@@ -697,7 +697,7 @@ DROP POLICY IF EXISTS "Clients insert their own subscriptions" ON subscriptions;
 CREATE POLICY "Clients insert their own subscriptions" ON subscriptions
   FOR INSERT WITH CHECK (
     client_id IN (
-      SELECT id FROM profiles 
+      SELECT id FROM profiles
       WHERE auth_user_id = auth.uid() OR id = auth.uid()
     )
   );
@@ -706,7 +706,7 @@ DROP POLICY IF EXISTS "Clients update/cancel their own subscriptions" ON subscri
 CREATE POLICY "Clients update/cancel their own subscriptions" ON subscriptions
   FOR UPDATE USING (
     client_id IN (
-      SELECT id FROM profiles 
+      SELECT id FROM profiles
       WHERE auth_user_id = auth.uid() OR id = auth.uid()
     )
   );
@@ -1148,7 +1148,7 @@ BEGIN
       'Migrado de cash_register', cr.barber_id,
       COALESCE(cr.created_at, cr.register_date::timestamptz)
     FROM cash_register cr;
-    
+
     DROP POLICY IF EXISTS "Admins manage cash register" ON cash_register;
     DROP TABLE IF EXISTS cash_register;
   END IF;
@@ -1415,25 +1415,25 @@ DROP POLICY IF EXISTS "Admin Delete Access" ON storage.objects;
 
 -- 3. Crear política para permitir lectura pública de los archivos en 'media'
 CREATE POLICY "Public Read Access" ON storage.objects
-  FOR SELECT 
+  FOR SELECT
   USING (bucket_id = 'media');
 
 -- 4. Crear política para permitir inserción de archivos en 'media' a admins autenticados
 CREATE POLICY "Admin Insert Access" ON storage.objects
-  FOR INSERT 
+  FOR INSERT
   TO authenticated
   WITH CHECK (bucket_id = 'media' AND public.is_admin());
 
 -- 5. Crear política para permitir actualización de archivos en 'media' a admins autenticados
 CREATE POLICY "Admin Update Access" ON storage.objects
-  FOR UPDATE 
+  FOR UPDATE
   TO authenticated
   USING (bucket_id = 'media' AND public.is_admin())
   WITH CHECK (bucket_id = 'media' AND public.is_admin());
 
 -- 6. Crear política para permitir borrado de archivos en 'media' a admins autenticados
 CREATE POLICY "Admin Delete Access" ON storage.objects
-  FOR DELETE 
+  FOR DELETE
   TO authenticated
   USING (bucket_id = 'media' AND public.is_admin());
 
