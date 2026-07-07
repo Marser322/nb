@@ -97,6 +97,20 @@ function LoginPageContent() {
             return;
         }
 
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+            .limit(1)
+            .maybeSingle();
+
+        if (profile?.role !== 'admin') {
+            await supabase.auth.signOut();
+            toast.error("No tenés permisos de administrador");
+            setIsLoading(false);
+            return;
+        }
+
         toast.success("¡Bienvenido, Admin demo!");
         router.push(ROUTES.ADMIN_DASHBOARD);
         router.refresh();
@@ -211,4 +225,3 @@ export default function LoginPage() {
         </Suspense>
     );
 }
-

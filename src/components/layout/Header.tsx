@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Menu, ShoppingBag, User, LogOut, Lock } from "lucide-react";
+import { LayoutDashboard, Menu, ShoppingBag, User, LogOut, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -30,6 +30,8 @@ const navLinks = [
     { href: ROUTES.LOOKBOOK, label: "Lookbook", feature: "lookbook" },
     { href: ROUTES.CONTACTO, label: "Contacto" },
 ];
+
+const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
 export function Header() {
     const { features } = useFeatures();
@@ -133,11 +135,24 @@ export function Header() {
                         </div>
 
                         {/* Admin Access (Desktop) */}
-                        <Button variant="ghost" size="icon" className="hidden md:inline-flex text-muted-foreground hover:text-primary" asChild>
-                            <Link href={ROUTES.ADMIN_LOGIN} aria-label="Acceso staff">
-                                <Lock className="h-5 w-5" />
-                            </Link>
-                        </Button>
+                        {isDemoMode ? (
+                            <Button
+                                variant="outline"
+                                className="hidden rounded-full border-primary/30 bg-primary/10 px-4 text-primary hover:bg-primary/15 hover:text-primary md:inline-flex"
+                                asChild
+                            >
+                                <Link href={ROUTES.ADMIN_LOGIN}>
+                                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                                    Panel demo
+                                </Link>
+                            </Button>
+                        ) : (
+                            <Button variant="ghost" size="icon" className="hidden md:inline-flex text-muted-foreground hover:text-primary" asChild>
+                                <Link href={ROUTES.ADMIN_LOGIN} aria-label="Acceso staff">
+                                    <Lock className="h-5 w-5" />
+                                </Link>
+                            </Button>
+                        )}
 
                         {/* Cart */}
                         {features.tienda && (
@@ -216,6 +231,7 @@ export function Header() {
                                 </Button>
                             </SheetTrigger>
                             <SheetContent side="right" className="w-[300px] bg-background">
+                                <SheetTitle className="sr-only">Menú principal</SheetTitle>
                                 <div className="flex items-center justify-between mt-4 pb-4 border-b border-border">
                                     <span className="font-display font-bold uppercase tracking-normal">
                                         NEW <span className="text-primary">BROTHERS</span>
@@ -277,14 +293,26 @@ export function Header() {
                                     )}
 
                                     <div className="border-t border-border pt-4 mt-auto">
-                                        <Link
-                                            href={ROUTES.ADMIN_LOGIN}
-                                            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary p-2"
-                                            onClick={() => setIsMobileMenuOpen(false)}
-                                        >
-                                            <Lock className="h-4 w-4" />
-                                            Acceso Administrativo
-                                        </Link>
+                                        {isDemoMode ? (
+                                            <Button asChild className="w-full rounded-full">
+                                                <Link
+                                                    href={ROUTES.ADMIN_LOGIN}
+                                                    onClick={() => setIsMobileMenuOpen(false)}
+                                                >
+                                                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                                                    Panel demo
+                                                </Link>
+                                            </Button>
+                                        ) : (
+                                            <Link
+                                                href={ROUTES.ADMIN_LOGIN}
+                                                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary p-2"
+                                                onClick={() => setIsMobileMenuOpen(false)}
+                                            >
+                                                <Lock className="h-4 w-4" />
+                                                Acceso Administrativo
+                                            </Link>
+                                        )}
                                     </div>
                                 </div>
                             </SheetContent>
