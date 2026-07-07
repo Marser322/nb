@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
+import { isDemoMode, useDemoAdminLogin } from "@/hooks/useDemoAdminLogin";
 
 export default function RegisterPage() {
     const [fullName, setFullName] = useState("");
@@ -21,6 +22,8 @@ export default function RegisterPage() {
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
     const supabase = createClient();
+    const { loginAsDemoAdmin, isDemoLoading } = useDemoAdminLogin();
+    const isSubmitting = isLoading || isDemoLoading;
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -95,7 +98,7 @@ export default function RegisterPage() {
                                 value={fullName}
                                 onChange={(e) => setFullName(e.target.value)}
                                 className="pl-10"
-                                disabled={isLoading}
+                                disabled={isSubmitting}
                             />
                         </div>
                     </div>
@@ -111,7 +114,7 @@ export default function RegisterPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="pl-10"
-                                disabled={isLoading}
+                                disabled={isSubmitting}
                             />
                         </div>
                     </div>
@@ -127,7 +130,7 @@ export default function RegisterPage() {
                                 value={phone}
                                 onChange={(e) => setPhone(e.target.value)}
                                 className="pl-10"
-                                disabled={isLoading}
+                                disabled={isSubmitting}
                             />
                         </div>
                     </div>
@@ -143,7 +146,7 @@ export default function RegisterPage() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="pl-10"
-                                disabled={isLoading}
+                                disabled={isSubmitting}
                             />
                         </div>
                     </div>
@@ -159,14 +162,14 @@ export default function RegisterPage() {
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 className="pl-10"
-                                disabled={isLoading}
+                                disabled={isSubmitting}
                             />
                         </div>
                     </div>
                 </CardContent>
 
                 <CardFooter className="flex flex-col gap-4">
-                    <Button type="submit" className="w-full" disabled={isLoading}>
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
                         {isLoading ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -186,6 +189,19 @@ export default function RegisterPage() {
                             Iniciá sesión
                         </Link>
                     </p>
+
+                    {isDemoMode && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full text-xs text-muted-foreground hover:text-primary"
+                            disabled={isSubmitting}
+                            onClick={loginAsDemoAdmin}
+                        >
+                            ¿Querés ver el panel de administración? Entrá como admin demo
+                        </Button>
+                    )}
                 </CardFooter>
             </form>
         </Card>
