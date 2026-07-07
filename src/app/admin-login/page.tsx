@@ -11,19 +11,16 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
-
-const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
-const demoEmail = process.env.NEXT_PUBLIC_DEMO_ADMIN_EMAIL;
-const demoPassword = process.env.NEXT_PUBLIC_DEMO_ADMIN_PASSWORD;
+import { isDemoMode, useDemoAdminLogin } from "@/hooks/useDemoAdminLogin";
 
 export default function AdminLoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [isDemoLoading, setIsDemoLoading] = useState(false);
     const router = useRouter();
     const supabase = createClient();
+    const { loginAsDemoAdmin, isDemoLoading } = useDemoAdminLogin();
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -71,25 +68,10 @@ export default function AdminLoginPage() {
 
         try {
             await loginWithCredentials(email, password);
-        } catch (error) {
+        } catch {
             toast.error("Ocurrió un error al intentar iniciar sesión");
         } finally {
             setIsLoading(false);
-        }
-    };
-
-    const handleDemoLogin = async () => {
-        if (!demoEmail || !demoPassword) {
-            toast.error("Credenciales demo no configuradas");
-            return;
-        }
-        setIsDemoLoading(true);
-        try {
-            await loginWithCredentials(demoEmail, demoPassword);
-        } catch (error) {
-            toast.error("Ocurrió un error al intentar iniciar sesión");
-        } finally {
-            setIsDemoLoading(false);
         }
     };
 
@@ -165,7 +147,7 @@ export default function AdminLoginPage() {
                         <Button
                             type="submit"
                             className="w-full bg-amber-500 hover:bg-amber-600 text-black font-semibold h-11"
-                            disabled={isLoading || !password || !email}
+                            disabled={isLoading || isDemoLoading || !password || !email}
                         >
                             {isLoading ? (
                                 <>
@@ -195,7 +177,7 @@ export default function AdminLoginPage() {
                             variant="outline"
                             className="w-full border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                             disabled={isDemoLoading}
-                            onClick={handleDemoLogin}
+                            onClick={loginAsDemoAdmin}
                         >
                             {isDemoLoading ? (
                                 <>

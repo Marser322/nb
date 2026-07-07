@@ -11,8 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
-
-const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+import { isDemoMode, useDemoAdminLogin } from "@/hooks/useDemoAdminLogin";
 
 function LoginPageContent() {
     const [email, setEmail] = useState("");
@@ -22,6 +21,8 @@ function LoginPageContent() {
     const searchParams = useSearchParams();
     const nextParam = searchParams.get("next");
     const supabase = createClient();
+    const { loginAsDemoAdmin, isDemoLoading } = useDemoAdminLogin();
+    const isSubmitting = isLoading || isDemoLoading;
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -75,47 +76,6 @@ function LoginPageContent() {
         router.refresh();
     };
 
-    const handleDemoLogin = async () => {
-        const demoEmail = process.env.NEXT_PUBLIC_DEMO_ADMIN_EMAIL;
-        const demoPassword = process.env.NEXT_PUBLIC_DEMO_ADMIN_PASSWORD;
-        if (!demoEmail || !demoPassword) {
-            toast.error("Credenciales demo no configuradas");
-            return;
-        }
-        setEmail(demoEmail);
-        setPassword(demoPassword);
-        setIsLoading(true);
-
-        const { data: { user }, error } = await supabase.auth.signInWithPassword({
-            email: demoEmail,
-            password: demoPassword,
-        });
-
-        if (error || !user) {
-            toast.error("No se pudo iniciar la demo (¿el usuario demo existe en Supabase?)");
-            setIsLoading(false);
-            return;
-        }
-
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
-            .limit(1)
-            .maybeSingle();
-
-        if (profile?.role !== 'admin') {
-            await supabase.auth.signOut();
-            toast.error("No tenés permisos de administrador");
-            setIsLoading(false);
-            return;
-        }
-
-        toast.success("¡Bienvenido, Admin demo!");
-        router.push(ROUTES.ADMIN_DASHBOARD);
-        router.refresh();
-    };
-
     return (
         <Card className="border-border/50 bg-card/50 backdrop-blur">
             <CardHeader className="text-center">
@@ -144,7 +104,7 @@ function LoginPageContent() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="pl-10"
-                                disabled={isLoading}
+                                disabled={isSubmitting}
                             />
                         </div>
                     </div>
@@ -165,15 +125,15 @@ function LoginPageContent() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="pl-10"
-                                disabled={isLoading}
+                                disabled={isSubmitting}
                             />
                         </div>
                     </div>
                 </CardContent>
 
                 <CardFooter className="flex flex-col gap-4">
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                        {isLoading ? (
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
+                        {isSubmitting ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 Ingresando...
@@ -199,8 +159,8 @@ function LoginPageContent() {
                             variant="ghost"
                             size="sm"
                             className="w-full text-xs text-muted-foreground hover:text-primary"
-                            disabled={isLoading}
-                            onClick={handleDemoLogin}
+                            disabled={isSubmitting}
+                            onClick={loginAsDemoAdmin}
                         >
                             ¿Querés ver el panel de administración? Entrá como admin demo
                         </Button>
