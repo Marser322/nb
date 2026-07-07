@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { ArrowRight, Calendar, Clock, Star, Scissors, Sparkles } from "lucide-react";
+import { ArrowRight, Calendar, Clock, LayoutDashboard, Star, Scissors, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Header, Footer } from "@/components/layout";
@@ -48,6 +48,7 @@ const services = [
 export default function HomePage() {
   const { features } = useFeatures();
   const waLink = buildWaLink(BUSINESS_CONFIG.phone, "Hola, me gustaría reservar un turno.");
+  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
   return (
     <div className="min-h-screen bg-background">
@@ -137,6 +138,47 @@ export default function HomePage() {
           <p className="text-sm text-zinc-300">Reservas online · Lun a sáb</p>
         </div>
       </section>
+
+      {isDemoMode && (
+        <motion.section
+          id="demo-admin-cta"
+          className="relative overflow-hidden border-y border-primary/20 bg-primary/5 py-10 md:py-12"
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <div className="absolute inset-0 bg-noise opacity-10 pointer-events-none" />
+          <div className="container mx-auto px-4 relative z-10">
+            <div className="glass-card overflow-hidden rounded-2xl border border-primary/30 bg-card/60 p-5 shadow-2xl shadow-primary/10 md:p-8">
+              <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                <div className="max-w-3xl">
+                  <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                    <LayoutDashboard className="h-4 w-4" />
+                    Demo para dueños de barberías
+                  </div>
+                  <h2 className="text-2xl font-bold tracking-tight text-foreground md:text-4xl">
+                    ¿Gestionás una barbería? Mirá el panel por dentro
+                  </h2>
+                  <p className="mt-3 text-base leading-relaxed text-muted-foreground md:text-lg">
+                    Agenda, caja, clientes, stock y liquidaciones en un solo lugar. Entrá al panel de administración de demostración sin crear cuenta.
+                  </p>
+                </div>
+                <Button
+                  size="lg"
+                  asChild
+                  className="h-14 w-full rounded-full px-6 text-base font-semibold shadow-lg shadow-primary/20 md:w-auto"
+                >
+                  <Link href={ROUTES.ADMIN_LOGIN}>
+                    Ver el panel de gestión
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+      )}
 
       {/* Services Section */}
       {/* Services Section */}
