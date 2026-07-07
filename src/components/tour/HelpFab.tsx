@@ -52,7 +52,7 @@ export function HelpFab() {
                     align="end"
                     side="top"
                     sideOffset={12}
-                    className="glass-card w-64 border-border/60 bg-card/95 p-2 shadow-2xl shadow-black/20"
+                    className="glass-card w-64 border-border/60 bg-card/95 p-2 shadow-2xl shadow-foreground/10"
                 >
                     <DropdownMenuLabel className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                         Ayuda rápida
