@@ -457,7 +457,7 @@ export default function AdminProductsPage() {
                                             <Button
                                                 variant="outline"
                                                 size="icon"
-                                                className="h-8 w-8"
+                                                className="h-10 w-10 md:h-8 md:w-8"
                                                 onClick={() => updateStock(product.id, product.stock - 1)}
                                                 disabled={product.stock <= 0}
                                             >
@@ -469,7 +469,7 @@ export default function AdminProductsPage() {
                                             <Button
                                                 variant="outline"
                                                 size="icon"
-                                                className="h-8 w-8"
+                                                className="h-10 w-10 md:h-8 md:w-8"
                                                 onClick={() => updateStock(product.id, product.stock + 1)}
                                             >
                                                 <Plus className="h-3 w-3" />
@@ -487,6 +487,7 @@ export default function AdminProductsPage() {
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
+                                                className="h-10 w-10 md:h-8 md:w-8"
                                                 onClick={() => openEditDialog(product)}
                                             >
                                                 <Edit2 className="h-4 w-4" />
@@ -494,7 +495,7 @@ export default function AdminProductsPage() {
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="text-red-400 hover:text-red-500"
+                                                className="h-10 w-10 text-destructive hover:text-destructive md:h-8 md:w-8"
                                                 onClick={() => deleteProduct(product.id)}
                                             >
                                                 <Trash2 className="h-4 w-4" />

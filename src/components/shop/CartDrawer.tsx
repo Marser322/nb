@@ -116,7 +116,7 @@ export function CartDrawer() {
                                             variant="ghost"
                                             size="icon"
                                             aria-label={`Quitar ${item.product.name} del carrito`}
-                                            className="h-11 w-11 md:h-8 md:w-8 text-muted-foreground hover:text-red-400"
+                                            className="h-11 w-11 md:h-8 md:w-8 text-muted-foreground hover:text-destructive"
                                             onClick={() => removeItem(item.product.id)}
                                         >
                                             <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -157,7 +157,7 @@ export function CartDrawer() {
                                 </Button>
                                 <Button
                                     variant="ghost"
-                                    className="w-full text-muted-foreground hover:text-red-400"
+                                    className="w-full text-muted-foreground hover:text-destructive"
                                     onClick={clearCart}
                                 >
                                     <Trash2 className="mr-2 h-4 w-4" />

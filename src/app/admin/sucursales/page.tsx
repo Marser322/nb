@@ -364,6 +364,7 @@ export default function AdminSucursalesPage() {
                                                 size="icon"
                                                 onClick={() => openEditDialog(branch)}
                                                 title="Editar"
+                                                className="h-10 w-10 md:h-8 md:w-8"
                                             >
                                                 <Edit2 className="h-4 w-4" />
                                             </Button>
@@ -372,7 +373,7 @@ export default function AdminSucursalesPage() {
                                                 size="icon"
                                                 onClick={() => setActiveBranchForBlocks(branch)}
                                                 title="Bloqueos de Agenda"
-                                                className="text-primary hover:text-primary-foreground hover:bg-primary/20"
+                                                className="h-10 w-10 text-primary hover:text-primary-foreground hover:bg-primary/20 md:h-8 md:w-8"
                                             >
                                                 <CalendarRange className="h-4 w-4" />
                                             </Button>
@@ -439,7 +440,7 @@ export default function AdminSucursalesPage() {
                                                 variant="ghost"
                                                 size="icon"
                                                 onClick={() => handleDeleteBlock(block.id)}
-                                                className="text-red-400 hover:text-red-300 hover:bg-red-950/20"
+                                                className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 md:h-8 md:w-8"
                                             >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>

@@ -540,7 +540,29 @@ function ReservarPageContent() {
 
         <div className="container mx-auto px-4 relative z-10">
           {/* Indicador de pasos */}
-          <div className="flex items-center justify-center flex-wrap gap-2 md:gap-4 mb-12 max-w-3xl mx-auto">
+          <div className="mb-10 rounded-2xl border border-border bg-card/50 p-4 shadow-sm md:hidden">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                  Paso {currentStep + 1} de {STEPS.length}
+                </p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {STEPS[currentStep]}
+                </p>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary bg-primary/10 text-sm font-bold text-primary">
+                {currentStep + 1}
+              </div>
+            </div>
+            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="mb-12 hidden max-w-3xl items-center justify-center gap-2 md:flex md:flex-wrap md:gap-4 md:mx-auto">
             {STEPS.map((step, index) => (
               <div key={step} className="flex items-center">
                 <div
@@ -1092,7 +1114,7 @@ function ReservarPageContent() {
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-bold h-11 px-6 rounded-full shadow-lg shadow-amber-500/10 active:scale-95 transition-all"
+                  className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-bold h-11 px-6 rounded-full shadow-lg shadow-primary/10 active:scale-95 transition-all"
                 >
                   {isSubmitting ? "Confirmando…" : "Confirmar Reserva"}
                   <Check className="h-4 w-4" />

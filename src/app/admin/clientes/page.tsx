@@ -239,7 +239,7 @@ function ClientesList() {
                                                                 variant="ghost"
                                                                 onClick={(e) => handleOpenWa(e, client)}
                                                                 aria-label={`Enviar WhatsApp a ${client.full_name || "cliente"}`}
-                                                                className="text-primary hover:text-primary hover:bg-primary/10"
+                                                                className="h-10 w-10 text-primary hover:text-primary hover:bg-primary/10 md:h-8 md:w-8"
                                                                 title="Enviar WhatsApp"
                                                             >
                                                                 <MessageCircle className="h-4 w-4" aria-hidden="true" />

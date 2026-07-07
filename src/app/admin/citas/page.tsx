@@ -673,7 +673,7 @@ export default function AdminCitasPage() {
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    className="text-green-400 border-green-400/30 hover:bg-green-400/10"
+                                                    className="h-10 border-primary/30 text-primary hover:bg-primary/10 md:h-8"
                                                     onClick={() => updateStatus(cita.id, "confirmed")}
                                                 >
                                                     <CheckCircle className="h-4 w-4 mr-1" />
@@ -683,7 +683,7 @@ export default function AdminCitasPage() {
                                             {cita.status === "confirmed" && (
                                                 <Button
                                                     size="sm"
-                                                    className="bg-green-500 hover:bg-green-600"
+                                                    className="h-10 bg-primary text-primary-foreground hover:bg-primary/90 md:h-8"
                                                     onClick={() => {
                                                         if (features.contabilidad) {
                                                             setChargeApt(cita);
@@ -700,6 +700,7 @@ export default function AdminCitasPage() {
                                                 size="sm"
                                                 variant="outline"
                                                 onClick={() => openReschedule(cita)}
+                                                className="h-10 md:h-8"
                                             >
                                                 <Clock className="h-4 w-4 mr-1" />
                                                 Reprogramar
@@ -707,7 +708,7 @@ export default function AdminCitasPage() {
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                className="text-red-400 border-red-400/30 hover:bg-red-400/10"
+                                                className="h-10 border-destructive/30 text-destructive hover:bg-destructive/10 md:h-8"
                                                 onClick={() => updateStatus(cita.id, "cancelled")}
                                             >
                                                 <XCircle className="h-4 w-4 mr-1" />

@@ -226,7 +226,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                         variant="outline"
                         size="icon"
                         onClick={() => router.push("/admin/clientes")}
-                        className="border-border"
+                        className="h-10 w-10 border-border md:h-8 md:w-8"
                     >
                         <ArrowLeft className="h-4 w-4" />
                     </Button>

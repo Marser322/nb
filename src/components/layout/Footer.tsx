@@ -52,7 +52,7 @@ export function Footer() {
                                 <li>
                                     <Link
                                         href={ROUTES.RESERVAR}
-                                        className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                                        className="inline-flex min-h-11 items-center text-sm text-muted-foreground transition-colors hover:text-primary md:min-h-0"
                                     >
                                         Reservar Turno
                                     </Link>
@@ -62,7 +62,7 @@ export function Footer() {
                                 <li>
                                     <Link
                                         href={ROUTES.TIENDA}
-                                        className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                                        className="inline-flex min-h-11 items-center text-sm text-muted-foreground transition-colors hover:text-primary md:min-h-0"
                                     >
                                         Tienda Online
                                     </Link>
@@ -72,7 +72,7 @@ export function Footer() {
                                 <li>
                                     <Link
                                         href={ROUTES.LOOKBOOK}
-                                        className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                                        className="inline-flex min-h-11 items-center text-sm text-muted-foreground transition-colors hover:text-primary md:min-h-0"
                                     >
                                         Lookbook
                                     </Link>
@@ -81,7 +81,7 @@ export function Footer() {
                             <li>
                                 <Link
                                     href={ROUTES.CONTACTO}
-                                    className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                                    className="inline-flex min-h-11 items-center text-sm text-muted-foreground transition-colors hover:text-primary md:min-h-0"
                                 >
                                     Contacto
                                 </Link>
@@ -89,7 +89,7 @@ export function Footer() {
                             <li>
                                 <Link
                                     href={ROUTES.ADMIN_LOGIN}
-                                    className="text-muted-foreground/70 hover:text-primary transition-colors text-xs"
+                                    className="inline-flex min-h-11 items-center text-xs text-muted-foreground/70 transition-colors hover:text-primary md:min-h-0"
                                 >
                                     Acceso staff
                                 </Link>
@@ -146,14 +146,22 @@ export function Footer() {
                     <div className="flex items-center gap-4">
                         <a
                             href="#"
-                            className="text-muted-foreground hover:text-primary transition-colors"
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground transition-colors hover:text-primary md:min-h-0 md:min-w-0"
+                            aria-label="Instagram de NB Barber"
                         >
                             <Instagram className="h-5 w-5" />
                         </a>
                         {/* Hidden admin access - 5 clicks activates */}
                         <span
                             onClick={handleSecretClick}
-                            className="text-xs text-muted-foreground/70 cursor-pointer select-none hover:text-muted-foreground transition-colors"
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                    handleSecretClick();
+                                }
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            className="inline-flex min-h-11 items-center text-xs text-muted-foreground/70 cursor-pointer select-none transition-colors hover:text-muted-foreground md:min-h-0"
                         >
                             v1.0.0
                         </span>

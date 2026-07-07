@@ -274,6 +274,7 @@ export default function AdminServiciosPage() {
                                             variant="ghost"
                                             size="icon"
                                             onClick={() => openEditDialog(service)}
+                                            className="h-10 w-10 md:h-8 md:w-8"
                                         >
                                             <Edit2 className="h-4 w-4" />
                                         </Button>

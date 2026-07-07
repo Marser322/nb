@@ -482,7 +482,7 @@ export default function AdminMensajesPage() {
                                                                 variant="ghost"
                                                                 onClick={() => openEditTemplate(t)}
                                                                 aria-label={`Editar plantilla de ${t.days_since_last_visit} días`}
-                                                                className="text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                                className="h-10 w-10 text-muted-foreground hover:text-foreground hover:bg-muted md:h-8 md:w-8"
                                                             >
                                                                 <Edit2 className="h-4 w-4" aria-hidden="true" />
                                                             </Button>
@@ -491,7 +491,7 @@ export default function AdminMensajesPage() {
                                                                 variant="ghost"
                                                                 onClick={() => handleDeleteTemplate(t.id)}
                                                                 aria-label={`Eliminar plantilla de ${t.days_since_last_visit} días`}
-                                                                className="text-red-400 hover:text-red-500 hover:bg-red-500/10"
+                                                                className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 md:h-8 md:w-8"
                                                             >
                                                                 <Trash2 className="h-4 w-4" aria-hidden="true" />
                                                             </Button>
