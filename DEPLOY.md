@@ -65,6 +65,14 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_SITE_URL=
 ```
 
+Variables demo publicas (solo para proyectos descartables/solo-demo):
+
+```bash
+NEXT_PUBLIC_DEMO_MODE=true
+NEXT_PUBLIC_DEMO_ADMIN_EMAIL=demo@nbbarber.uy
+NEXT_PUBLIC_DEMO_ADMIN_PASSWORD=DemoNB2026!
+```
+
 Variables opcionales del asistente IA:
 
 ```bash
@@ -77,6 +85,21 @@ No cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel ni en variables publicas del fro
 ```bash
 supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=...
 ```
+
+Admin demo: para aprovisionar `demo@nbbarber.uy`, poner temporalmente `SUPABASE_URL` (opcional si ya coincide con `NEXT_PUBLIC_SUPABASE_URL`) y `SUPABASE_SERVICE_ROLE_KEY` en `.env` o `.env.local` local, apuntando a la DB destino, y correr:
+
+```bash
+npm run seed:demo-admin
+```
+
+El comando es idempotente: la segunda corrida debe detectar que el usuario ya existia, resetear password/confirmacion y volver a confirmar `role=admin`. Si tu version de Node no soporta `--env-file-if-exists`, usar `node --env-file=.env scripts/seed-demo-admin.mjs` con las variables exportadas. Si Supabase devuelve `permission denied for table profiles`, aplicar la migracion `demo_admin_service_role_grant` o ejecutar:
+
+```sql
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.profiles TO service_role;
+```
+
+En Vercel setear solo las 3 `NEXT_PUBLIC_DEMO_*` para la demo y redeployar. No cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel.
 
 ## 4. Backup diario desde el VPS
 

@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 CREATE INDEX IF NOT EXISTS idx_profiles_auth_user_id ON profiles(auth_user_id);
 
+-- Permite que scripts locales con service_role actualicen profiles via Data API.
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.profiles TO service_role;
+
 -- TABLA: BARBERS
 CREATE TABLE IF NOT EXISTS barbers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
