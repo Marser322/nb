@@ -263,7 +263,7 @@ export default function AdminMensajesPage() {
                                 placeholder="Buscar por cliente, teléfono o mensaje..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10 bg-background/50 border-input/50 focus:border-amber-500/50"
+                                className="pl-10 bg-background/50 border-input/50 focus:border-primary/50"
                             />
                         </div>
                         <Button variant="outline" onClick={loadLogs} className="border-border hover:bg-muted">
@@ -320,16 +320,16 @@ export default function AdminMensajesPage() {
                                             {filteredLogs.map((log) => {
                                                 return (
                                                     <TableRow key={log.id} className="border-b border-border/30">
-                                                        <TableCell className="text-zinc-300 text-sm pl-6 py-4">
+                                                        <TableCell className="text-muted-foreground text-sm pl-6 py-4">
                                                             {format(parseISO(log.sent_at), "dd/MM/yyyy HH:mm")}
                                                         </TableCell>
                                                         <TableCell className="font-semibold text-foreground">
                                                             {log.client_name || "Sin nombre"}
                                                         </TableCell>
-                                                        <TableCell className="text-zinc-300 font-mono text-sm">
+                                                        <TableCell className="text-muted-foreground font-mono text-sm">
                                                             {log.client_phone || "—"}
                                                         </TableCell>
-                                                        <TableCell className="text-zinc-300 text-xs leading-normal max-w-sm break-words">
+                                                        <TableCell className="text-muted-foreground text-xs leading-normal max-w-sm break-words">
                                                             {log.message_sent}
                                                         </TableCell>
                                                         <TableCell className="text-right pr-6">
@@ -357,14 +357,14 @@ export default function AdminMensajesPage() {
                         </div>
                         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                             <DialogTrigger asChild>
-                                <Button onClick={openNewTemplate} className="bg-primary hover:bg-primary/90 text-black font-semibold">
-                                    <Plus className="mr-2 h-4 w-4" /> Nueva Plantilla
+                                <Button onClick={openNewTemplate} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+                                    <Plus className="mr-2 h-4 w-4" /> Nueva plantilla
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="max-w-md bg-card/95 border-border/50 backdrop-blur-xl text-foreground">
                                 <DialogHeader>
                                     <DialogTitle className="text-foreground">
-                                        {editingTemplate ? "Editar Plantilla" : "Nueva Plantilla"}
+                                        {editingTemplate ? "Editar plantilla" : "Nueva plantilla"}
                                     </DialogTitle>
                                 </DialogHeader>
                                 <form onSubmit={handleSubmitTemplate} className="space-y-4 mt-2">
@@ -406,8 +406,8 @@ export default function AdminMensajesPage() {
                                         <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="text-muted-foreground hover:bg-muted">
                                             Cancelar
                                         </Button>
-                                        <Button type="submit" disabled={isSubmitting} className="bg-primary hover:bg-primary/90 text-black font-semibold">
-                                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar Plantilla"}
+                                        <Button type="submit" disabled={isSubmitting} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+                                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar plantilla"}
                                         </Button>
                                     </div>
                                 </form>
@@ -459,10 +459,10 @@ export default function AdminMensajesPage() {
                                                     <TableCell className="font-bold text-foreground text-base pl-6 py-4">
                                                         {t.days_since_last_visit} días
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 text-xs max-w-sm break-words leading-relaxed">
+                                                    <TableCell className="text-muted-foreground text-xs max-w-sm break-words leading-relaxed">
                                                         {t.message_template}
                                                     </TableCell>
-                                                    <TableCell className="text-zinc-300 text-xs font-semibold capitalize">
+                                                    <TableCell className="text-muted-foreground text-xs font-semibold capitalize">
                                                         {t.channel || "whatsapp"}
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">
