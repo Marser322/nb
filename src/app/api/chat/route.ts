@@ -89,6 +89,10 @@ export async function POST(req: Request) {
     const messages = (body.messages || []) as ChatMessage[];
     const lastMessage = messages[messages.length - 1];
     const userQuery = lastMessage?.content?.toLowerCase() || "";
+    const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+    const isDemoAdminQuery = ["panel", "admin", "gestión", "gestion", "demo", "crm"].some((term) =>
+      userQuery.includes(term)
+    );
 
     // Resolve mode / persona / context parameter
     let mode = (body.mode || body.persona || body.context || "client").toLowerCase();
@@ -260,6 +264,13 @@ RESTRICCIONES IMPORTANTES:
 - NO des instrucciones ni expliques flujos de módulos que estén APAGADOS. Informa de manera concisa que dicho módulo se encuentra inactivo y debe activarse en Configuración si es necesario.
 - Responde siempre en español con terminología clara.`;
     } else {
+      const demoAdminPrompt = isDemoMode
+        ? `
+DEMO PÚBLICA DEL PANEL ADMIN:
+- Si el usuario pregunta por "panel", "admin", "gestión", "demo" o "CRM", explicá que puede entrar con el botón "Entrar como Admin demo" en /admin-login o desde el botón de ayuda flotante.
+- No reveles contraseñas ni credenciales demo.`
+        : "";
+
       systemPrompt = `Eres el Asistente Virtual Inteligente (conserje amable) de la barbería premium "New Brothers" en Uruguay. 
 Tus respuestas deben ser cálidas, educadas, atentas y serviciales, con una estética premium de lujo minimalista.
 Tus objetivos principales son:
@@ -282,7 +293,7 @@ INFORMACIÓN OFICIAL DE LA BARBERÍA:
 RESTRICCIONES IMPORTANTES:
 - Reservas online: ${activeFeatures.reservas_online ? 'ACTIVADAS. Debes empujar al usuario a reservar su turno y guiarlo a hacerlo.' : 'DESACTIVADAS por mantenimiento. Informa al usuario que la agenda online no está disponible temporalmente y no ofrezcas reservar.'}
 - Tienda online: ${activeFeatures.tienda ? 'ACTIVADA.' : 'DESACTIVADA. No recomiendes productos ni menciones la tienda.'}
-- Responde siempre en español. No inventes información que no esté en la lista oficial.`;
+- Responde siempre en español. No inventes información que no esté en la lista oficial.${demoAdminPrompt}`;
     }
 
     // Add structured UI formats prompt instruction
@@ -341,7 +352,7 @@ Estructura JSON permitida en "data":
                 data: parsed.data
               });
             }
-          } catch (e) {
+          } catch {
             // Treat as plain text
           }
 
@@ -384,7 +395,7 @@ Estructura JSON permitida en "data":
                 data: parsed.data
               });
             }
-          } catch (e) {
+          } catch {
             // Treat as plain text
           }
 
@@ -470,7 +481,15 @@ Estructura JSON permitida en "data":
       }
     } else {
       // Client Local Rules Fallback
-      if (userQuery.includes("hola") || userQuery.includes("buenas") || userQuery.includes("buen dia") || userQuery.includes("buena tarde")) {
+      if (isDemoMode && isDemoAdminQuery) {
+        reply = "Sí, esta demo también tiene un panel de administración para recorrer el CRM de **New Brothers**. Podés entrar con el botón **Entrar como Admin demo** en `/admin-login` o abrirlo desde el botón de ayuda flotante. Por seguridad, no comparto contraseñas por el chat.";
+        dataPayload = {
+          type: "action",
+          label: "Entrar como Admin demo",
+          url: "/admin-login"
+        };
+      }
+      else if (userQuery.includes("hola") || userQuery.includes("buenas") || userQuery.includes("buen dia") || userQuery.includes("buena tarde")) {
         reply = "¡Hola! Bienvenido a **New Brothers**. Soy tu Asesor de Estética Masculina personal. ¿En qué te puedo ayudar hoy? Podés consultarme sobre nuestros servicios, reservar turnos, recomendaciones de cortes o conocer nuestros locales.";
       }
       else if (userQuery.includes("precio") || userQuery.includes("costo") || userQuery.includes("cuanto sale") || userQuery.includes("servicio") || userQuery.includes("menu")) {
