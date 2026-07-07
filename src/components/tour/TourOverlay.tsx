@@ -194,6 +194,12 @@ function Tooltip({ step, index, total, targetRect, tourKey, onNext, onPrev, onCl
         router.push(isAdminTour ? '/admin/dashboard' : '/reservar');
     };
 
+    const handleStepCta = () => {
+        if (!step.href) return;
+        onClose();
+        router.push(step.href);
+    };
+
     let style: CSSProperties = {};
     const SPACING = 20;
     const CARD_WIDTH = 384;
@@ -236,7 +242,7 @@ function Tooltip({ step, index, total, targetRect, tourKey, onNext, onPrev, onCl
                 exit={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.98, y: prefersReducedMotion ? 0 : -8 }}
                 key={index}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.32, ease: [0.16, 1, 0.3, 1] }}
-                className="pointer-events-auto absolute w-full max-w-[min(calc(100vw-2rem),24rem)] outline-none"
+                className="pointer-events-auto absolute z-20 w-full max-w-[min(calc(100vw-2rem),24rem)] outline-none"
                 style={style}
             >
                 <div className="relative overflow-hidden rounded-2xl border border-primary/25 bg-card/95 p-5 text-card-foreground shadow-2xl shadow-foreground/10 backdrop-blur-xl sm:p-6">
@@ -318,6 +324,17 @@ function Tooltip({ step, index, total, targetRect, tourKey, onNext, onPrev, onCl
                             <ArrowRight size={16} className="ml-2" />
                         </Button>
                     </div>
+
+                    {step.href && (
+                        <Button
+                            type="button"
+                            onClick={handleStepCta}
+                            className="mt-4 w-full rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
+                        >
+                            {step.ctaLabel ?? 'Ir'}
+                            <ArrowRight size={16} className="ml-2" />
+                        </Button>
+                    )}
                 </div>
             </motion.div>
         </AnimatePresence>

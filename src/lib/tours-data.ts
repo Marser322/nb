@@ -1,4 +1,5 @@
 import { TourStep } from "./store/tour-store";
+import { ROUTES } from "./constants";
 import {
     BadgeDollarSign,
     BarChart3,
@@ -57,6 +58,15 @@ export const APP_TOURS: Record<string, TourStep[]> = {
             content: 'Explorá cortes reales de nuestros clientes y seleccioná tu favorito como referencia para tu reserva.',
             position: 'bottom',
             icon: Images
+        },
+        {
+            target: '#demo-admin-cta',
+            title: 'Panel de gestión (demo)',
+            content: 'Detrás de la vidriera hay un CRM completo: agenda, caja, clientes, stock y liquidaciones. Entrá y recorré el panel de administración de demostración.',
+            position: 'top',
+            icon: LayoutDashboard,
+            href: ROUTES.ADMIN_LOGIN,
+            ctaLabel: 'Ver el panel'
         },
         {
             target: '#hero-cta',

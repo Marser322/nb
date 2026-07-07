@@ -9,6 +9,8 @@ export type TourStep = {
     icon?: LucideIcon;
     image?: string;
     imageAlt?: string;
+    href?: string;
+    ctaLabel?: string;
 };
 
 export type TourData = {
