@@ -1,54 +1,141 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Home, Loader2, ShoppingBag } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, ShoppingBag, Home } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/client";
+import { FULFILLMENT_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, ROUTES } from "@/lib/constants";
+import { formatPrice } from "@/lib/utils";
 
-export default function CheckoutSuccessPage() {
+type SuccessOrder = {
+    id: string;
+    total: number;
+    status: string;
+    fulfillment: string;
+    created_at: string;
+    branch?: { name: string | null } | null;
+};
+
+function CheckoutSuccessContent() {
+    const searchParams = useSearchParams();
+    const orderId = searchParams.get("order");
+    const supabase = useMemo(() => createClient(), []);
+    const [order, setOrder] = useState<SuccessOrder | null>(null);
+    const [isLoading, setIsLoading] = useState(Boolean(orderId));
+
+    useEffect(() => {
+        async function loadOrder() {
+            if (!orderId) return;
+
+            const { data } = await supabase
+                .from("orders")
+                .select("id, total, status, fulfillment, created_at, branch:branches(name)")
+                .eq("id", orderId)
+                .maybeSingle();
+
+            setOrder(data as SuccessOrder | null);
+            setIsLoading(false);
+        }
+
+        loadOrder();
+    }, [orderId, supabase]);
+
+    const shortId = orderId ? orderId.slice(0, 8).toUpperCase() : "pendiente";
+
     return (
         <div className="min-h-[80vh] flex items-center justify-center bg-background px-4">
             <Card className="max-w-md w-full bg-card/50 border-border/50 backdrop-blur">
                 <CardContent className="pt-12 pb-8 px-6 text-center space-y-6">
-                    <div className="mx-auto w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mb-6">
-                        <CheckCircle2 className="h-10 w-10 text-green-500" />
+                    <div className="mx-auto w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+                        <CheckCircle2 className="h-10 w-10 text-primary" />
                     </div>
 
                     <div className="space-y-2">
-                        <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-amber-600">
-                            ¡Pedido Confirmado!
+                        <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                            Pedido confirmado
                         </h1>
                         <p className="text-muted-foreground">
-                            Gracias por tu compra. Prepararemos tu pedido a la brevedad.
+                            Gracias por tu compra. Ya registramos tu pedido #{shortId}.
                         </p>
                     </div>
 
-                    <div className="p-4 bg-muted/30 rounded-lg text-sm text-left space-y-2 border border-border/50">
-                        <p className="flex justify-between">
-                            <span className="text-muted-foreground">Estado:</span>
-                            <span className="font-medium text-primary">Pendiente de Retiro</span>
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                            Te enviaremos un email cuando tu pedido esté listo para retirar por el local.
-                        </p>
+                    <div className="p-4 bg-muted/30 rounded-lg text-sm text-left space-y-3 border border-border/50">
+                        {isLoading ? (
+                            <div className="flex items-center justify-center py-6 text-muted-foreground">
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Cargando pedido...
+                            </div>
+                        ) : order ? (
+                            <>
+                                <p className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground">Orden:</span>
+                                    <span className="font-medium text-foreground">#{shortId}</span>
+                                </p>
+                                <p className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground">Estado:</span>
+                                    <Badge variant="outline" className={ORDER_STATUS_COLORS[order.status] || ""}>
+                                        {ORDER_STATUS_LABELS[order.status] || order.status}
+                                    </Badge>
+                                </p>
+                                <p className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground">Modalidad:</span>
+                                    <span className="font-medium text-foreground">
+                                        {FULFILLMENT_LABELS[order.fulfillment] || order.fulfillment}
+                                    </span>
+                                </p>
+                                {order.branch?.name && (
+                                    <p className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Sucursal:</span>
+                                        <span className="font-medium text-foreground text-right">{order.branch.name}</span>
+                                    </p>
+                                )}
+                                <p className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground">Total:</span>
+                                    <span className="font-semibold text-primary">{formatPrice(order.total)}</span>
+                                </p>
+                                <p className="text-xs text-muted-foreground pt-2">
+                                    Podés seguir el estado de tu pedido en Mi cuenta.
+                                </p>
+                            </>
+                        ) : (
+                            <p className="text-muted-foreground">
+                                No pudimos cargar el detalle, pero el pedido quedó registrado si viste la confirmación.
+                            </p>
+                        )}
                     </div>
 
                     <div className="flex flex-col gap-3 pt-4">
                         <Button asChild className="w-full text-lg h-12">
-                            <Link href="/">
+                            <Link href={ROUTES.MI_CUENTA}>
                                 <Home className="mr-2 h-4 w-4" />
-                                Volver al Inicio
+                                Ver mi cuenta
                             </Link>
                         </Button>
                         <Button variant="outline" asChild className="w-full">
-                            <Link href="/tienda">
+                            <Link href={ROUTES.TIENDA}>
                                 <ShoppingBag className="mr-2 h-4 w-4" />
-                                Seguir Comprando
+                                Seguir comprando
                             </Link>
                         </Button>
                     </div>
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+export default function CheckoutSuccessPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-[80vh] flex items-center justify-center bg-background px-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        }>
+            <CheckoutSuccessContent />
+        </Suspense>
     );
 }

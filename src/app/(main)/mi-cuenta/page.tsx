@@ -6,18 +6,26 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar, Clock, History, Loader2, Repeat, Scissors, User } from "lucide-react";
+import { Calendar, Clock, History, Loader2, MapPin, Package, Repeat, Scissors, ShoppingBag, User } from "lucide-react";
 import { Header, Footer } from "@/components/layout";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
-import { APPOINTMENT_STATUS_COLORS, APPOINTMENT_STATUS_LABELS, ROUTES } from "@/lib/constants";
+import {
+    APPOINTMENT_STATUS_COLORS,
+    APPOINTMENT_STATUS_LABELS,
+    FULFILLMENT_LABELS,
+    ORDER_STATUS_COLORS,
+    ORDER_STATUS_LABELS,
+    ORDER_TYPE_LABELS,
+    ROUTES,
+} from "@/lib/constants";
 import { toast } from "sonner";
 import { formatPrice, canCancelAppointment } from "@/lib/utils";
 import { getBarberAvatarUrl } from "@/lib/static-data";
-import type { Appointment, Barber, HaircutHistory, Profile, Service, Subscription } from "@/types/database.types";
+import type { Appointment, Barber, Branch, HaircutHistory, Order, OrderItem, Product, Profile, Service, Subscription } from "@/types/database.types";
 import { useFeatures } from "@/lib/features";
 
 type AppointmentWithRelations = Appointment & {
@@ -30,6 +38,11 @@ type HaircutHistoryWithRelations = HaircutHistory & {
     barber?: Barber | null;
 };
 
+type OrderWithRelations = Order & {
+    branch?: Branch | null;
+    items?: (OrderItem & { product?: Product | null })[];
+};
+
 export default function MiCuentaPage() {
     const { features } = useFeatures();
     const router = useRouter();
@@ -40,6 +53,7 @@ export default function MiCuentaPage() {
     const [recentAppointments, setRecentAppointments] = useState<AppointmentWithRelations[]>([]);
     const [history, setHistory] = useState<HaircutHistoryWithRelations[]>([]);
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+    const [orders, setOrders] = useState<OrderWithRelations[]>([]);
 
     useEffect(() => {
         async function loadAccount() {
@@ -65,7 +79,7 @@ export default function MiCuentaPage() {
             }
 
             const today = new Date().toISOString().slice(0, 10);
-            const [upcomingRes, recentRes, historyRes, subsRes] = await Promise.all([
+            const [upcomingRes, recentRes, historyRes, subsRes, ordersRes] = await Promise.all([
                 supabase
                     .from("appointments")
                     .select("*, service:services(*), barber:barbers(*)")
@@ -95,6 +109,12 @@ export default function MiCuentaPage() {
                     .eq("client_id", profileData.id)
                     .eq("status", "active")
                     .order("created_at", { ascending: false }),
+                supabase
+                    .from("orders")
+                    .select("*, branch:branches(*), items:order_items(*, product:products(*))")
+                    .eq("client_id", profileData.id)
+                    .order("created_at", { ascending: false })
+                    .limit(8),
             ]);
 
             setProfile(profileData);
@@ -102,6 +122,7 @@ export default function MiCuentaPage() {
             setRecentAppointments(recentRes.data || []);
             setHistory(historyRes.data || []);
             setSubscriptions(subsRes.data || []);
+            setOrders((ordersRes.data || []) as OrderWithRelations[]);
             setIsLoading(false);
         }
 
@@ -364,6 +385,100 @@ export default function MiCuentaPage() {
                                 </CardContent>
                             </Card>
                         </section>
+
+                        {features.tienda && (
+                            <Card id="orders-card" className="border-border bg-card/70">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <ShoppingBag className="h-5 w-5 text-primary" />
+                                        Mis pedidos
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    {orders.length === 0 ? (
+                                        <div className="py-10 text-center">
+                                            <Package className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
+                                            <p className="font-semibold text-foreground">No tenés pedidos todavía</p>
+                                            <p className="text-sm text-muted-foreground mt-2">
+                                                Cuando compres productos en la tienda, los vas a ver acá.
+                                            </p>
+                                            <Button asChild className="mt-5 rounded-full">
+                                                <Link href={ROUTES.TIENDA}>Ir a la tienda</Link>
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {orders.map((order) => {
+                                                const itemCount = order.items?.reduce((total, item) => total + item.quantity, 0) || 0;
+                                                const createdAt = order.created_at ? format(parseISO(order.created_at), "d 'de' MMMM, yyyy", { locale: es }) : "";
+
+                                                return (
+                                                    <div key={order.id} className="rounded-lg border border-border bg-muted/20 p-4">
+                                                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                                                            <div>
+                                                                <p className="font-bold text-foreground">Orden #{order.id.slice(0, 8).toUpperCase()}</p>
+                                                                <p className="text-sm text-muted-foreground">{createdAt}</p>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                <Badge variant="outline" className={ORDER_STATUS_COLORS[order.status] || ""}>
+                                                                    {ORDER_STATUS_LABELS[order.status] || order.status}
+                                                                </Badge>
+                                                                <Badge variant="outline">
+                                                                    {ORDER_TYPE_LABELS[order.order_type] || order.order_type}
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
+                                                            <div className="space-y-2">
+                                                                {order.items?.slice(0, 3).map((item) => (
+                                                                    <div key={item.id} className="flex items-center gap-3 text-sm">
+                                                                        <div className="relative h-10 w-10 overflow-hidden rounded bg-muted flex-shrink-0">
+                                                                            <ImageWithFallback
+                                                                                src={item.product?.image_url}
+                                                                                alt={item.product?.name || "Producto NB"}
+                                                                                fill
+                                                                                sizes="40px"
+                                                                                className="object-cover"
+                                                                                fallbackClassName="h-full w-full rounded"
+                                                                                iconClassName="h-4 w-4"
+                                                                            />
+                                                                        </div>
+                                                                        <div className="min-w-0">
+                                                                            <p className="font-medium text-foreground truncate">{item.product?.name || "Producto"}</p>
+                                                                            <p className="text-muted-foreground">
+                                                                                x{item.quantity} · {formatPrice(item.unit_price)}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                                {(order.items?.length || 0) > 3 && (
+                                                                    <p className="text-xs text-muted-foreground">
+                                                                        +{(order.items?.length || 0) - 3} productos más
+                                                                    </p>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="space-y-2 md:text-right text-sm">
+                                                                <p className="font-bold text-primary text-lg">{formatPrice(order.total)}</p>
+                                                                <p className="text-muted-foreground">{itemCount} unidades</p>
+                                                                <p className="inline-flex md:justify-end items-center gap-2 text-muted-foreground">
+                                                                    <MapPin className="h-4 w-4 text-primary" />
+                                                                    {order.branch?.name || "Sucursal pendiente"}
+                                                                </p>
+                                                                <p className="text-muted-foreground">
+                                                                    {FULFILLMENT_LABELS[order.fulfillment] || order.fulfillment}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        )}
 
                         {/* Sección de Suscripciones (Turnos Fijos) */}
                         {features.suscripciones && (

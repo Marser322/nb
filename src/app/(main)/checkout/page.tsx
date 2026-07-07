@@ -1,25 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useCartStore } from "@/stores/cartStore";
-import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
+import { Landmark, Loader2, MapPin, MessageSquareText, ShieldCheck, Store, Truck, Wallet } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { formatPrice } from "@/lib/utils";
-import { Loader2, ShieldCheck, Wallet, Landmark } from "lucide-react";
-import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { useFeatures } from "@/lib/features";
+import { createClient } from "@/lib/supabase/client";
+import { formatPrice } from "@/lib/utils";
+import { useCartStore } from "@/stores/cartStore";
+import type { Branch, FulfillmentType } from "@/types/database.types";
 
 type PaymentMethod = "efectivo" | "transferencia";
 
-// Definición manual de tipo CartItem para evitar imports circulares si no está exportado correctamente
 interface CartItem {
     product: {
         id: string;
@@ -33,12 +35,19 @@ interface CartItem {
 export default function CheckoutPage() {
     const { features, isLoaded: isFeaturesLoaded } = useFeatures();
     const router = useRouter();
+    const supabase = useMemo(() => createClient(), []);
     const { items, getTotalPrice, clearCart } = useCartStore();
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
     const [user, setUser] = useState<User | null>(null);
+    const [branches, setBranches] = useState<Branch[]>([]);
+    const [branchId, setBranchId] = useState("");
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("efectivo");
-    const supabase = createClient();
+    const [fulfillment, setFulfillment] = useState<FulfillmentType>("pickup");
+    const [contactName, setContactName] = useState("");
+    const [contactPhone, setContactPhone] = useState("");
+    const [deliveryAddress, setDeliveryAddress] = useState("");
+    const [notes, setNotes] = useState("");
 
     useEffect(() => {
         if (isFeaturesLoaded && !features.tienda) {
@@ -47,149 +56,111 @@ export default function CheckoutPage() {
         }
     }, [isFeaturesLoaded, features.tienda, router]);
 
-    // 1. Verificar Autenticación
     useEffect(() => {
-        async function checkAuth() {
+        async function loadCheckoutData() {
             const { data: { user } } = await supabase.auth.getUser();
+
             if (!user) {
-                toast.error("Debes iniciar sesión para finalizar la compra");
+                toast.error("Debés iniciar sesión para finalizar la compra");
                 router.push("/login?next=/checkout");
                 return;
             }
+
+            const [{ data: profile }, { data: activeBranches, error: branchesError }] = await Promise.all([
+                supabase
+                    .from("profiles")
+                    .select("full_name, phone")
+                    .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+                    .limit(1)
+                    .maybeSingle(),
+                supabase
+                    .from("branches")
+                    .select("*")
+                    .eq("is_active", true)
+                    .order("created_at"),
+            ]);
+
+            if (branchesError) {
+                toast.error("No pudimos cargar las sucursales para retiro");
+            }
+
             setUser(user);
+            setContactName(profile?.full_name || "");
+            setContactPhone(profile?.phone || "");
+            setBranches(activeBranches || []);
+            setBranchId(activeBranches?.[0]?.id || "");
             setIsLoading(false);
         }
-        checkAuth();
-    }, [supabase, router]);
 
-    // 2. Verificar Carrito Vacío
+        loadCheckoutData();
+    }, [router, supabase]);
+
     useEffect(() => {
         if (!isLoading && items.length === 0) {
             router.push("/tienda");
         }
-    }, [isLoading, items, router]);
+    }, [isLoading, items.length, router]);
 
-    // Flujo previo a la migración 005: secuencia de escrituras desde el cliente.
-    // Se mantiene como respaldo hasta que create_order_with_items exista en la DB.
-    const legacyCheckout = async () => {
-        if (!user) throw new Error("Sesión expirada");
+    const selectedBranch = branches.find((branch) => branch.id === branchId);
 
-        const { data: profileData } = await supabase
-            .from('profiles')
-            .select('id')
-            .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
-            .limit(1)
-            .maybeSingle();
-
-        if (!profileData) throw new Error("Error al obtener perfil de usuario");
-
-        // Validar stock actual antes de crear la orden
-        const productIds = items.map((item: CartItem) => item.product.id);
-        const { data: stocks, error: stockReadError } = await supabase
-            .from('products')
-            .select('id, name, stock')
-            .in('id', productIds);
-
-        if (stockReadError || !stocks) throw new Error("No se pudo verificar el stock");
-
-        for (const item of items as CartItem[]) {
-            const current = stocks.find((s) => s.id === item.product.id);
-            if (!current || current.stock < item.quantity) {
-                throw new Error(`No hay stock suficiente de ${item.product.name}`);
-            }
+    const mapCheckoutError = (message?: string) => {
+        if (!message) return "No pudimos procesar el pedido.";
+        if (message.includes("STOCK_INSUFICIENTE")) {
+            const productName = message.split("STOCK_INSUFICIENTE:")[1]?.trim();
+            return `No hay stock suficiente de ${productName || "un producto del carrito"} en esa sucursal.`;
         }
-
-        const total = getTotalPrice();
-
-        const { data: orderData, error: orderError } = await supabase
-            .from('orders')
-            .insert({
-                client_id: profileData.id,
-                subtotal: total,
-                total: total,
-                status: 'pending',
-                payment_method: paymentMethod
-            })
-            .select()
-            .single();
-
-        if (orderError) throw orderError;
-
-        const orderItems = items.map((item: CartItem) => ({
-            order_id: orderData.id,
-            product_id: item.product.id,
-            quantity: item.quantity,
-            unit_price: item.product.price
-        }));
-
-        const { error: itemsError } = await supabase
-            .from('order_items')
-            .insert(orderItems);
-
-        if (itemsError) {
-            await supabase.from('orders').delete().eq('id', orderData.id);
-            throw itemsError;
-        }
-
-        // Descontar stock: si un producto falla, reponer lo ya descontado y abortar
-        const decremented: CartItem[] = [];
-        for (const item of items as CartItem[]) {
-            const { error: stockError } = await supabase.rpc('decrement_stock', {
-                p_product_id: item.product.id,
-                p_quantity: item.quantity
-            });
-
-            if (stockError) {
-                for (const done of decremented) {
-                    // cantidad negativa repone stock (la guarda stock >= p_quantity siempre pasa)
-                    await supabase.rpc('decrement_stock', {
-                        p_product_id: done.product.id,
-                        p_quantity: -done.quantity
-                    });
-                }
-                await supabase.from('orders').delete().eq('id', orderData.id);
-                throw new Error(`No hay stock suficiente de ${item.product.name}`);
-            }
-            decremented.push(item);
-        }
+        if (message.includes("SUCURSAL_INVALIDA")) return "Elegí una sucursal activa para retirar o enviar el pedido.";
+        if (message.includes("DIRECCION_REQUERIDA")) return "Ingresá la dirección de envío.";
+        if (message.includes("TELEFONO_REQUERIDO")) return "Ingresá un teléfono de contacto.";
+        if (message.includes("PERFIL_NO_ENCONTRADO")) return "No encontramos tu perfil. Cerrá sesión y volvé a ingresar.";
+        if (message.includes("PRODUCTO_NO_DISPONIBLE")) return "Un producto del carrito ya no está disponible.";
+        if (message.includes("CARRITO_VACIO")) return "El carrito está vacío.";
+        return message;
     };
 
     const handleCheckout = async () => {
         if (!user) return;
+        if (!branchId) {
+            toast.error("Elegí una sucursal para continuar");
+            return;
+        }
+        if (fulfillment === "delivery" && !deliveryAddress.trim()) {
+            toast.error("Ingresá la dirección de envío");
+            return;
+        }
+        if (fulfillment === "delivery" && !contactPhone.trim()) {
+            toast.error("Ingresá un teléfono de contacto");
+            return;
+        }
+
         setIsProcessing(true);
 
         try {
-            // Orden + items + descuento de stock en una sola transacción (migración 005)
-            const { error: rpcError } = await supabase.rpc('create_order_with_items', {
+            const { data: orderId, error } = await supabase.rpc("create_order_with_items", {
                 p_payment_method: paymentMethod,
                 p_items: items.map((item: CartItem) => ({
                     product_id: item.product.id,
-                    quantity: item.quantity
-                }))
+                    quantity: item.quantity,
+                })),
+                p_branch_id: branchId,
+                p_fulfillment: fulfillment,
+                p_contact_name: contactName || null,
+                p_contact_phone: contactPhone || null,
+                p_delivery_address: fulfillment === "delivery" ? deliveryAddress : null,
+                p_notes: notes || null,
             });
 
-            if (rpcError) {
-                if (rpcError.code === 'PGRST202') {
-                    // La función todavía no fue migrada en esta DB
-                    await legacyCheckout();
-                } else if (rpcError.message?.includes('STOCK_INSUFICIENTE')) {
-                    const productName = rpcError.message.split('STOCK_INSUFICIENTE:')[1]?.trim();
-                    throw new Error(`No hay stock suficiente de ${productName || 'un producto del carrito'}`);
-                } else if (rpcError.message?.includes('PERFIL_NO_ENCONTRADO')) {
-                    throw new Error("No encontramos tu perfil. Cerrá sesión y volvé a ingresar.");
-                } else if (rpcError.message?.includes('PRODUCTO_NO_DISPONIBLE')) {
-                    throw new Error("Un producto del carrito ya no está disponible.");
-                } else {
-                    throw rpcError;
+            if (error) {
+                if (error.code === "PGRST202") {
+                    throw new Error("La migración 019 todavía no está aplicada en la base de datos.");
                 }
+                throw new Error(mapCheckoutError(error.message));
             }
 
             clearCart();
-            toast.success("¡Pedido confirmado!");
-            router.push("/checkout/success");
-
+            toast.success("Pedido confirmado");
+            router.push(`/checkout/success?order=${orderId}`);
         } catch (error: unknown) {
-            console.error("Checkout error:", error);
             const errorMessage = error instanceof Error ? error.message : "Error desconocido";
             toast.error("Error al procesar el pedido: " + errorMessage);
         } finally {
@@ -201,11 +172,8 @@ export default function CheckoutPage() {
         return (
             <div className="min-h-screen bg-background pt-24 pb-12">
                 <div className="container mx-auto px-4 max-w-4xl">
-                    {/* Skeleton Title */}
                     <div className="h-8 bg-muted/40 rounded w-1/3 mb-8 mx-auto md:text-left animate-pulse" />
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {/* Columna Izquierda: Método de Pago Skeleton */}
                         <div className="md:col-span-2 space-y-6">
                             <Card className="bg-card/50 border-border/50 animate-pulse">
                                 <CardHeader>
@@ -217,29 +185,14 @@ export default function CheckoutPage() {
                                 </CardContent>
                             </Card>
                         </div>
-
-                        {/* Columna Derecha: Resumen Skeleton */}
                         <div className="md:col-span-1">
                             <Card className="bg-card border-border animate-pulse">
                                 <CardHeader>
                                     <div className="h-6 bg-muted/40 rounded w-1/2" />
                                 </CardHeader>
                                 <CardContent className="space-y-6">
-                                    <div className="space-y-4">
-                                        <div className="flex gap-3">
-                                            <div className="h-12 w-12 rounded bg-muted/30 flex-shrink-0" />
-                                            <div className="flex-1 space-y-2">
-                                                <div className="h-4 bg-muted/40 rounded w-3/4" />
-                                                <div className="h-3 bg-muted/30 rounded w-1/4" />
-                                            </div>
-                                            <div className="h-4 bg-muted/40 rounded w-10" />
-                                        </div>
-                                    </div>
+                                    <div className="h-20 bg-muted/30 rounded-lg" />
                                     <Separator className="bg-border/30" />
-                                    <div className="space-y-2">
-                                        <div className="h-4 bg-muted/30 rounded w-1/3" />
-                                        <div className="h-6 bg-muted/40 rounded w-1/2" />
-                                    </div>
                                     <div className="h-12 bg-muted/30 rounded" />
                                 </CardContent>
                             </Card>
@@ -254,17 +207,117 @@ export default function CheckoutPage() {
 
     return (
         <div className="min-h-screen bg-background pt-24 pb-12">
-            <div className="container mx-auto px-4 max-w-4xl">
-                <h1 className="text-3xl font-bold mb-8 text-center md:text-left">Finalizar Compra</h1>
+            <div className="container mx-auto px-4 max-w-5xl">
+                <h1 className="text-3xl font-bold mb-8 text-center md:text-left">Finalizar compra</h1>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Columna Izquierda: Método de Pago */}
                     <div className="md:col-span-2 space-y-6">
                         <Card className="bg-card/50 border-border/50">
                             <CardHeader>
                                 <CardTitle className="text-xl flex items-center gap-2">
+                                    <MapPin className="h-5 w-5 text-primary" />
+                                    Entrega
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-5">
+                                <div className="space-y-2">
+                                    <Label>Sucursal</Label>
+                                    <Select value={branchId} onValueChange={setBranchId}>
+                                        <SelectTrigger className="h-11 text-base md:text-sm">
+                                            <SelectValue placeholder="Elegí una sucursal" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {branches.map((branch) => (
+                                                <SelectItem key={branch.id} value={branch.id}>
+                                                    {branch.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {selectedBranch && (
+                                        <p className="text-sm text-muted-foreground">
+                                            {selectedBranch.address || "Dirección pendiente de cargar"}
+                                        </p>
+                                    )}
+                                </div>
+
+                                <RadioGroup
+                                    value={fulfillment}
+                                    onValueChange={(value) => setFulfillment(value as FulfillmentType)}
+                                    className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                                >
+                                    <Label className={`flex items-start gap-3 rounded-lg border p-4 cursor-pointer ${fulfillment === "pickup" ? "border-primary bg-primary/5" : "border-border"}`}>
+                                        <RadioGroupItem value="pickup" className="mt-1" />
+                                        <Store className="h-5 w-5 text-primary mt-0.5" />
+                                        <span>
+                                            <span className="block font-semibold">Retiro en sucursal</span>
+                                            <span className="block text-sm text-muted-foreground">Pasás por el local elegido.</span>
+                                        </span>
+                                    </Label>
+                                    <Label className={`flex items-start gap-3 rounded-lg border p-4 cursor-pointer ${fulfillment === "delivery" ? "border-primary bg-primary/5" : "border-border"}`}>
+                                        <RadioGroupItem value="delivery" className="mt-1" />
+                                        <Truck className="h-5 w-5 text-primary mt-0.5" />
+                                        <span>
+                                            <span className="block font-semibold">Envío</span>
+                                            <span className="block text-sm text-muted-foreground">Coordinamos la entrega desde esa sucursal.</span>
+                                        </span>
+                                    </Label>
+                                </RadioGroup>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="contact-name">Nombre de contacto</Label>
+                                        <Input
+                                            id="contact-name"
+                                            value={contactName}
+                                            onChange={(event) => setContactName(event.target.value)}
+                                            className="text-base md:text-sm"
+                                            placeholder="Tu nombre"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="contact-phone">Teléfono</Label>
+                                        <Input
+                                            id="contact-phone"
+                                            value={contactPhone}
+                                            onChange={(event) => setContactPhone(event.target.value)}
+                                            className="text-base md:text-sm"
+                                            placeholder="099 123 456"
+                                        />
+                                    </div>
+                                </div>
+
+                                {fulfillment === "delivery" && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="delivery-address">Dirección de envío</Label>
+                                        <Input
+                                            id="delivery-address"
+                                            value={deliveryAddress}
+                                            onChange={(event) => setDeliveryAddress(event.target.value)}
+                                            className="text-base md:text-sm"
+                                            placeholder="Calle, número, barrio"
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="order-notes">Notas</Label>
+                                    <Textarea
+                                        id="order-notes"
+                                        value={notes}
+                                        onChange={(event) => setNotes(event.target.value)}
+                                        className="text-base md:text-sm"
+                                        placeholder="Indicaciones para retiro o entrega"
+                                    />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-card/50 border-border/50">
+                            <CardHeader>
+                                <CardTitle className="text-xl flex items-center gap-2">
                                     <Wallet className="h-5 w-5 text-primary" />
-                                    Método de Pago
+                                    Método de pago
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
@@ -273,11 +326,10 @@ export default function CheckoutPage() {
                                     onValueChange={(val) => setPaymentMethod(val as PaymentMethod)}
                                     className="space-y-4"
                                 >
-                                    {/* Opción Efectivo */}
-                                    <div className={`flex items-center space-x-4 border p-4 rounded-lg cursor-pointer transition-colors ${paymentMethod === 'efectivo' ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                                    <div className={`flex items-center space-x-4 border p-4 rounded-lg cursor-pointer transition-colors ${paymentMethod === "efectivo" ? "border-primary bg-primary/5" : "border-border"}`}>
                                         <RadioGroupItem value="efectivo" id="efectivo" />
                                         <Label htmlFor="efectivo" className="flex-1 cursor-pointer">
-                                            <div className="font-semibold text-base">Efectivo / Tarjeta en Local</div>
+                                            <div className="font-semibold text-base">Efectivo en local</div>
                                             <p className="text-sm text-muted-foreground mt-1">
                                                 Pagás al retirar tus productos en la barbería.
                                             </p>
@@ -285,11 +337,10 @@ export default function CheckoutPage() {
                                         <ShieldCheck className="h-5 w-5 text-muted-foreground" />
                                     </div>
 
-                                    {/* Opción Transferencia */}
-                                    <div className={`flex items-center space-x-4 border p-4 rounded-lg cursor-pointer transition-colors ${paymentMethod === 'transferencia' ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                                    <div className={`flex items-center space-x-4 border p-4 rounded-lg cursor-pointer transition-colors ${paymentMethod === "transferencia" ? "border-primary bg-primary/5" : "border-border"}`}>
                                         <RadioGroupItem value="transferencia" id="transferencia" />
                                         <Label htmlFor="transferencia" className="flex-1 cursor-pointer">
-                                            <div className="font-semibold text-base">Transferencia Bancaria</div>
+                                            <div className="font-semibold text-base">Transferencia bancaria</div>
                                             <p className="text-sm text-muted-foreground mt-1">
                                                 Enviá el comprobante por WhatsApp tras confirmar.
                                             </p>
@@ -298,9 +349,9 @@ export default function CheckoutPage() {
                                     </div>
                                 </RadioGroup>
 
-                                {paymentMethod === 'transferencia' && (
+                                {paymentMethod === "transferencia" && (
                                     <div className="mt-4 p-4 bg-muted/50 rounded-lg text-sm space-y-2 border border-border">
-                                        <p className="font-semibold text-primary">Datos Bancarios:</p>
+                                        <p className="font-semibold text-primary">Datos bancarios:</p>
                                         <p>Banco: <span className="text-foreground">Santander</span></p>
                                         <p>Cuenta: <span className="text-foreground">1234 5678 9012</span></p>
                                         <p>Titular: <span className="text-foreground">NB Barber S.A.</span></p>
@@ -310,11 +361,10 @@ export default function CheckoutPage() {
                         </Card>
                     </div>
 
-                    {/* Columna Derecha: Resumen */}
                     <div className="md:col-span-1">
                         <Card className="bg-card border-border sticky top-24">
                             <CardHeader>
-                                <CardTitle>Resumen del Pedido</CardTitle>
+                                <CardTitle>Resumen del pedido</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
@@ -355,10 +405,17 @@ export default function CheckoutPage() {
                                     </div>
                                 </div>
 
+                                {selectedBranch && (
+                                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+                                        <p className="font-medium text-foreground">{selectedBranch.name}</p>
+                                        <p>{fulfillment === "pickup" ? "Retiro en sucursal" : "Envío coordinado"}</p>
+                                    </div>
+                                )}
+
                                 <Button
                                     className="w-full text-lg h-12"
                                     onClick={handleCheckout}
-                                    disabled={isProcessing}
+                                    disabled={isProcessing || branches.length === 0}
                                 >
                                     {isProcessing ? (
                                         <>
@@ -366,7 +423,10 @@ export default function CheckoutPage() {
                                             Procesando...
                                         </>
                                     ) : (
-                                        "Confirmar Pedido"
+                                        <>
+                                            <MessageSquareText className="mr-2 h-5 w-5" />
+                                            Confirmar pedido
+                                        </>
                                     )}
                                 </Button>
                             </CardContent>

@@ -9,6 +9,8 @@ import {
     Contact,
     MessageSquare,
     Package,
+    ClipboardList,
+    ShoppingCart,
     Wallet,
     LogOut,
     Menu,
@@ -50,6 +52,16 @@ const sidebarLinks = [
         href: ROUTES.ADMIN_PRODUCTOS,
         label: "Productos",
         icon: Package,
+    },
+    {
+        href: ROUTES.ADMIN_PEDIDOS,
+        label: "Pedidos",
+        icon: ClipboardList,
+    },
+    {
+        href: ROUTES.ADMIN_POS,
+        label: "Punto de venta",
+        icon: ShoppingCart,
     },
     {
         href: ROUTES.ADMIN_CAJA,
@@ -100,6 +112,8 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
         if (link.href === ROUTES.ADMIN_LIQUIDACIONES && !features.contabilidad) return false;
         if (link.href === ROUTES.ADMIN_MENSAJES && !features.mensajes_crm) return false;
         if (link.href === ROUTES.ADMIN_PRODUCTOS && !features.tienda) return false;
+        if (link.href === ROUTES.ADMIN_PEDIDOS && !features.tienda) return false;
+        if (link.href === ROUTES.ADMIN_POS && (!features.tienda || !features.contabilidad)) return false;
         return true;
     });
 

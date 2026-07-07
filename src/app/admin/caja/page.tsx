@@ -148,28 +148,27 @@ export default function AdminCajaPage() {
         const startDate = date?.from ? format(date.from, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
         const endDate = date?.to ? format(date.to, 'yyyy-MM-dd') : startDate;
 
-        // 1. Obtener Órdenes (Ingresos por Productos)
-        const { data: orders } = await supabase
-            .from('orders')
-            .select(`
-                id,
-                created_at,
-                total,
-                status,
-                payment_method,
-                order_items(quantity)
-            `)
-            .gte('created_at', `${startDate}T00:00:00`)
-            .lte('created_at', `${endDate}T23:59:59`)
-            .order('created_at', { ascending: false });
-
-        // 2. Obtener Movimientos de Caja (gastos, cobros de servicios y propinas reales, ingresos manuales)
+        // Caja usa cash_movements como fuente única. Las ventas de productos
+        // llegan desde las RPCs de pedidos/POS para evitar doble conteo con orders.
         const { data: movements } = await supabase
             .from('cash_movements')
             .select('*, barber:barbers(name)')
             .gte('created_at', `${startDate}T00:00:00`)
             .lte('created_at', `${endDate}T23:59:59`)
             .order('created_at', { ascending: false });
+
+        const productOrderIds = Array.from(new Set((movements || [])
+            .filter((mov) => mov.category === 'product' && mov.reference_id)
+            .map((mov) => mov.reference_id as string)));
+
+        const { data: productOrders } = productOrderIds.length > 0
+            ? await supabase
+                .from('orders')
+                .select('id, status, order_items(quantity)')
+                .in('id', productOrderIds)
+            : { data: [] };
+
+        const productOrdersById = new Map((productOrders || []).map((order) => [order.id, order]));
 
         // Procesar Datos
         let sIncome = 0;
@@ -184,35 +183,16 @@ export default function AdminCajaPage() {
         const trans: Transaction[] = [];
         const barberBreakdown: Record<string, { name: string; services: number; tips: number }> = {};
 
-        // Productos de la tienda
-        if (orders) {
-            orders.forEach(ord => {
-                pIncome += Number(ord.total);
-                const itemsCount = ord.order_items?.reduce((acc: number, item: { quantity: number }) => acc + item.quantity, 0) || 0;
-                pSold += itemsCount;
-
-                // Clasificar por método de pago
-                if (ord.payment_method === 'cash' || ord.payment_method === 'efectivo') cashPay += Number(ord.total);
-                else if (ord.payment_method === 'transfer' || ord.payment_method === 'transferencia') transferPay += Number(ord.total);
-                else cardPay += Number(ord.total);
-
-                trans.push({
-                    id: ord.id,
-                    type: 'producto',
-                    description: `Venta de ${itemsCount} productos`,
-                    amount: Number(ord.total),
-                    date: ord.created_at,
-                    status: ord.status === 'pending' ? 'Pendiente' : 'Pagado',
-                    method: PAYMENT_METHOD_LABELS[ord.payment_method || ''] || ord.payment_method || 'N/A'
-                });
-            });
-        }
-
         // Movimientos de caja (incluyendo servicios, propinas, etc.)
         if (movements) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             movements.forEach((mov: any) => {
                 const amount = Number(mov.amount);
+                const relatedOrder = mov.reference_id ? productOrdersById.get(mov.reference_id) : null;
+
+                if (mov.category === 'product' && relatedOrder?.status === 'cancelled') {
+                    return;
+                }
 
                 // Acumular por barbero (para el desglose de ingresos del período)
                 if (mov.barber_id && mov.type === 'income') {
@@ -245,6 +225,10 @@ export default function AdminCajaPage() {
                         totalServicesCount++;
                     } else if (mov.category === 'tip') {
                         totalTips += amount;
+                    } else if (mov.category === 'product') {
+                        const itemsCount = relatedOrder?.order_items?.reduce((acc: number, item: { quantity: number }) => acc + item.quantity, 0) || 0;
+                        pIncome += amount;
+                        pSold += itemsCount;
                     }
 
                     // Clasificar por método de pago ('other' no entra en ningún desglose)
@@ -257,9 +241,11 @@ export default function AdminCajaPage() {
 
                     trans.push({
                         id: mov.id,
-                        type: mov.category === 'service' ? 'servicio' : 'ingreso',
+                        type: mov.category === 'service' ? 'servicio' : mov.category === 'product' ? 'producto' : 'ingreso',
                         description: mov.category === 'service'
                             ? `${catLabel}${barberNameSuffix}`
+                            : mov.category === 'product'
+                                ? mov.description || `Venta de ${relatedOrder?.order_items?.reduce((acc: number, item: { quantity: number }) => acc + item.quantity, 0) || 0} productos`
                             : mov.description || catLabel,
                         amount: amount,
                         date: mov.created_at,

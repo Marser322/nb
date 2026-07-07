@@ -4,6 +4,8 @@
 export type UserRole = 'cliente' | 'barbero' | 'admin'
 export type AppointmentStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
 export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled'
+export type OrderType = 'online' | 'local'
+export type FulfillmentType = 'pickup' | 'delivery'
 export type PaymentMethod = 'mercadopago' | 'efectivo' | 'transferencia' | 'cash' | 'card' | 'transfer' | 'other'
 
 export interface Profile {
@@ -84,13 +86,24 @@ export interface Product {
 
 export interface Order {
   id: string
-  client_id: string
+  client_id: string | null
+  branch_id: string | null
+  order_type: OrderType
+  fulfillment: FulfillmentType
+  contact_name: string | null
+  contact_phone: string | null
+  delivery_address: string | null
+  notes: string | null
   subtotal: number
   total: number
   status: OrderStatus
   payment_method: PaymentMethod | null
   created_at: string
+  created_by: string | null
+  updated_at: string
   items?: OrderItem[]
+  branch?: Branch | null
+  client?: Profile | null
 }
 
 export interface OrderItem {
@@ -141,12 +154,34 @@ export interface CashMovement {
   amount: number
   payment_method: 'cash' | 'card' | 'transfer' | 'other'
   description: string | null
+  reference_id: string | null
   barber_id: string | null
   appointment_id: string | null
   branch_id: string | null
   created_by: string | null
   created_at: string
   barber?: Barber | null
+}
+
+export interface ProductStock {
+  product_id: string
+  branch_id: string
+  quantity: number
+  low_stock_threshold: number
+  updated_at: string
+  product?: Product | null
+  branch?: Branch | null
+}
+
+export interface StockMovement {
+  id: string
+  product_id: string
+  branch_id: string
+  delta: number
+  reason: 'sale_online' | 'sale_local' | 'adjustment' | 'restock' | 'cancel_restock'
+  reference_id: string | null
+  created_by: string | null
+  created_at: string
 }
 
 export interface BarberCompensation {
@@ -302,6 +337,42 @@ export interface Database {
         Update: { [K in keyof Appointment]?: Appointment[K] }
         Relationships: []
       }
+      branches: {
+        Row: { [K in keyof Branch]: Branch[K] }
+        Insert: { [K in keyof Branch]?: Branch[K] }
+        Update: { [K in keyof Branch]?: Branch[K] }
+        Relationships: []
+      }
+      products: {
+        Row: { [K in keyof Product]: Product[K] }
+        Insert: { [K in keyof Product]?: Product[K] }
+        Update: { [K in keyof Product]?: Product[K] }
+        Relationships: []
+      }
+      orders: {
+        Row: { [K in keyof Order]: Order[K] }
+        Insert: { [K in keyof Order]?: Order[K] }
+        Update: { [K in keyof Order]?: Order[K] }
+        Relationships: []
+      }
+      order_items: {
+        Row: { [K in keyof OrderItem]: OrderItem[K] }
+        Insert: { [K in keyof OrderItem]?: OrderItem[K] }
+        Update: { [K in keyof OrderItem]?: OrderItem[K] }
+        Relationships: []
+      }
+      product_stock: {
+        Row: { [K in keyof ProductStock]: ProductStock[K] }
+        Insert: { [K in keyof ProductStock]?: ProductStock[K] }
+        Update: { [K in keyof ProductStock]?: ProductStock[K] }
+        Relationships: []
+      }
+      stock_movements: {
+        Row: { [K in keyof StockMovement]: StockMovement[K] }
+        Insert: { [K in keyof StockMovement]?: StockMovement[K] }
+        Update: { [K in keyof StockMovement]?: StockMovement[K] }
+        Relationships: []
+      }
       schedule_blocks: {
         Row: { [K in keyof ScheduleBlock]: ScheduleBlock[K] }
         Insert: { [K in keyof ScheduleBlock]?: ScheduleBlock[K] }
@@ -400,6 +471,44 @@ export interface Database {
           p_final_amount: number
           p_payment_method: string
           p_tip_amount?: number
+        }
+        Returns: undefined
+      }
+      create_order_with_items: {
+        Args: {
+          p_payment_method: 'mercadopago' | 'efectivo' | 'transferencia'
+          p_items: unknown
+          p_branch_id: string
+          p_fulfillment?: FulfillmentType
+          p_contact_name?: string | null
+          p_contact_phone?: string | null
+          p_delivery_address?: string | null
+          p_notes?: string | null
+        }
+        Returns: string
+      }
+      create_counter_sale: {
+        Args: {
+          p_branch_id: string
+          p_payment_method: 'mercadopago' | 'efectivo' | 'transferencia'
+          p_items: unknown
+          p_barber_id?: string | null
+          p_notes?: string | null
+        }
+        Returns: string
+      }
+      update_order_status: {
+        Args: {
+          p_order_id: string
+          p_new_status: OrderStatus
+        }
+        Returns: undefined
+      }
+      set_product_stock: {
+        Args: {
+          p_product_id: string
+          p_branch_id: string
+          p_new_quantity: number
         }
         Returns: undefined
       }

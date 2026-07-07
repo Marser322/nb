@@ -74,6 +74,26 @@ export const ORDER_STATUS_COLORS: Record<string, string> = {
     cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
 }
 
+export const ORDER_TYPE_LABELS: Record<string, string> = {
+    online: 'Pedido online',
+    local: 'Venta en local',
+}
+
+export const ORDER_TYPE_COLORS: Record<string, string> = {
+    online: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    local: 'bg-primary/20 text-primary border-primary/30',
+}
+
+export const FULFILLMENT_LABELS: Record<string, string> = {
+    pickup: 'Retiro en sucursal',
+    delivery: 'Envío',
+}
+
+export const FULFILLMENT_COLORS: Record<string, string> = {
+    pickup: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    delivery: 'bg-primary/20 text-primary border-primary/30',
+}
+
 export const COMMUNICATION_STATUS_LABELS: Record<string, string> = {
     sent: 'Enviado',
     delivered: 'Entregado',
@@ -118,6 +138,12 @@ export function normalizePaymentMethod(method: string | null | undefined): Canon
 export function getPaymentMethodLabel(method: string | null | undefined): string {
     if (!method) return 'N/A';
     return PAYMENT_METHOD_LABELS[method] || PAYMENT_METHOD_LABELS[normalizePaymentMethod(method) || 'other'] || method;
+}
+
+export const ORDER_TO_CASH_PAYMENT: Record<string, CanonicalPaymentMethod> = {
+    efectivo: 'cash',
+    transferencia: 'transfer',
+    mercadopago: 'transfer',
 }
 
 // Movimientos de Caja
@@ -211,6 +237,8 @@ export const ROUTES = {
     ADMIN_CLIENTES: '/admin/clientes',
     ADMIN_MENSAJES: '/admin/mensajes',
     ADMIN_PRODUCTOS: '/admin/productos',
+    ADMIN_PEDIDOS: '/admin/pedidos',
+    ADMIN_POS: '/admin/pos',
     ADMIN_CAJA: '/admin/caja',
     ADMIN_LIQUIDACIONES: '/admin/liquidaciones',
     ADMIN_SUCURSALES: '/admin/sucursales',
