@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageSquare, X, Send, Scissors, Sparkles, Calendar, MapPin, DollarSign, ArrowRight, Wallet, Settings, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -94,6 +94,10 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const scrollMessagesToEnd = useCallback((behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior, block: "nearest" });
+  }, []);
+
   // Dynamic quick actions
   const getQuickActions = () => {
     if (resolvedMode === 'admin') {
@@ -154,10 +158,8 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
   }, [messages, sessionKey, defaultGreeting]);
 
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, isOpen]);
+    scrollMessagesToEnd();
+  }, [messages, isOpen, scrollMessagesToEnd]);
 
   const handleSendMessage = async (textToSend: string) => {
     if (!textToSend.trim() || isLoading) return;
@@ -210,13 +212,17 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
   return (
     <>
       {/* Floating Action Button - Positioned bottom-left to avoid colliding with HelpFab (bottom-right) */}
-      <div className="fixed bottom-6 left-6 z-50">
+      <div
+        className="fixed left-4 z-50 sm:left-6"
+        style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
+      >
         <Button
           onClick={() => setIsOpen(!isOpen)}
           size="icon"
+          aria-label={isOpen ? "Cerrar asistente" : "Abrir asistente"}
           className="h-14 w-14 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black shadow-xl shadow-amber-500/20 transition-all hover:scale-110 active:scale-95"
         >
-          {isOpen ? <X className="h-6 w-6 animate-in spin-in duration-300" /> : <MessageSquare className="h-6 w-6 animate-in zoom-in duration-300" />}
+          {isOpen ? <X className="h-6 w-6 animate-in spin-in duration-300" aria-hidden="true" /> : <MessageSquare className="h-6 w-6 animate-in zoom-in duration-300" aria-hidden="true" />}
           <span className="absolute -top-1 -right-1 flex h-4 w-4">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-4 w-4 bg-amber-500 items-center justify-center text-[10px] font-bold text-black">
@@ -234,7 +240,8 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.3 }}
-            className="fixed bottom-24 left-4 right-4 sm:left-6 sm:right-auto z-50 w-auto sm:w-[400px] h-[70vh] max-h-[600px] rounded-3xl border border-border bg-card/95 backdrop-blur-2xl shadow-2xl overflow-hidden flex flex-col"
+            className="fixed left-3 right-3 sm:left-6 sm:right-auto z-50 w-auto sm:w-[400px] h-[70dvh] max-h-[calc(100dvh-8rem)] sm:max-h-[600px] rounded-3xl border border-border bg-card/95 backdrop-blur-2xl shadow-2xl overflow-hidden overscroll-contain flex flex-col"
+            style={{ bottom: "calc(6rem + env(safe-area-inset-bottom))" }}
           >
             {/* Header */}
             <div className="p-4 border-b border-border bg-gradient-to-r from-card to-background flex items-center justify-between">
@@ -255,29 +262,30 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsOpen(false)}
-                className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent"
+                aria-label="Cerrar asistente"
+                className="h-10 w-10 md:h-8 md:w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent"
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
 
             {/* Quick Actions / Suggestions */}
-            <div className="px-4 py-3 border-b border-border/50 bg-muted/30 flex gap-2 overflow-x-auto scrollbar-none shrink-0">
+            <div className="px-4 py-3 border-b border-border/50 bg-muted/30 flex gap-2 overflow-x-auto overscroll-contain scrollbar-none shrink-0">
               {quickActions.map((action) => (
                 <Button
                   key={action.label}
                   variant="outline"
                   onClick={() => handleSendMessage(action.label)}
-                  className="rounded-full h-8 px-3 text-xs bg-card border-border text-muted-foreground hover:bg-primary hover:border-primary hover:text-primary-foreground transition-all flex items-center gap-1.5 shrink-0"
+                  className="rounded-full h-10 md:h-8 px-3 text-xs bg-card border-border text-muted-foreground hover:bg-primary hover:border-primary hover:text-primary-foreground transition-all flex items-center gap-1.5 shrink-0"
                 >
-                  <action.icon className="h-3 w-3" />
+                  <action.icon className="h-3 w-3" aria-hidden="true" />
                   {action.label}
                 </Button>
               ))}
             </div>
 
             {/* Message History */}
-            <div className="flex-grow overflow-y-auto p-4 space-y-4 min-h-0">
+            <div className="flex-grow overflow-y-auto overscroll-contain p-4 space-y-4 min-h-0">
               {messages.map((msg, i) => (
                 <div
                   key={i}
@@ -291,7 +299,7 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                     }`}
                   >
                     {/* Render message text with simple markdown-like bold parsing */}
-                    <p className="whitespace-pre-line text-xs sm:text-sm">
+                    <p className="whitespace-pre-line text-sm">
                       {msg.content.split("**").map((part, idx) =>
                         idx % 2 === 1 ? <strong key={idx} className="font-bold text-foreground">{part}</strong> : part
                       )}
@@ -385,7 +393,7 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                       <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce delay-300" />
                     </span>
                     <span>
-                      {resolvedMode === 'admin' ? "Analizando CRM..." : "Analizando estilo..."}
+                      {resolvedMode === 'admin' ? "Analizando CRM…" : "Analizando estilo…"}
                     </span>
                   </div>
                 </div>
@@ -404,17 +412,20 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={resolvedMode === 'admin' ? "Preguntame cómo cobrar, liquidar, stock..." : "Preguntame sobre cortes, precios o reservá..."}
+                onFocus={() => window.setTimeout(() => scrollMessagesToEnd("auto"), 250)}
+                placeholder={resolvedMode === 'admin' ? "Preguntame cómo cobrar, liquidar, stock…" : "Preguntame sobre cortes, precios o reservá…"}
                 disabled={isLoading}
-                className="bg-background border-border text-foreground rounded-full focus-visible:ring-primary h-10 px-4 flex-grow placeholder:text-muted-foreground text-xs sm:text-sm"
+                autoComplete="off"
+                className="bg-background border-border text-foreground rounded-full focus-visible:ring-primary h-11 px-4 flex-grow placeholder:text-muted-foreground text-base md:text-sm"
               />
               <Button
                 type="submit"
                 disabled={isLoading || !input.trim()}
                 size="icon"
-                className="h-10 w-10 rounded-full bg-primary hover:bg-primary/95 text-primary-foreground shrink-0 transition-transform active:scale-90 disabled:opacity-50"
+                aria-label="Enviar mensaje"
+                className="h-11 w-11 md:h-10 md:w-10 rounded-full bg-primary hover:bg-primary/95 text-primary-foreground shrink-0 transition-transform active:scale-90 disabled:opacity-50"
               >
-                <Send className="h-4 w-4" />
+                <Send className="h-4 w-4" aria-hidden="true" />
               </Button>
             </form>
           </motion.div>

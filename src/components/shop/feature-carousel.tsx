@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { ArrowRight, ArrowLeft, Plus, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatPrice } from "@/lib/utils";
@@ -65,17 +65,15 @@ export function FeaturedProductsCarousel({
                     transition={{ duration: 0.8 }}
                     className="absolute inset-0"
                 >
-                    {currentProduct.image_url ? (
-                        <Image
-                            src={currentProduct.image_url}
-                            alt={currentProduct.name}
-                            fill
-                            className="object-cover"
-                            priority
-                        />
-                    ) : (
-                        <div className="h-full w-full bg-zinc-950" />
-                    )}
+                    <ImageWithFallback
+                        src={currentProduct.image_url}
+                        alt={currentProduct.name}
+                        fill
+                        sizes="100vw"
+                        className="object-cover"
+                        fallbackClassName="h-full w-full bg-zinc-950"
+                        priority
+                    />
                     <div className="absolute inset-0 bg-gradient-to-r from-black via-black/70 to-black/20" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/30" />
                 </motion.div>

@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { useState, useEffect, Suspense, useMemo } from "react";
+import { useState, useEffect, Suspense, useMemo, type KeyboardEvent } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { format, addDays, isBefore, startOfToday, isToday } from "date-fns";
 import { es } from "date-fns/locale";
@@ -11,13 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Header, Footer } from "@/components/layout";
-import { cn, formatPrice, generateTimeSlots, generateTimeSlotsFromRange, calculateEndTime } from "@/lib/utils";
-import { BUSINESS_CONFIG, BRANCHES } from "@/lib/constants";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
+import { cn, formatPrice, generateTimeSlotsFromRange, calculateEndTime } from "@/lib/utils";
+import { BRANCHES } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { Service, Barber, DayAvailability } from "@/types/database.types";
 import { toast } from "sonner";
 import { STATIC_STYLES, getBarberAvatarUrl, STATIC_SERVICES, STATIC_BARBERS } from "@/lib/static-data";
-import { fetchActiveAppointments, computeBookedSlots, hasOverlap, bookAppointment, fetchAvailability } from "@/lib/booking";
+import { bookAppointment, fetchAvailability } from "@/lib/booking";
 import { useFeatures } from "@/lib/features";
 
 interface Branch {
@@ -113,7 +114,6 @@ function ReservarPageContent() {
     loadData();
   }, [paramBarberId, paramServiceId, supabase]);
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   // Rehidratar borrador de sessionStorage
   useEffect(() => {
     if (isLoading || draftChecked) return;
@@ -167,7 +167,6 @@ function ReservarPageContent() {
 
     checkDraft();
   }, [isLoading, draftChecked, branches, services, barbers, supabase]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Filtrar barberos según la sucursal seleccionada (los barberos sin branch_id asignado se muestran en todas)
   const filteredBarbers = useMemo(() => {
@@ -281,6 +280,39 @@ function ReservarPageContent() {
     return true;
   };
 
+  const handleBranchSelect = (branch: Branch) => {
+    setSelectedBranch(branch);
+    setSelectedBarber(null);
+    setSelectedDate(null);
+    setSelectedTime(null);
+    setAvailability([]);
+  };
+
+  const handleServiceSelect = (service: Service) => {
+    setSelectedService(service);
+    setSelectedDate(null);
+    setSelectedTime(null);
+  };
+
+  const handleBarberSelect = (barber: Barber) => {
+    setSelectedBarber(barber);
+    setSelectedDate(null);
+    setSelectedTime(null);
+    setAvailability([]);
+  };
+
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+    setSelectedTime(null);
+  };
+
+  const handleSelectionKey = (event: KeyboardEvent<HTMLElement>, action: () => void) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      action();
+    }
+  };
+
   // Navegación entre pasos
   const canProceed = () => {
     switch (currentStep) {
@@ -368,6 +400,7 @@ function ReservarPageContent() {
 
       // Reset form
       setCurrentStep(0);
+      setSelectedBranch(null);
       setSelectedService(null);
       setSelectedStyle(null);
       setSelectedBarber(null);
@@ -442,6 +475,7 @@ function ReservarPageContent() {
 
     // Reset form
     setCurrentStep(0);
+    setSelectedBranch(null);
     setSelectedService(null);
     setSelectedStyle(null);
     setSelectedBarber(null);
@@ -470,7 +504,7 @@ function ReservarPageContent() {
                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
                 className="relative w-20 h-20 md:w-32 md:h-32 opacity-20"
               >
-                <Image src="/images/hero/herramientas-barberia.jpg" alt="Scissor" fill className="object-cover rounded-2xl grayscale border border-border" />
+                <Image src="/images/hero/herramientas-barberia.jpg" alt="Herramientas de barbería" fill sizes="(max-width: 768px) 80px, 128px" className="object-cover rounded-2xl grayscale border border-border" />
               </motion.div>
             </div>
 
@@ -480,7 +514,7 @@ function ReservarPageContent() {
                 transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1 }}
                 className="relative w-24 h-24 md:w-40 md:h-40 opacity-20"
               >
-                <Image src="/images/hero/maquina-clippers.jpg" alt="Clippers" fill className="object-cover rounded-full grayscale blur-[1px]" />
+                <Image src="/images/hero/maquina-clippers.jpg" alt="Máquina de corte profesional" fill sizes="(max-width: 768px) 96px, 160px" className="object-cover rounded-full grayscale blur-[1px]" />
               </motion.div>
             </div>
           </div>
@@ -548,25 +582,31 @@ function ReservarPageContent() {
                   <MapPin className="h-5 w-5 text-primary" />
                   ¿A cuál sucursal querés ir?
                 </h2>
+                <p className="-mt-4 mb-6 text-sm text-muted-foreground">
+                  Tocá una tarjeta para seleccionarla y después avanzá con Siguiente.
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {branches.map((branch) => (
                     <Card
                       key={branch.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={selectedBranch?.id === branch.id}
                       className={cn(
                         "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative h-full flex flex-col",
                         selectedBranch?.id === branch.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card/50 hover:bg-card/80"
                       )}
-                      onClick={() => {
-                        setSelectedBranch(branch);
-                        setCurrentStep(1);
-                      }}
+                      onClick={() => handleBranchSelect(branch)}
+                      onKeyDown={(event) => handleSelectionKey(event, () => handleBranchSelect(branch))}
                     >
                       <div className="relative h-48 w-full overflow-hidden">
-                        <Image
+                        <ImageWithFallback
                           src={branch.image}
                           alt={branch.name}
                           fill
+                          sizes="(max-width: 768px) 100vw, 33vw"
                           className="object-cover transition-transform duration-500 group-hover:scale-110"
+                          fallbackClassName="h-full w-full"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
                         <div className="absolute bottom-0 left-0 p-4">
@@ -605,6 +645,9 @@ function ReservarPageContent() {
                     <Scissors className="h-5 w-5 text-primary" />
                     ¿Qué servicio necesitás?
                   </h2>
+                  <p className="-mt-4 mb-6 text-sm text-muted-foreground">
+                    Elegí el servicio y confirmá el paso con Siguiente.
+                  </p>
                   <div className="space-y-3">
                     {isLoading ? (
                       <div className="space-y-3">
@@ -625,32 +668,30 @@ function ReservarPageContent() {
                     ) : services.map((service) => (
                       <Card
                         key={service.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={selectedService?.id === service.id}
                         className={cn(
                           "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative",
                           selectedService?.id === service.id ? "border-primary bg-primary/5" : "bg-card/50 hover:bg-card/80"
                         )}
-                        onClick={() => {
-                          setSelectedService(service);
-                          setCurrentStep(2);
-                        }}
+                        onClick={() => handleServiceSelect(service)}
+                        onKeyDown={(event) => handleSelectionKey(event, () => handleServiceSelect(service))}
                         onMouseEnter={() => setHoveredService(service)}
                         onMouseLeave={() => setHoveredService(null)}
                       >
                         <CardContent className="p-6 relative z-10">
                           <div className="flex items-start gap-4">
                             <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border bg-muted lg:hidden">
-                              {service.image_url ? (
-                                <Image
-                                  src={service.image_url}
-                                  alt={service.name}
-                                  fill
-                                  className="object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center">
-                                  <Scissors className="h-6 w-6 text-muted-foreground" />
-                                </div>
-                              )}
+                              <ImageWithFallback
+                                src={service.image_url}
+                                alt={service.name}
+                                fill
+                                sizes="64px"
+                                className="object-cover"
+                                fallbackClassName="h-full w-full"
+                                iconClassName="h-6 w-6"
+                              />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex justify-between items-start mb-2 opacity-90 group-hover:opacity-100 transition-opacity">
@@ -684,11 +725,13 @@ function ReservarPageContent() {
                       transition={{ duration: 0.5 }}
                       className="absolute inset-0"
                     >
-                      <Image
+                      <ImageWithFallback
                         src={hoveredService?.image_url || selectedService?.image_url || "/images/hero/ambiente-barberia.jpg"}
-                        alt="Service Preview"
+                        alt={hoveredService?.name || selectedService?.name || "Vista previa del servicio"}
                         fill
+                        sizes="(max-width: 1024px) 0px, 50vw"
                         className="object-cover opacity-60"
+                        fallbackClassName="h-full w-full"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                     </motion.div>
@@ -716,7 +759,7 @@ function ReservarPageContent() {
             {/* Paso 3: Referencia de Estilo (Opcional) */}
             {currentStep === 2 && (
               <div className="space-y-4 animate-in fade-in duration-300">
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
                   <div>
                     <h2 className="text-xl font-semibold flex items-center gap-2">
                       <Sparkles className="h-5 w-5 text-primary" />
@@ -732,11 +775,10 @@ function ReservarPageContent() {
                       size="sm"
                       onClick={() => {
                         setSelectedStyle(null);
-                        setCurrentStep(3);
                       }}
                       className="text-xs border-border text-muted-foreground hover:text-foreground bg-muted rounded-full px-4"
                     >
-                      Omitir e ir a Barbero
+                      Sin referencia
                     </Button>
                     {selectedStyle && (
                       <Button
@@ -754,21 +796,24 @@ function ReservarPageContent() {
                   {STATIC_STYLES.map((style) => (
                     <Card
                       key={style.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={selectedStyle?.id === style.id}
                       className={cn(
                         "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative flex flex-col h-full",
                         selectedStyle?.id === style.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card/50 hover:bg-card/80"
                       )}
-                      onClick={() => {
-                        setSelectedStyle(style);
-                        setCurrentStep(3);
-                      }}
+                      onClick={() => setSelectedStyle(style)}
+                      onKeyDown={(event) => handleSelectionKey(event, () => setSelectedStyle(style))}
                     >
                       <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
-                        <Image
+                        <ImageWithFallback
                           src={style.image_url}
                           alt={style.title}
                           fill
+                          sizes="(max-width: 768px) 50vw, 33vw"
                           className="object-cover transition-transform duration-500 group-hover:scale-105"
+                          fallbackClassName="h-full w-full"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                       </div>
@@ -795,6 +840,9 @@ function ReservarPageContent() {
                   <User className="h-5 w-5 text-primary" />
                   ¿Con qué barbero preferís?
                 </h2>
+                <p className="-mt-4 mb-6 text-sm text-muted-foreground">
+                  Seleccioná tu barbero y avanzá cuando estés seguro.
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {isLoading ? (
                     [...Array(3)].map((_, i) => (
@@ -820,30 +868,27 @@ function ReservarPageContent() {
                     return (
                       <Card
                         key={barber.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={isSelected}
                         className={cn(
                           "group cursor-pointer transition-all duration-300 hover:border-primary/50 overflow-hidden",
                           isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card/50 hover:bg-card/80"
                         )}
-                        onClick={() => {
-                          setSelectedBarber(barber);
-                          setCurrentStep(4);
-                        }}
+                        onClick={() => handleBarberSelect(barber)}
+                        onKeyDown={(event) => handleSelectionKey(event, () => handleBarberSelect(barber))}
                       >
                         <CardContent className="p-0">
                           <div className="relative aspect-square overflow-hidden bg-muted">
-                            {avatarUrl ? (
-                              <Image
-                                src={avatarUrl}
-                                alt={barber.name}
-                                fill
-                                sizes="(max-width: 768px) 100vw, 33vw"
-                                className="object-cover transition-transform duration-500 group-hover:scale-105"
-                              />
-                            ) : (
-                              <div className="h-full w-full flex items-center justify-center">
-                                <User className="h-12 w-12 text-primary/40" />
-                              </div>
-                            )}
+                            <ImageWithFallback
+                              src={avatarUrl}
+                              alt={barber.name}
+                              fill
+                              sizes="(max-width: 768px) 100vw, 33vw"
+                              className="object-cover transition-transform duration-500 group-hover:scale-105"
+                              fallbackClassName="h-full w-full"
+                              iconClassName="h-12 w-12"
+                            />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
                             {isSelected && (
                               <div className="absolute top-3 right-3 bg-primary text-primary-foreground h-8 w-8 rounded-full flex items-center justify-center shadow-lg">
@@ -884,12 +929,9 @@ function ReservarPageContent() {
                     {availableDates.map((date) => (
                       <button
                         key={date.toISOString()}
-                        onClick={() => {
-                          setSelectedDate(date);
-                          setSelectedTime(null);
-                        }}
+                        onClick={() => handleDateSelect(date)}
                         className={cn(
-                          "flex-shrink-0 flex flex-col items-center p-3 rounded-lg border transition-colors min-w-[80px]",
+                          "flex-shrink-0 flex min-h-11 min-w-[80px] flex-col items-center rounded-lg border p-3 transition-colors",
                           selectedDate?.toDateString() === date.toDateString()
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-border hover:border-primary/50"
@@ -926,7 +968,7 @@ function ReservarPageContent() {
                             disabled={!available}
                             onClick={() => setSelectedTime(time)}
                             className={cn(
-                              "p-2.5 rounded-lg border text-xs text-center transition-colors",
+                              "min-h-11 rounded-lg border p-2.5 text-center text-sm transition-colors",
                               !available && "opacity-30 cursor-not-allowed bg-muted",
                               available && selectedTime === time
                                 ? "border-primary bg-primary/10 text-primary"
@@ -1030,19 +1072,19 @@ function ReservarPageContent() {
             )}
 
             {/* Navegación */}
-            <div className="flex justify-between mt-8 border-t border-border pt-6">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between mt-8 border-t border-border pt-6">
               <Button
                 variant="outline"
                 onClick={prevStep}
                 disabled={currentStep === 0}
-                className="gap-2 h-10 px-4 text-xs md:text-sm border-border text-muted-foreground hover:text-foreground"
+                className="gap-2 h-11 px-4 text-sm border-border text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Atrás
               </Button>
 
               {currentStep < STEPS.length - 1 ? (
-                <Button onClick={nextStep} disabled={!canProceed()} className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground h-10 px-5 text-xs md:text-sm rounded-full">
+                <Button onClick={nextStep} disabled={!canProceed()} className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground h-11 px-5 text-sm rounded-full">
                   Siguiente
                   <ArrowRight className="h-4 w-4" />
                 </Button>
@@ -1050,9 +1092,9 @@ function ReservarPageContent() {
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-bold h-10 px-6 rounded-full shadow-lg shadow-amber-500/10 active:scale-95 transition-all"
+                  className="gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-bold h-11 px-6 rounded-full shadow-lg shadow-amber-500/10 active:scale-95 transition-all"
                 >
-                  {isSubmitting ? "Confirmando..." : "Confirmar Reserva"}
+                  {isSubmitting ? "Confirmando…" : "Confirmar Reserva"}
                   <Check className="h-4 w-4" />
                 </Button>
               )}

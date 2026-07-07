@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense, useMemo } from "react";
+import { useState, useEffect, Suspense, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -19,27 +19,32 @@ import { Search, Contact, ArrowLeft, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils";
 import { INACTIVE_DAYS } from "@/lib/constants";
+import { fetchClientsOverviewPage, isInactiveClient } from "@/lib/crm";
 import type { ClientOverview } from "@/types/database.types";
-import { format, parseISO, differenceInDays } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
 import { useFeatures } from "@/lib/features";
 import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
 
+const CLIENTS_PAGE_SIZE = 20;
+
 function ClientesList() {
     const { features } = useFeatures();
     const [clients, setClients] = useState<ClientOverview[]>([]);
+    const [totalClients, setTotalClients] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
     const searchParams = useSearchParams();
     const filterParam = searchParams.get("filtro");
     const router = useRouter();
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
+    const inactiveOnly = filterParam === "inactivos";
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, filterParam]);
+    }, [filterParam]);
 
 
 
@@ -50,29 +55,32 @@ function ClientesList() {
     } | null>(null);
     const [isWaOpen, setIsWaOpen] = useState(false);
 
-    const loadClients = async () => {
+    const loadClients = useCallback(async () => {
         setIsLoading(true);
-        const { data, error } = await supabase.rpc("get_clients_overview");
-        if (error) {
+        try {
+            const { clients: pageClients, total } = await fetchClientsOverviewPage(supabase, {
+                search: searchQuery,
+                inactiveOnly,
+                inactiveDays: INACTIVE_DAYS,
+                limit: CLIENTS_PAGE_SIZE,
+                offset: (currentPage - 1) * CLIENTS_PAGE_SIZE,
+            });
+
+            setClients(pageClients);
+            setTotalClients(total);
+        } catch (error) {
             console.error("Error loading clients:", error);
             toast.error("Error al cargar la lista de clientes");
-        } else if (data) {
-            setClients(data);
+            setClients([]);
+            setTotalClients(0);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
-    };
+    }, [currentPage, inactiveOnly, searchQuery, supabase]);
 
     useEffect(() => {
         loadClients();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const isInactive = (lastVisitStr: string | null) => {
-        if (!lastVisitStr) return true;
-        const lastVisitDate = parseISO(lastVisitStr);
-        const diff = differenceInDays(new Date(), lastVisitDate);
-        return diff > INACTIVE_DAYS;
-    };
+    }, [loadClients]);
 
     const formatLastVisit = (lastVisitStr: string | null) => {
         if (!lastVisitStr) return "Nunca";
@@ -80,25 +88,9 @@ function ClientesList() {
         return format(date, "d 'de' MMMM, yyyy", { locale: es });
     };
 
-    const filteredClients = clients.filter((client) => {
-        // Filtro por inactivos
-        if (filterParam === "inactivos" && !isInactive(client.last_visit)) {
-            return false;
-        }
-
-        // Búsqueda en memoria
-        const query = searchQuery.toLowerCase().trim();
-        if (!query) return true;
-
-        const nameMatches = client.full_name?.toLowerCase().includes(query) ?? false;
-        const phoneMatches = client.phone?.includes(query) ?? false;
-        return nameMatches || phoneMatches;
-    });
-
-    const paginatedClients = useMemo(() => {
-        const startIndex = (currentPage - 1) * 20;
-        return filteredClients.slice(startIndex, startIndex + 20);
-    }, [filteredClients, currentPage]);
+    const totalPages = Math.max(1, Math.ceil(totalClients / CLIENTS_PAGE_SIZE));
+    const firstVisibleClient = totalClients === 0 ? 0 : (currentPage - 1) * CLIENTS_PAGE_SIZE + 1;
+    const lastVisibleClient = Math.min(totalClients, currentPage * CLIENTS_PAGE_SIZE);
 
     const handleOpenWa = (e: React.MouseEvent, client: ClientOverview) => {
         e.stopPropagation();
@@ -145,8 +137,11 @@ function ClientesList() {
                     <Input
                         placeholder="Buscar por nombre o teléfono..."
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 bg-background/50 border-input/50 focus:border-primary/50"
+                        onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="pl-10 bg-background/50 border-input/50 focus:border-primary/50 text-base md:text-sm"
                     />
                 </div>
             </div>
@@ -167,7 +162,7 @@ function ClientesList() {
                                 </div>
                             ))}
                         </div>
-                    ) : filteredClients.length === 0 ? (
+                    ) : clients.length === 0 ? (
                         <IllustratedEmptyState
                             icon={Contact}
                             imageSrc="/images/empty/no-clientes.webp"
@@ -197,8 +192,8 @@ function ClientesList() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {paginatedClients.map((client) => {
-                                            const inactive = isInactive(client.last_visit);
+                                        {clients.map((client) => {
+                                            const inactive = isInactiveClient(client.last_visit);
                                             return (
                                                 <TableRow
                                                     key={client.id}
@@ -243,10 +238,11 @@ function ClientesList() {
                                                                 size="icon"
                                                                 variant="ghost"
                                                                 onClick={(e) => handleOpenWa(e, client)}
+                                                                aria-label={`Enviar WhatsApp a ${client.full_name || "cliente"}`}
                                                                 className="text-primary hover:text-primary hover:bg-primary/10"
                                                                 title="Enviar WhatsApp"
                                                             >
-                                                                <MessageCircle className="h-4 w-4" />
+                                                                <MessageCircle className="h-4 w-4" aria-hidden="true" />
                                                             </Button>
                                                         )}
                                                     </TableCell>
@@ -256,11 +252,11 @@ function ClientesList() {
                                     </TableBody>
                                 </Table>
                             </div>
-                            {filteredClients.length > 20 && (
+                            {totalClients > CLIENTS_PAGE_SIZE && (
                                 <div className="flex items-center justify-between px-6 py-4 border-t border-border/30 bg-muted/5">
                                     <div className="text-xs text-muted-foreground">
-                                        Mostrando <span className="font-semibold text-foreground">{Math.min(filteredClients.length, (currentPage - 1) * 20 + 1)}-{Math.min(filteredClients.length, currentPage * 20)}</span> de{" "}
-                                        <span className="font-semibold text-foreground">{filteredClients.length}</span> clientes
+                                        Mostrando <span className="font-semibold text-foreground">{firstVisibleClient}-{lastVisibleClient}</span> de{" "}
+                                        <span className="font-semibold text-foreground">{totalClients}</span> clientes
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Button
@@ -268,19 +264,19 @@ function ClientesList() {
                                             size="sm"
                                             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                                             disabled={currentPage === 1}
-                                            className="h-8 border-border/50 hover:bg-muted text-xs"
+                                            className="h-11 md:h-8 border-border/50 hover:bg-muted text-sm md:text-xs"
                                         >
                                             Anterior
                                         </Button>
                                         <span className="text-xs text-muted-foreground px-2">
-                                            Página {currentPage} de {Math.ceil(filteredClients.length / 20)}
+                                            Página {currentPage} de {totalPages}
                                         </span>
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filteredClients.length / 20), prev + 1))}
-                                            disabled={currentPage === Math.ceil(filteredClients.length / 20)}
-                                            className="h-8 border-border/50 hover:bg-muted text-xs"
+                                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className="h-11 md:h-8 border-border/50 hover:bg-muted text-sm md:text-xs"
                                         >
                                             Siguiente
                                         </Button>

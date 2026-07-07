@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
     Calendar,
@@ -20,6 +20,7 @@ import {
     APPOINTMENT_STATUS_COLORS,
 } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
+import { getBookingErrorMessage } from "@/lib/booking-errors";
 import type { Appointment, Service, Profile } from "@/types/database.types";
 import { format, startOfToday } from "date-fns";
 import { es } from "date-fns/locale";
@@ -50,7 +51,7 @@ export default function BarberoAgendaPage() {
     const [chargeApt, setChargeApt] = useState<AppointmentWithRelations | null>(null);
     const [ingresosReales, setIngresosReales] = useState(0);
 
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
     const today = format(startOfToday(), "yyyy-MM-dd");
 
     const loadAgenda = useCallback(async () => {
@@ -134,13 +135,13 @@ export default function BarberoAgendaPage() {
     }, [loadAgenda]);
 
     const updateStatus = async (id: string, newStatus: string) => {
-        const { error } = await supabase
-            .from("appointments")
-            .update({ status: newStatus })
-            .eq("id", id);
+        const { error } = await supabase.rpc("admin_update_appointment_status", {
+            p_appointment_id: id,
+            p_status: newStatus,
+        });
 
         if (error) {
-            toast.error("Error al actualizar");
+            toast.error(getBookingErrorMessage(error));
             return;
         }
 

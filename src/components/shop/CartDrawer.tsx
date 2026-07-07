@@ -2,11 +2,11 @@
 
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { useCartStore } from "@/stores/cartStore";
 import { formatPrice } from "@/lib/utils";
 import { useFeatures } from "@/lib/features";
@@ -60,17 +60,15 @@ export function CartDrawer() {
                                     >
                                         {/* Imagen */}
                                         <div className="relative h-16 w-16 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                            {item.product.image_url ? (
-                                                <Image
-                                                    src={item.product.image_url}
-                                                    alt={item.product.name}
-                                                    fill
-                                                    sizes="64px"
-                                                    className="object-cover"
-                                                />
-                                            ) : (
-                                                <ShoppingBag className="h-6 w-6 text-primary/50" />
-                                            )}
+                                            <ImageWithFallback
+                                                src={item.product.image_url}
+                                                alt={item.product.name}
+                                                fill
+                                                sizes="64px"
+                                                className="object-cover"
+                                                fallbackClassName="h-full w-full rounded-md"
+                                                iconClassName="h-6 w-6"
+                                            />
                                         </div>
 
                                         {/* Info */}
@@ -87,12 +85,13 @@ export function CartDrawer() {
                                                 <Button
                                                     variant="outline"
                                                     size="icon"
-                                                    className="h-7 w-7"
+                                                    aria-label={`Restar ${item.product.name}`}
+                                                    className="h-11 w-11 md:h-7 md:w-7"
                                                     onClick={() =>
                                                         updateQuantity(item.product.id, item.quantity - 1)
                                                     }
                                                 >
-                                                    <Minus className="h-3 w-3" />
+                                                    <Minus className="h-3 w-3" aria-hidden="true" />
                                                 </Button>
                                                 <span className="w-8 text-center text-sm font-medium">
                                                     {item.quantity}
@@ -100,13 +99,14 @@ export function CartDrawer() {
                                                 <Button
                                                     variant="outline"
                                                     size="icon"
-                                                    className="h-7 w-7"
+                                                    aria-label={`Sumar ${item.product.name}`}
+                                                    className="h-11 w-11 md:h-7 md:w-7"
                                                     onClick={() =>
                                                         updateQuantity(item.product.id, item.quantity + 1)
                                                     }
                                                     disabled={item.quantity >= item.product.stock}
                                                 >
-                                                    <Plus className="h-3 w-3" />
+                                                    <Plus className="h-3 w-3" aria-hidden="true" />
                                                 </Button>
                                             </div>
                                         </div>
@@ -115,10 +115,11 @@ export function CartDrawer() {
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 text-muted-foreground hover:text-red-400"
+                                            aria-label={`Quitar ${item.product.name} del carrito`}
+                                            className="h-11 w-11 md:h-8 md:w-8 text-muted-foreground hover:text-red-400"
                                             onClick={() => removeItem(item.product.id)}
                                         >
-                                            <Trash2 className="h-4 w-4" />
+                                            <Trash2 className="h-4 w-4" aria-hidden="true" />
                                         </Button>
                                     </div>
                                 ))}

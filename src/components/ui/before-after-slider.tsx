@@ -61,8 +61,9 @@ export function BeforeAfterSlider({ beforeImage, afterImage, className = "" }: B
             {/* After Image (Background) */}
             <Image
                 src={afterImage}
-                alt="After Transformation"
+                alt="Resultado después del corte"
                 fill
+                sizes="(max-width: 768px) 100vw, 50vw"
                 className="object-cover"
                 draggable={false}
             />
@@ -78,8 +79,9 @@ export function BeforeAfterSlider({ beforeImage, afterImage, className = "" }: B
             >
                 <Image
                     src={beforeImage}
-                    alt="Before Transformation"
+                    alt="Antes del corte"
                     fill
+                    sizes="(max-width: 768px) 100vw, 50vw"
                     className="object-cover"
                     style={{ width: "100%", height: "100%", objectFit: "cover" }} // Fix for clipped container
                 // NextJS Image fill tries to fill relative parent. 
@@ -103,8 +105,9 @@ export function BeforeAfterSlider({ beforeImage, afterImage, className = "" }: B
             >
                 <Image
                     src={beforeImage}
-                    alt="Before Transformation"
+                    alt="Antes del corte"
                     fill
+                    sizes="(max-width: 768px) 100vw, 50vw"
                     className="object-cover"
                     draggable={false}
                 />

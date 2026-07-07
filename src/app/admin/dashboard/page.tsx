@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { formatPrice } from "@/lib/utils";
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_COLORS, INACTIVE_DAYS } from "@/lib/constants";
+import { fetchClientsOverviewPage } from "@/lib/crm";
 import { createClient } from "@/lib/supabase/client";
 import type { Appointment, Service, Barber, Branch, ClientOverview } from "@/types/database.types";
 import { CrmCards, type RankingItem } from "@/components/admin/crm-cards";
@@ -26,7 +27,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { differenceInDays, endOfMonth, format, parseISO, startOfMonth, startOfToday, subDays } from "date-fns";
+import { endOfMonth, format, parseISO, startOfMonth, startOfToday, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 
 interface DashboardStats {
@@ -91,7 +92,7 @@ export default function AdminDashboardPage() {
             lowStockRes,
             completedRes,
             newClientsRes,
-            clientsOverviewRes,
+            inactiveClientsRes,
             topPerformersRes,
         ] = await Promise.all([
             supabase.from("appointments").select("*, service:services(*), barber:barbers(*)").eq("appointment_date", today).order("start_time"),
@@ -101,7 +102,12 @@ export default function AdminDashboardPage() {
             supabase.from("products").select("*", { count: "exact", head: true }).lte("stock", 5).eq("is_active", true),
             supabase.from("appointments").select("service:services(price)").eq("status", "completed").gte("appointment_date", monthStart).lte("appointment_date", monthEnd),
             supabase.from("profiles").select("*", { count: "exact", head: true }).eq("role", "cliente").gte("created_at", monthStartDate.toISOString()),
-            supabase.rpc("get_clients_overview"),
+            fetchClientsOverviewPage(supabase, {
+                inactiveOnly: true,
+                inactiveDays: INACTIVE_DAYS,
+                limit: 8,
+                offset: 0,
+            }),
             supabase
                 .from("appointments")
                 .select("service:services(name, price), barber:barbers(name)")
@@ -115,8 +121,6 @@ export default function AdminDashboardPage() {
         const citasMesCount = citasMesRes.count || 0;
         const lowStockCount = lowStockRes.count || 0;
         const completedAppointments = completedRes.data || [];
-        const clientsOverview = (clientsOverviewRes.data || []) as ClientOverview[];
-        const inactiveAll = clientsOverview.filter((client) => isInactiveClient(client.last_visit));
         const { services, barbers: barberRanking } = aggregateRankings((topPerformersRes.data || []) as CompletedMetricRow[]);
 
         const ingresosMes = completedAppointments.reduce((sum, apt) => {
@@ -129,13 +133,13 @@ export default function AdminDashboardPage() {
             ingresosMes,
             productosLowStock: lowStockCount,
             clientesNuevos: newClientsRes.count || 0,
-            clientesInactivos: inactiveAll.length,
+            clientesInactivos: inactiveClientsRes.total,
         });
 
         setCitasHoy(citasHoyData);
         setBarbers(barbersData);
         setBranches(branchesData);
-        setInactiveClients([...inactiveAll].sort(sortInactiveClients).slice(0, 8));
+        setInactiveClients([...inactiveClientsRes.clients].sort(sortInactiveClients));
         setTopServices(services);
         setTopBarbers(barberRanking);
         setIsLoading(false);
@@ -258,7 +262,7 @@ export default function AdminDashboardPage() {
                     <div className="flex flex-wrap gap-2">
                         {/* Selector de Sucursal */}
                         <Select value={branchFilter} onValueChange={setBranchFilter}>
-                            <SelectTrigger className="w-[160px] h-9 text-xs">
+                            <SelectTrigger className="w-[160px] text-base md:h-9 md:text-xs">
                                 <Filter className="h-3 w-3 mr-1" />
                                 <SelectValue placeholder="Sucursal" />
                             </SelectTrigger>
@@ -274,7 +278,7 @@ export default function AdminDashboardPage() {
 
                         {/* Selector de Barbero */}
                         <Select value={barberFilter} onValueChange={setBarberFilter}>
-                            <SelectTrigger className="w-[160px] h-9 text-xs">
+                            <SelectTrigger className="w-[160px] text-base md:h-9 md:text-xs">
                                 <Filter className="h-3 w-3 mr-1" />
                                 <SelectValue placeholder="Barbero" />
                             </SelectTrigger>
@@ -346,11 +350,6 @@ export default function AdminDashboardPage() {
             </Card>
         </div>
     );
-}
-
-function isInactiveClient(lastVisit: string | null) {
-    if (!lastVisit) return true;
-    return differenceInDays(new Date(), parseISO(lastVisit)) > INACTIVE_DAYS;
 }
 
 function sortInactiveClients(a: ClientOverview, b: ClientOverview) {

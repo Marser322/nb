@@ -104,8 +104,9 @@ export default function AdminLoginPage() {
                     <div className="w-20 h-20 mx-auto mb-4 relative rounded-full overflow-hidden border-2 border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
                         <Image
                             src="/logo.png"
-                            alt="Logo"
+                            alt="NB Barber"
                             fill
+                            sizes="80px"
                             className="object-cover"
                         />
                     </div>
@@ -149,11 +150,12 @@ export default function AdminLoginPage() {
                                     size="icon"
                                     className="absolute right-0 top-0 h-10 w-10 hover:bg-transparent"
                                     onClick={() => setShowPassword(!showPassword)}
+                                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                                 >
                                     {showPassword ? (
-                                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                        <EyeOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                                     ) : (
-                                        <Eye className="h-4 w-4 text-muted-foreground" />
+                                        <Eye className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                                     )}
                                 </Button>
                             </div>

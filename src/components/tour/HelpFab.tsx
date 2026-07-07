@@ -20,14 +20,16 @@ export function HelpFab() {
         <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="fixed bottom-6 right-6 z-50"
+            className="fixed right-4 z-50 sm:right-6"
+            style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
         >
             <Button
                 onClick={() => startTour(tourKey!, APP_TOURS[tourKey!])}
                 size="icon"
+                aria-label="Abrir ayuda"
                 className="h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-110 hover:bg-primary/90"
             >
-                <HelpCircle className="h-6 w-6" />
+                <HelpCircle className="h-6 w-6" aria-hidden="true" />
                 <span className="sr-only">Ayuda</span>
             </Button>
 

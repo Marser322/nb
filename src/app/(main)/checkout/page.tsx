@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { formatPrice } from "@/lib/utils";
 import { Loader2, ShieldCheck, Wallet, Landmark } from "lucide-react";
 import { toast } from "sonner";
-import Image from "next/image";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { useFeatures } from "@/lib/features";
 
 type PaymentMethod = "efectivo" | "transferencia";
@@ -321,14 +321,15 @@ export default function CheckoutPage() {
                                     {items.map((item: CartItem) => (
                                         <div key={item.product.id} className="flex gap-3">
                                             <div className="h-12 w-12 rounded bg-muted relative overflow-hidden flex-shrink-0">
-                                                {item.product.image_url && (
-                                                    <Image
-                                                        src={item.product.image_url}
-                                                        alt={item.product.name}
-                                                        fill
-                                                        className="object-cover"
-                                                    />
-                                                )}
+                                                <ImageWithFallback
+                                                    src={item.product.image_url}
+                                                    alt={item.product.name}
+                                                    fill
+                                                    sizes="48px"
+                                                    className="object-cover"
+                                                    fallbackClassName="h-full w-full rounded"
+                                                    iconClassName="h-5 w-5"
+                                                />
                                             </div>
                                             <div className="flex-1 text-sm">
                                                 <p className="font-medium line-clamp-1">{item.product.name}</p>

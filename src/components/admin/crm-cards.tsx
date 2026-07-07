@@ -91,10 +91,11 @@ export function CrmCards({
                                                 size="icon-sm"
                                                 variant="ghost"
                                                 onClick={() => openWhatsapp(client)}
+                                                aria-label={`Enviar WhatsApp a ${client.full_name || "cliente"}`}
                                                 className="text-primary hover:bg-primary/10 hover:text-primary"
                                                 title="Enviar WhatsApp"
                                             >
-                                                <MessageCircle className="h-4 w-4" />
+                                                <MessageCircle className="h-4 w-4" aria-hidden="true" />
                                             </Button>
                                         )}
                                     </div>

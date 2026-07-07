@@ -8,6 +8,7 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { Calendar, Clock, History, Loader2, Repeat, Scissors, User } from "lucide-react";
 import { Header, Footer } from "@/components/layout";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -199,6 +200,7 @@ export default function MiCuentaPage() {
                                         src="/images/hero/detalle-corte.jpg"
                                         alt="Detalle de corte"
                                         fill
+                                        sizes="(max-width: 1024px) 100vw, 60vw"
                                         className="object-cover opacity-20"
                                         priority
                                     />
@@ -260,19 +262,15 @@ export default function MiCuentaPage() {
                                         <div className="space-y-5">
                                             <div className="flex items-center gap-4">
                                                 <div className="relative h-16 w-16 overflow-hidden rounded-full bg-primary/10">
-                                                    {lastExperience.barber && getBarberAvatarUrl(lastExperience.barber) ? (
-                                                        <Image
-                                                            src={getBarberAvatarUrl(lastExperience.barber)!}
-                                                            alt={lastExperience.barber.name}
-                                                            fill
-                                                            sizes="64px"
-                                                            className="object-cover"
-                                                        />
-                                                    ) : (
-                                                        <div className="h-full w-full flex items-center justify-center">
-                                                            <Scissors className="h-7 w-7 text-primary" />
-                                                        </div>
-                                                    )}
+                                                    <ImageWithFallback
+                                                        src={lastExperience.barber ? getBarberAvatarUrl(lastExperience.barber) : null}
+                                                        alt={lastExperience.barber?.name || "Barbero NB"}
+                                                        fill
+                                                        sizes="64px"
+                                                        className="object-cover"
+                                                        fallbackClassName="h-full w-full rounded-full"
+                                                        iconClassName="h-7 w-7 text-primary"
+                                                    />
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-foreground">{lastExperience.service?.name || "Servicio NB"}</p>

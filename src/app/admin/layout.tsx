@@ -23,7 +23,6 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import { logoutAdmin } from "./actions";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 
 const sidebarLinks = [
@@ -182,7 +181,7 @@ export default function AdminLayout({
                 <div className="flex items-center gap-3">
                     <Sheet>
                         <SheetTrigger asChild className="md:hidden">
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon" aria-label="Abrir menú admin">
                                 <Menu className="h-5 w-5" />
                             </Button>
                         </SheetTrigger>
@@ -192,9 +191,7 @@ export default function AdminLayout({
                     </Sheet>
                     <span className="font-semibold text-foreground">NB Barber Admin</span>
                 </div>
-                <div className="flex items-center gap-2">
-                    <ThemeToggle />
-                </div>
+                <div className="flex items-center gap-2" />
             </header>
 
             {/* Desktop Sidebar */}

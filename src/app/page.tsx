@@ -60,6 +60,7 @@ export default function HomePage() {
             src="/images/hero/ambiente-barberia.jpg"
             alt="Interior premium de New Brothers"
             fill
+            sizes="100vw"
             priority
             className="object-cover"
           />
@@ -172,6 +173,7 @@ export default function HomePage() {
                       src={service.image}
                       alt={service.name}
                       fill
+                      sizes="(max-width: 768px) 100vw, 33vw"
                       className="object-cover opacity-0 group-hover:opacity-20 transition-all duration-700 group-hover:scale-110 grayscale group-hover:grayscale-0"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent z-10" />
@@ -284,8 +286,9 @@ export default function HomePage() {
         <div className="absolute inset-0">
           <Image
             src="/images/hero/ambiente-barberia.jpg"
-            alt="Background"
+            alt="Interior de New Brothers"
             fill
+            sizes="100vw"
             className="object-cover opacity-20"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-black/60" />

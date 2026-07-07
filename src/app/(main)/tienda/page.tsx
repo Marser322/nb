@@ -17,6 +17,7 @@ import {
 import { Header, Footer } from "@/components/layout";
 import { CartDrawer } from "@/components/shop/CartDrawer";
 import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/stores/cartStore";
 import type { Product } from "@/types/database.types";
@@ -278,19 +279,15 @@ export default function TiendaPage() {
                                     <CardContent className="p-0 flex flex-col h-full relative">
                                         {/* Imagen Container */}
                                         <div className="relative aspect-square overflow-hidden bg-muted">
-                                            {product.image_url ? (
-                                                <Image
-                                                    src={product.image_url}
-                                                    alt={product.name}
-                                                    fill
-                                                    className="object-cover transition-transform duration-700 group-hover:scale-110"
-                                                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center">
-                                                    <ShoppingBag className="h-12 w-12 text-primary/20" />
-                                                </div>
-                                            )}
+                                            <ImageWithFallback
+                                                src={product.image_url}
+                                                alt={product.name}
+                                                fill
+                                                className="object-cover transition-transform duration-700 group-hover:scale-110"
+                                                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+                                                fallbackClassName="h-full w-full"
+                                                iconClassName="h-12 w-12 text-primary/20"
+                                            />
 
                                             {/* Gradient Overlay */}
                                             <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-transparent opacity-70 transition-opacity group-hover:opacity-50" />
@@ -342,8 +339,9 @@ export default function TiendaPage() {
                                                     className="lg:hidden rounded-full bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20"
                                                     onClick={() => handleAddToCart(product)}
                                                     disabled={product.stock <= 0}
+                                                    aria-label={`Agregar ${product.name} al carrito`}
                                                 >
-                                                    <Plus className="h-5 w-5" />
+                                                    <Plus className="h-5 w-5" aria-hidden="true" />
                                                 </Button>
                                             </div>
                                         </div>

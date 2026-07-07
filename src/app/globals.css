@@ -148,14 +148,30 @@
 }
 
 @layer base {
+  html {
+    color-scheme: dark;
+    background: var(--background);
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
 
   body {
     @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
   }
 
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  select {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
 }
 
 @layer utilities {
@@ -170,6 +186,17 @@
 
   .glass-card {
     @apply bg-card/30 backdrop-blur-md border border-border/30;
+  }
+
+  .scrollbar-none,
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar,
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 
   .font-display {

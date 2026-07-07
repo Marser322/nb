@@ -2,8 +2,8 @@
 
 import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +34,15 @@ import {
 import { toast } from "sonner";
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
 import { useFeatures } from "@/lib/features";
+import {
+    APPOINTMENT_STATUS_COLORS,
+    APPOINTMENT_STATUS_LABELS,
+    COMMUNICATION_STATUS_COLORS,
+    COMMUNICATION_STATUS_LABELS,
+    ORDER_STATUS_COLORS,
+    ORDER_STATUS_LABELS,
+    getPaymentMethodLabel,
+} from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -350,21 +359,6 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                     </TableHeader>
                                     <TableBody>
                                         {appointments.map((apt) => {
-                                            const statusColors: Record<string, string> = {
-                                                pending: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-                                                confirmed: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                                                completed: "bg-green-500/10 text-green-500 border-green-500/20",
-                                                cancelled: "bg-red-500/10 text-red-500 border-red-500/20",
-                                                no_show: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
-                                            };
-                                            const statusLabels: Record<string, string> = {
-                                                pending: "Pendiente",
-                                                confirmed: "Confirmada",
-                                                completed: "Completada",
-                                                cancelled: "Cancelada",
-                                                no_show: "No asistió",
-                                            };
-
                                             return (
                                                 <TableRow key={apt.id} className="border-b border-border/30">
                                                     <TableCell className="font-semibold text-foreground pl-6 py-4">
@@ -380,8 +374,8 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                                         {apt.barber?.name || "Sin asignar"}
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Badge variant="outline" className={statusColors[apt.status] || ""}>
-                                                            {statusLabels[apt.status] || apt.status}
+                                                        <Badge variant="outline" className={APPOINTMENT_STATUS_COLORS[apt.status] || ""}>
+                                                            {APPOINTMENT_STATUS_LABELS[apt.status] || apt.status}
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right text-primary font-bold pr-6">
@@ -413,19 +407,16 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                 <Card key={haircut.id} className="bg-card/50 border-border/50 overflow-hidden flex flex-col">
                                     {/* Grid de Fotos */}
                                     <div className="relative aspect-[4/3] w-full bg-muted">
-                                        {haircut.photo_urls && haircut.photo_urls.length > 0 ? (
-                                            <Image
-                                                src={haircut.photo_urls[0]}
-                                                alt={`Corte realizado por ${haircut.barber?.name || "Barbero"}`}
-                                                fill
-                                                unoptimized
-                                                className="object-cover"
-                                            />
-                                        ) : (
-                                            <div className="h-full w-full flex items-center justify-center">
-                                                <Scissors className="h-12 w-12 text-muted-foreground/30" />
-                                            </div>
-                                        )}
+                                        <ImageWithFallback
+                                            src={haircut.photo_urls?.[0]}
+                                            alt={`Corte realizado por ${haircut.barber?.name || "Barbero"}`}
+                                            fill
+                                            sizes="(max-width: 768px) 100vw, 33vw"
+                                            unoptimized
+                                            className="object-cover"
+                                            fallbackClassName="h-full w-full"
+                                            iconClassName="h-12 w-12 text-muted-foreground/30"
+                                        />
                                         <div className="absolute top-3 left-3 bg-black/75 px-3 py-1 rounded-full border border-border text-[10px] text-zinc-300 font-semibold font-mono">
                                             {format(parseISO(haircut.created_at), "dd/MM/yyyy HH:mm")}
                                         </div>
@@ -473,26 +464,6 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                     </TableHeader>
                                     <TableBody>
                                         {orders.map((order) => {
-                                            const statusLabels: Record<string, string> = {
-                                                pending: "Pendiente",
-                                                paid: "Pagada",
-                                                shipped: "Enviada",
-                                                delivered: "Entregada",
-                                                cancelled: "Cancelada",
-                                            };
-                                            const statusColors: Record<string, string> = {
-                                                pending: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-                                                paid: "bg-green-500/10 text-green-500 border-green-500/20",
-                                                shipped: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                                                delivered: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-                                                cancelled: "bg-red-500/10 text-red-500 border-red-500/20",
-                                            };
-                                            const paymentMethodLabels: Record<string, string> = {
-                                                efectivo: "Efectivo",
-                                                transferencia: "Transferencia",
-                                                mercadopago: "MercadoPago"
-                                            };
-
                                             return (
                                                 <TableRow key={order.id} className="border-b border-border/30">
                                                     <TableCell className="font-mono text-xs font-semibold text-foreground pl-6 py-4">
@@ -511,11 +482,11 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-muted-foreground text-xs font-medium">
-                                                        {order.payment_method ? (paymentMethodLabels[order.payment_method] || order.payment_method) : "—"}
+                                                        {order.payment_method ? getPaymentMethodLabel(order.payment_method) : "—"}
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Badge variant="outline" className={statusColors[order.status] || ""}>
-                                                            {statusLabels[order.status] || order.status}
+                                                        <Badge variant="outline" className={ORDER_STATUS_COLORS[order.status] || ""}>
+                                                            {ORDER_STATUS_LABELS[order.status] || order.status}
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right text-primary font-bold pr-6">
@@ -553,17 +524,6 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                     </TableHeader>
                                     <TableBody>
                                         {messages.map((msg) => {
-                                            const statusColors: Record<string, string> = {
-                                                sent: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                                                delivered: "bg-green-500/10 text-green-500 border-green-500/20",
-                                                failed: "bg-red-500/10 text-red-500 border-red-500/20",
-                                            };
-                                            const statusLabels: Record<string, string> = {
-                                                sent: "Enviado",
-                                                delivered: "Entregado",
-                                                failed: "Fallo",
-                                            };
-
                                             return (
                                                 <TableRow key={msg.id} className="border-b border-border/30">
                                                     <TableCell className="text-muted-foreground text-sm pl-6 py-4">
@@ -576,8 +536,8 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                                         {msg.message_sent}
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">
-                                                        <Badge variant="outline" className={statusColors[msg.status] || ""}>
-                                                            {statusLabels[msg.status] || msg.status}
+                                                        <Badge variant="outline" className={COMMUNICATION_STATUS_COLORS[msg.status] || ""}>
+                                                            {COMMUNICATION_STATUS_LABELS[msg.status] || msg.status}
                                                         </Badge>
                                                     </TableCell>
                                                 </TableRow>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
     Calendar,
     Search,
@@ -30,11 +30,10 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
-import { formatPrice, formatDate, calculateEndTime } from "@/lib/utils";
+import { formatPrice } from "@/lib/utils";
 import {
     APPOINTMENT_STATUS_LABELS,
     APPOINTMENT_STATUS_COLORS,
-    APPOINTMENT_STATUS,
     BUSINESS_CONFIG,
 } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
@@ -43,7 +42,8 @@ import { format, addDays, startOfToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { normalizeUyPhone } from "@/lib/whatsapp";
-import { fetchActiveAppointments, computeBookedSlots, hasOverlap } from "@/lib/booking";
+import { fetchActiveAppointments, computeBookedSlots } from "@/lib/booking";
+import { getBookingErrorMessage } from "@/lib/booking-errors";
 import ChargeDialog from "@/components/shared/ChargeDialog";
 import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
 import { useFeatures } from "@/lib/features";
@@ -92,7 +92,7 @@ export default function AdminCitasPage() {
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
 
     // Cargar citas
     const loadAppointments = useCallback(async () => {
@@ -125,7 +125,7 @@ export default function AdminCitasPage() {
             setBranches(branchesData || []);
         }
         loadFormData();
-    }, []);
+    }, [supabase]);
 
     // Filtrar por estado, sucursal, barbero y búsqueda de cliente (en memoria)
     useEffect(() => {
@@ -184,13 +184,13 @@ export default function AdminCitasPage() {
 
     // Actualizar estado de cita
     const updateStatus = async (id: string, newStatus: string) => {
-        const { error } = await supabase
-            .from("appointments")
-            .update({ status: newStatus })
-            .eq("id", id);
+        const { error } = await supabase.rpc("admin_update_appointment_status", {
+            p_appointment_id: id,
+            p_status: newStatus,
+        });
 
         if (error) {
-            toast.error("Error al actualizar la cita");
+            toast.error(getBookingErrorMessage(error));
             return;
         }
 
@@ -241,44 +241,18 @@ export default function AdminCitasPage() {
             toast.error("Elegí fecha y hora");
             return;
         }
-        const duration = rescheduleApt.service?.duration_minutes ?? BUSINESS_CONFIG.timeSlotMinutes;
         const startHHMM = rescheduleTime.slice(0, 5);
-        const endHHMM = calculateEndTime(startHHMM, duration);
 
         setIsRescheduling(true);
         try {
-            // Validación de solape en cliente (excluyendo la propia cita).
-            // La constraint EXCLUDE en la BD es la red de seguridad final.
-            const { data: others } = await supabase
-                .from("appointments")
-                .select("start_time, end_time")
-                .eq("barber_id", rescheduleApt.barber_id)
-                .eq("appointment_date", rescheduleDate)
-                .in("status", ["pending", "confirmed"])
-                .neq("id", rescheduleApt.id);
-
-            if (hasOverlap(startHHMM, endHHMM, others || [])) {
-                toast.error("El nuevo horario se superpone con otra cita del barbero");
-                setIsRescheduling(false);
-                return;
-            }
-
-            const { error } = await supabase
-                .from("appointments")
-                .update({
-                    appointment_date: rescheduleDate,
-                    start_time: startHHMM + ":00",
-                    end_time: endHHMM + ":00",
-                })
-                .eq("id", rescheduleApt.id);
+            const { error } = await supabase.rpc("admin_reschedule_appointment", {
+                p_appointment_id: rescheduleApt.id,
+                p_date: rescheduleDate,
+                p_start_time: startHHMM,
+            });
 
             if (error) {
-                // 23P01 = exclusion_violation (anti-solape en la BD)
-                toast.error(
-                    error.code === "23P01"
-                        ? "El horario ya está ocupado"
-                        : "Error al reprogramar: " + error.message
-                );
+                toast.error(getBookingErrorMessage(error));
                 setIsRescheduling(false);
                 return;
             }
@@ -334,74 +308,21 @@ export default function AdminCitasPage() {
                 return;
             }
 
-            const formattedTime = formData.time.length === 5 ? formData.time + ":00" : formData.time;
-            const endTime = calculateEndTime(formattedTime.substring(0, 5), selectedService.duration_minutes);
-            const endTimeFormatted = endTime + ":00";
-
-            // 1. Validar solape
-            const activeApts = await fetchActiveAppointments(supabase, formData.barberId, formData.date);
-            const hasConflict = hasOverlap(formattedTime.substring(0, 5), endTime, activeApts);
-
-            if (hasConflict) {
-                toast.error(`El horario se superpone con otra cita de ${selectedBarber.name}`);
-                setIsSubmitting(false);
-                return;
-            }
-
-            // 2. Normalizar teléfono
+            const formattedTime = formData.time.slice(0, 5);
             const normalizedPhone = normalizeUyPhone(formData.clientPhone);
-            let clientId = null;
 
-            // 3. Buscar cliente existente por teléfono
-            if (formData.clientPhone) {
-                const searchPhone = normalizedPhone || formData.clientPhone;
-                const { data: existingClient } = await supabase
-                    .from("profiles")
-                    .select("id")
-                    .eq("phone", searchPhone)
-                    .limit(1)
-                    .maybeSingle();
-
-                if (existingClient) {
-                    clientId = existingClient.id;
-                }
-            }
-
-            // 4. Si no existe, crear perfil walk-in
-            if (!clientId) {
-                const { data: newProfile, error: profileError } = await supabase
-                    .from("profiles")
-                    .insert({
-                        full_name: formData.clientName,
-                        phone: normalizedPhone || formData.clientPhone || null,
-                        role: "cliente",
-                    })
-                    .select()
-                    .single();
-
-                if (profileError) {
-                    console.error("Error al crear perfil de cliente walk-in:", profileError);
-                    toast.error("Error al registrar cliente: " + profileError.message);
-                    setIsSubmitting(false);
-                    return;
-                }
-                clientId = newProfile.id;
-            }
-
-            // 5. Insertar la cita
-            const { error } = await supabase.from("appointments").insert({
-                client_id: clientId,
-                barber_id: formData.barberId,
-                service_id: formData.serviceId,
-                appointment_date: formData.date,
-                start_time: formattedTime,
-                end_time: endTimeFormatted,
-                status: "confirmed",
-                notes: `Walk-in. Cliente: ${formData.clientName}${formData.clientPhone ? ` - Tel: ${formData.clientPhone}` : ''}`,
+            const { error } = await supabase.rpc("admin_create_appointment", {
+                p_client_name: formData.clientName.trim(),
+                p_client_phone: normalizedPhone || formData.clientPhone.trim() || null,
+                p_service_id: selectedService.id,
+                p_barber_id: selectedBarber.id,
+                p_date: formData.date,
+                p_start_time: formattedTime,
+                p_notes: `Walk-in. Cliente: ${formData.clientName.trim()}${formData.clientPhone ? ` - Tel: ${formData.clientPhone}` : ""}`,
             });
 
             if (error) {
-                toast.error("Error al crear la cita: " + error.message);
+                toast.error(getBookingErrorMessage(error));
             } else {
                 toast.success("Cita creada exitosamente");
                 setIsDialogOpen(false);
@@ -416,12 +337,7 @@ export default function AdminCitasPage() {
                 });
                 // Recargar citas si la fecha coincide
                 if (formData.date === selectedDate) {
-                    const { data } = await supabase
-                        .from("appointments")
-                        .select("*, service:services(*), barber:barbers(*), client:profiles(*)")
-                        .eq("appointment_date", selectedDate)
-                        .order("start_time");
-                    setAppointments(data || []);
+                    await loadAppointments();
                 }
             }
         } catch (err) {

@@ -66,6 +66,26 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
     cancelled: 'Cancelada',
 }
 
+export const ORDER_STATUS_COLORS: Record<string, string> = {
+    pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    paid: 'bg-green-500/20 text-green-400 border-green-500/30',
+    shipped: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    delivered: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
+}
+
+export const COMMUNICATION_STATUS_LABELS: Record<string, string> = {
+    sent: 'Enviado',
+    delivered: 'Entregado',
+    failed: 'Fallo',
+}
+
+export const COMMUNICATION_STATUS_COLORS: Record<string, string> = {
+    sent: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    delivered: 'bg-green-500/20 text-green-400 border-green-500/30',
+    failed: 'bg-red-500/20 text-red-400 border-red-500/30',
+}
+
 // Métodos de pago
 export const PAYMENT_METHODS = {
     CASH: 'cash',
@@ -79,6 +99,25 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
     card: 'Tarjeta',
     transfer: 'Transferencia',
     other: 'Otro',
+    efectivo: 'Efectivo',
+    tarjeta: 'Tarjeta',
+    transferencia: 'Transferencia',
+    mercadopago: 'Mercado Pago',
+}
+
+export type CanonicalPaymentMethod = 'cash' | 'card' | 'transfer' | 'other'
+
+export function normalizePaymentMethod(method: string | null | undefined): CanonicalPaymentMethod | null {
+    if (!method) return null;
+    if (method === 'cash' || method === 'efectivo') return 'cash';
+    if (method === 'card' || method === 'tarjeta') return 'card';
+    if (method === 'transfer' || method === 'transferencia') return 'transfer';
+    return 'other';
+}
+
+export function getPaymentMethodLabel(method: string | null | undefined): string {
+    if (!method) return 'N/A';
+    return PAYMENT_METHOD_LABELS[method] || PAYMENT_METHOD_LABELS[normalizePaymentMethod(method) || 'other'] || method;
 }
 
 // Movimientos de Caja

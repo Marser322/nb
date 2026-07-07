@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { MessageCircle, Plus, Loader2, Edit2, Search, Trash2, Calendar, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
+import { COMMUNICATION_STATUS_COLORS, COMMUNICATION_STATUS_LABELS } from "@/lib/constants";
 import type { CommunicationLog, RemindersConfig } from "@/types/database.types";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -317,17 +318,6 @@ export default function AdminMensajesPage() {
                                         </TableHeader>
                                         <TableBody>
                                             {filteredLogs.map((log) => {
-                                                const statusColors: Record<string, string> = {
-                                                    sent: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                                                    delivered: "bg-green-500/10 text-green-500 border-green-500/20",
-                                                    failed: "bg-red-500/10 text-red-500 border-red-500/20",
-                                                };
-                                                const statusLabels: Record<string, string> = {
-                                                    sent: "Enviado",
-                                                    delivered: "Entregado",
-                                                    failed: "Fallo",
-                                                };
-
                                                 return (
                                                     <TableRow key={log.id} className="border-b border-border/30">
                                                         <TableCell className="text-zinc-300 text-sm pl-6 py-4">
@@ -343,8 +333,8 @@ export default function AdminMensajesPage() {
                                                             {log.message_sent}
                                                         </TableCell>
                                                         <TableCell className="text-right pr-6">
-                                                            <Badge variant="outline" className={statusColors[log.status] || ""}>
-                                                                {statusLabels[log.status] || log.status}
+                                                            <Badge variant="outline" className={COMMUNICATION_STATUS_COLORS[log.status] || ""}>
+                                                                {COMMUNICATION_STATUS_LABELS[log.status] || log.status}
                                                             </Badge>
                                                         </TableCell>
                                                     </TableRow>
@@ -484,23 +474,26 @@ export default function AdminMensajesPage() {
                                                                 <Switch
                                                                     checked={t.is_active}
                                                                     onCheckedChange={() => toggleTemplateActive(t)}
+                                                                    aria-label={`${t.is_active ? "Desactivar" : "Activar"} plantilla de ${t.days_since_last_visit} días`}
                                                                 />
                                                             </div>
                                                             <Button
                                                                 size="icon"
                                                                 variant="ghost"
                                                                 onClick={() => openEditTemplate(t)}
+                                                                aria-label={`Editar plantilla de ${t.days_since_last_visit} días`}
                                                                 className="text-muted-foreground hover:text-foreground hover:bg-muted"
                                                             >
-                                                                <Edit2 className="h-4 w-4" />
+                                                                <Edit2 className="h-4 w-4" aria-hidden="true" />
                                                             </Button>
                                                             <Button
                                                                 size="icon"
                                                                 variant="ghost"
                                                                 onClick={() => handleDeleteTemplate(t.id)}
+                                                                aria-label={`Eliminar plantilla de ${t.days_since_last_visit} días`}
                                                                 className="text-red-400 hover:text-red-500 hover:bg-red-500/10"
                                                             >
-                                                                <Trash2 className="h-4 w-4" />
+                                                                <Trash2 className="h-4 w-4" aria-hidden="true" />
                                                             </Button>
                                                         </div>
                                                     </TableCell>

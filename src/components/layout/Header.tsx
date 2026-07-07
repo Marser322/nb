@@ -21,7 +21,6 @@ import { createClient } from "@/lib/supabase/client";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { useFeatures } from "@/lib/features";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 const navLinks = [
     { href: ROUTES.HOME, label: "Inicio" },
@@ -128,10 +127,9 @@ export function Header() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 md:gap-4">
-                        <ThemeToggle />
                         {/* Admin Access (Desktop) */}
                         <Button variant="ghost" size="icon" className="hidden md:inline-flex text-muted-foreground hover:text-amber-500" asChild>
-                            <Link href={ROUTES.ADMIN_LOGIN} title="Acceso Admin">
+                            <Link href={ROUTES.ADMIN_LOGIN} aria-label="Acceso staff">
                                 <Lock className="h-5 w-5" />
                             </Link>
                         </Button>
@@ -144,6 +142,7 @@ export function Header() {
                                 className="relative"
                                 id="cart-trigger"
                                 onClick={openCart}
+                                aria-label="Abrir carrito"
                             >
                                 <ShoppingBag className="h-5 w-5" />
                                 {totalItems > 0 && (
@@ -158,7 +157,7 @@ export function Header() {
                         {user ? (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="rounded-full">
+                                    <Button variant="ghost" size="icon" className="rounded-full" aria-label="Abrir menú de usuario">
                                         <Avatar className="h-8 w-8">
                                             <AvatarFallback className="bg-primary/20 text-primary text-xs">
                                                 {getUserInitials()}
@@ -191,7 +190,7 @@ export function Header() {
                             </DropdownMenu>
                         ) : (
                             <Button variant="ghost" size="icon" asChild>
-                                <Link href={ROUTES.LOGIN}>
+                                <Link href={ROUTES.LOGIN} aria-label="Iniciar sesión">
                                     <User className="h-5 w-5" />
                                 </Link>
                             </Button>
@@ -207,7 +206,7 @@ export function Header() {
                         {/* Mobile Menu */}
                         <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
                             <SheetTrigger asChild className="md:hidden">
-                                <Button variant="ghost" size="icon">
+                                <Button variant="ghost" size="icon" aria-label="Abrir menú">
                                     <Menu className="h-5 w-5" />
                                 </Button>
                             </SheetTrigger>
@@ -216,7 +215,6 @@ export function Header() {
                                     <span className="font-display font-bold uppercase tracking-normal">
                                         NEW <span className="text-primary">BROTHERS</span>
                                     </span>
-                                    <ThemeToggle />
                                 </div>
                                 <div className="flex flex-col gap-6 mt-6">
                                     {user && (

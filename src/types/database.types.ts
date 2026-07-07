@@ -4,7 +4,7 @@
 export type UserRole = 'cliente' | 'barbero' | 'admin'
 export type AppointmentStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
 export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled'
-export type PaymentMethod = 'mercadopago' | 'efectivo' | 'transferencia'
+export type PaymentMethod = 'mercadopago' | 'efectivo' | 'transferencia' | 'cash' | 'card' | 'transfer' | 'other'
 
 export interface Profile {
   id: string
@@ -232,6 +232,10 @@ export interface ClientOverview {
   total_spent: number
 }
 
+export interface ClientOverviewPage extends ClientOverview {
+  total_count: number
+}
+
 export interface Subscription {
   id: string
   client_id: string
@@ -363,6 +367,33 @@ export interface Database {
         Args: { p_appointment_id: string }
         Returns: undefined
       }
+      admin_create_appointment: {
+        Args: {
+          p_client_name: string
+          p_client_phone: string | null
+          p_service_id: string
+          p_barber_id: string
+          p_date: string
+          p_start_time: string
+          p_notes?: string | null
+        }
+        Returns: string
+      }
+      admin_reschedule_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_date: string
+          p_start_time: string
+        }
+        Returns: undefined
+      }
+      admin_update_appointment_status: {
+        Args: {
+          p_appointment_id: string
+          p_status: string
+        }
+        Returns: undefined
+      }
       complete_appointment_with_payment: {
         Args: {
           p_appointment_id: string
@@ -371,6 +402,16 @@ export interface Database {
           p_tip_amount?: number
         }
         Returns: undefined
+      }
+      get_clients_overview_page: {
+        Args: {
+          p_search?: string | null
+          p_inactive_only?: boolean
+          p_inactive_days?: number
+          p_limit?: number
+          p_offset?: number
+        }
+        Returns: { [K in keyof ClientOverviewPage]: ClientOverviewPage[K] }[]
       }
       get_barber_settlement: {
         Args: {

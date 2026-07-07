@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Oswald } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { TourOverlay } from "@/components/tour/TourOverlay";
@@ -44,6 +44,13 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+};
+
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "Barbershop",
@@ -74,7 +81,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" className="dark" suppressHydrationWarning>
       <head>
         <script
           type="application/ld+json"
@@ -87,6 +94,7 @@ export default function RootLayout({
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
+          forcedTheme="dark"
           enableSystem={false}
           disableTransitionOnChange
         >

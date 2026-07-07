@@ -68,7 +68,7 @@ export default function LookbookPage() {
                                 transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
                                 className="relative w-24 h-24 md:w-32 md:h-32 opacity-25"
                             >
-                                <Image src="/images/features/producto-textura.jpg" alt="Corte Style" fill className="object-cover rounded-3xl" />
+                                <Image src="/images/features/producto-textura.jpg" alt="Textura de producto de styling" fill sizes="(max-width: 768px) 96px, 128px" className="object-cover rounded-3xl" />
                             </motion.div>
                         </div>
 
@@ -79,7 +79,7 @@ export default function LookbookPage() {
                                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
                                 className="relative w-20 h-20 md:w-28 md:h-28 opacity-20"
                             >
-                                <Image src="/images/hero/tijera-detalle.jpg" alt="Scissor" fill className="object-cover rounded-full grayscale" />
+                                <Image src="/images/hero/tijera-detalle.jpg" alt="Tijera de barbería" fill sizes="(max-width: 768px) 80px, 112px" className="object-cover rounded-full grayscale" />
                             </motion.div>
                         </div>
                     </div>

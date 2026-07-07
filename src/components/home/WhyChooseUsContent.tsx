@@ -88,6 +88,7 @@ export function WhyChooseUsContent() {
                                     src={features[activeFeature].image}
                                     alt={features[activeFeature].title}
                                     fill
+                                    sizes="(max-width: 1024px) 100vw, 50vw"
                                     className="object-cover rounded-[2rem] shadow-2xl border border-border"
                                 />
                             </motion.div>
@@ -111,8 +112,9 @@ export function WhyChooseUsContent() {
                                 >
                                     <Image
                                         src={features[activeFeature].secondaryImage}
-                                        alt="Detail"
+                                        alt={`Detalle de ${features[activeFeature].title}`}
                                         fill
+                                        sizes="192px"
                                         className="object-cover rounded-2xl shadow-xl border border-border"
                                     />
                                 </motion.div>

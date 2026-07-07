@@ -315,8 +315,9 @@ export function ContactoContent() {
                     <div className="absolute inset-0">
                         <Image
                             src="/images/hero/ambiente-barberia.jpg"
-                            alt="Background"
+                            alt="Interior de New Brothers"
                             fill
+                            sizes="100vw"
                             className="object-cover opacity-20"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-black/60" />
