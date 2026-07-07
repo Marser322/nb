@@ -149,8 +149,12 @@
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
     background: var(--background);
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   * {

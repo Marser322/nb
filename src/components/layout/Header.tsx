@@ -15,6 +15,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { ROUTES } from "@/lib/constants";
 import { useCartStore } from "@/stores/cartStore";
 import { createClient } from "@/lib/supabase/client";
@@ -127,8 +128,12 @@ export function Header() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 md:gap-4">
+                        <div className="hidden md:flex">
+                            <ThemeToggle />
+                        </div>
+
                         {/* Admin Access (Desktop) */}
-                        <Button variant="ghost" size="icon" className="hidden md:inline-flex text-muted-foreground hover:text-amber-500" asChild>
+                        <Button variant="ghost" size="icon" className="hidden md:inline-flex text-muted-foreground hover:text-primary" asChild>
                             <Link href={ROUTES.ADMIN_LOGIN} aria-label="Acceso staff">
                                 <Lock className="h-5 w-5" />
                             </Link>
@@ -182,7 +187,7 @@ export function Header() {
                                         </Link>
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={handleLogout} className="text-red-400">
+                                    <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
                                         <LogOut className="mr-2 h-4 w-4" />
                                         Cerrar Sesión
                                     </DropdownMenuItem>
@@ -215,6 +220,7 @@ export function Header() {
                                     <span className="font-display font-bold uppercase tracking-normal">
                                         NEW <span className="text-primary">BROTHERS</span>
                                     </span>
+                                    <ThemeToggle />
                                 </div>
                                 <div className="flex flex-col gap-6 mt-6">
                                     {user && (
@@ -259,7 +265,7 @@ export function Header() {
                                                 handleLogout();
                                                 setIsMobileMenuOpen(false);
                                             }}
-                                            className="text-red-400 border-red-400/30"
+                                            className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
                                         >
                                             <LogOut className="mr-2 h-4 w-4" />
                                             Cerrar Sesión
@@ -273,7 +279,7 @@ export function Header() {
                                     <div className="border-t border-border pt-4 mt-auto">
                                         <Link
                                             href={ROUTES.ADMIN_LOGIN}
-                                            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-amber-500 p-2"
+                                            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary p-2"
                                             onClick={() => setIsMobileMenuOpen(false)}
                                         >
                                             <Lock className="h-4 w-4" />
