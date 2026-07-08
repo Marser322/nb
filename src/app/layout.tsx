@@ -5,6 +5,7 @@ import { TourOverlay } from "@/components/tour/TourOverlay";
 import { HelpFab } from "@/components/tour/HelpFab";
 import { AiAssistant } from "@/components/chat/AiAssistant";
 import { ThemeProvider } from "@/components/theme-provider";
+import { VisualSkinInitScript } from "@/components/admin/VisualSkinInitScript";
 import { BUSINESS_CONFIG } from "@/lib/constants";
 import "./globals.css";
 
@@ -87,6 +88,7 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        <VisualSkinInitScript />
       </head>
       <body
         className={`${inter.variable} ${oswald.variable} font-sans antialiased`}

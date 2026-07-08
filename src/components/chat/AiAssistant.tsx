@@ -230,21 +230,19 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
     <>
       {/* Floating Action Button - Positioned bottom-left to avoid colliding with HelpFab (bottom-right) */}
       <div
-        className="fixed left-4 z-50 sm:left-6"
+        className="nb-assistive-fab-wrap-chat fixed left-4 z-50 sm:left-6"
         style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
       >
         <Button
           onClick={() => setIsOpen(!isOpen)}
+          variant="ghost"
           size="icon"
           aria-label={isOpen ? "Cerrar asistente" : "Abrir asistente"}
-          className="h-14 w-14 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black shadow-xl shadow-amber-500/20 transition-all hover:scale-110 active:scale-95"
+          className="nb-assistive-fab nb-assistive-fab-chat h-14 w-14 rounded-full"
         >
           {isOpen ? <X className="h-6 w-6 animate-in spin-in duration-300" aria-hidden="true" /> : <MessageSquare className="h-6 w-6 animate-in zoom-in duration-300" aria-hidden="true" />}
-          <span className="absolute -top-1 -right-1 flex h-4 w-4">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-amber-500 items-center justify-center text-[10px] font-bold text-black">
-              {resolvedMode === 'admin' ? 'CRM' : 'AI'}
-            </span>
+          <span className="nb-assistive-badge absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold tracking-[0.08em]">
+            {resolvedMode === 'admin' ? 'CRM' : 'AI'}
           </span>
         </Button>
       </div>
@@ -257,20 +255,20 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.3 }}
-            className="fixed left-3 right-3 sm:left-6 sm:right-auto z-50 w-auto sm:w-[400px] h-[70dvh] max-h-[calc(100dvh-8rem)] sm:max-h-[600px] rounded-3xl border border-border bg-card/95 backdrop-blur-2xl shadow-2xl overflow-hidden overscroll-contain flex flex-col"
+            className="nb-assistive-panel fixed left-3 right-3 z-50 flex h-[70dvh] max-h-[calc(100dvh-8rem)] w-auto flex-col overflow-hidden overscroll-contain rounded-3xl border backdrop-blur-2xl sm:left-6 sm:right-auto sm:max-h-[600px] sm:w-[400px]"
             style={{ bottom: "calc(6rem + env(safe-area-inset-bottom))" }}
           >
             {/* Header */}
-            <div className="p-4 border-b border-border bg-gradient-to-r from-card to-background flex items-center justify-between">
+            <div className="nb-assistive-panel-header flex items-center justify-between border-b p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">
-                  <Sparkles className="h-5 w-5 text-primary" />
+                <div className="nb-assistive-icon flex h-10 w-10 items-center justify-center rounded-full">
+                  <Sparkles className="h-5 w-5" />
                 </div>
                 <div>
                   <h3 className="font-bold text-foreground text-sm">
                     {resolvedMode === 'admin' ? "Coach de Gestión New Brothers" : "Asesor de Estilo New Brothers"}
                   </h3>
-                  <span className="text-[10px] text-primary font-mono tracking-widest uppercase">
+                  <span className="nb-assistive-eyebrow font-mono text-[10px] uppercase tracking-widest">
                     {resolvedMode === 'admin' ? "Soporte CRM" : "Inteligencia Artificial"}
                   </span>
                 </div>
@@ -287,13 +285,13 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
             </div>
 
             {/* Quick Actions / Suggestions */}
-            <div className="px-4 py-3 border-b border-border/50 bg-muted/30 flex gap-2 overflow-x-auto overscroll-contain scrollbar-none shrink-0">
+            <div className="flex shrink-0 gap-2 overflow-x-auto overscroll-contain border-b border-border/50 bg-muted/30 px-4 py-3 scrollbar-none">
               {quickActions.map((action) => (
                 <Button
                   key={action.label}
                   variant="outline"
                   onClick={() => handleSendMessage(action.label)}
-                  className="rounded-full h-10 md:h-8 px-3 text-xs bg-card border-border text-muted-foreground hover:bg-primary hover:border-primary hover:text-primary-foreground transition-all flex items-center gap-1.5 shrink-0"
+                  className="nb-assistive-action flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs transition-all md:h-8"
                 >
                   <action.icon className="h-3 w-3" aria-hidden="true" />
                   {action.label}
@@ -311,14 +309,18 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                   <div
                     className={`max-w-[85%] rounded-2xl p-3.5 text-sm leading-relaxed ${
                       msg.role === "user"
-                        ? "bg-primary text-primary-foreground font-medium rounded-tr-none shadow-lg shadow-primary/10"
+                        ? "nb-assistive-user-message font-medium rounded-tr-none"
                         : "bg-muted border border-border text-foreground rounded-tl-none"
                     }`}
                   >
                     {/* Render message text with simple markdown-like bold parsing */}
                     <p className="whitespace-pre-line text-sm">
                       {msg.content.split("**").map((part, idx) =>
-                        idx % 2 === 1 ? <strong key={idx} className="font-bold text-foreground">{part}</strong> : part
+                        idx % 2 === 1 ? (
+                          <strong key={idx} className={msg.role === "user" ? "font-bold text-current" : "font-bold text-foreground"}>
+                            {part}
+                          </strong>
+                        ) : part
                       )}
                     </p>
 
@@ -335,12 +337,12 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                                 className="flex justify-between items-center bg-card p-2 rounded-lg border border-border hover:border-primary/50 hover:bg-accent transition-all text-xs group"
                               >
                                 <div>
-                                  <p className="font-bold text-foreground group-hover:text-primary transition-colors">{service.name}</p>
+                                  <p className="nb-assistive-hover-title font-bold text-foreground">{service.name}</p>
                                   <p className="text-[10px] text-muted-foreground">{service.duration} min</p>
                                 </div>
                                 <div className="flex items-center gap-1.5 font-mono">
                                   <span className="font-bold text-foreground">${service.price}</span>
-                                  <ArrowRight className="h-3 w-3 text-primary opacity-0 group-hover:opacity-100 transition-all" />
+                                  <ArrowRight className="nb-assistive-link-accent h-3 w-3 opacity-0 transition-all group-hover:opacity-100" />
                                 </div>
                               </Link>
                             ))}
@@ -356,8 +358,8 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                                 href={`/reservar?styleId=${style.id}&serviceId=${style.serviceId}`}
                                 className="bg-card p-2 rounded-lg border border-border hover:border-primary/50 hover:bg-accent transition-all text-left text-xs block group"
                               >
-                                <p className="font-bold text-foreground line-clamp-1 group-hover:text-primary transition-colors">{style.name}</p>
-                                <p className="text-[10px] text-primary mt-1 flex items-center gap-1">
+                                <p className="nb-assistive-hover-title line-clamp-1 font-bold text-foreground">{style.name}</p>
+                                <p className="nb-assistive-link-accent mt-1 flex items-center gap-1 text-[10px]">
                                   Reservar <ArrowRight className="h-2.5 w-2.5 group-hover:translate-x-1 transition-transform" />
                                 </p>
                               </Link>
@@ -377,10 +379,10 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                                   <p className="font-bold text-foreground">{prod.name}</p>
                                   <p className="text-[10px] text-muted-foreground line-clamp-1">{prod.desc}</p>
                                 </div>
-                                <span className="font-mono font-bold text-primary shrink-0 ml-2">${prod.price}</span>
+                                <span className="nb-assistive-price ml-2 shrink-0 font-mono font-bold">${prod.price}</span>
                               </div>
                             ))}
-                            <Button asChild size="sm" className="w-full text-xs h-8 rounded-lg bg-primary hover:bg-primary/95 text-primary-foreground mt-1">
+                            <Button asChild size="sm" className="nb-assistive-send mt-1 h-8 w-full rounded-lg text-xs">
                               <Link href="/tienda">Ver Tienda Completa</Link>
                             </Button>
                           </div>
@@ -388,7 +390,7 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
 
                         {/* General Actions (Redirect to booking page, etc.) */}
                         {msg.data.type === "action" && msg.data.label && msg.data.url && (
-                          <Button asChild className="w-full text-xs h-9 rounded-lg bg-primary hover:bg-primary/95 text-primary-foreground">
+                          <Button asChild className="nb-assistive-send h-9 w-full rounded-lg text-xs">
                             <Link href={msg.data.url}>
                               {msg.data.label}
                               <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
@@ -424,7 +426,7 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                 e.preventDefault();
                 handleSendMessage(input);
               }}
-              className="p-4 border-t border-border bg-card flex gap-2 items-center shrink-0"
+              className="nb-assistive-panel-footer flex shrink-0 items-center gap-2 border-t p-4"
             >
               <Input
                 value={input}
@@ -433,14 +435,15 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                 placeholder={resolvedMode === 'admin' ? "Preguntame cómo cobrar, liquidar, stock…" : "Preguntame sobre cortes, precios o reservá…"}
                 disabled={isLoading}
                 autoComplete="off"
-                className="bg-background border-border text-foreground rounded-full focus-visible:ring-primary h-11 px-4 flex-grow placeholder:text-muted-foreground text-base md:text-sm"
+                className="nb-assistive-input h-11 flex-grow rounded-full px-4 text-base text-foreground placeholder:text-muted-foreground md:text-sm"
               />
               <Button
                 type="submit"
                 disabled={isLoading || !input.trim()}
+                variant="ghost"
                 size="icon"
                 aria-label="Enviar mensaje"
-                className="h-11 w-11 md:h-10 md:w-10 rounded-full bg-primary hover:bg-primary/95 text-primary-foreground shrink-0 transition-transform active:scale-90 disabled:opacity-50"
+                className="nb-assistive-send h-11 w-11 shrink-0 rounded-full transition-transform active:scale-90 disabled:opacity-50 md:h-10 md:w-10"
               >
                 <Send className="h-4 w-4" aria-hidden="true" />
               </Button>

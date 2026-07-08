@@ -19,6 +19,7 @@ import {
     Sparkles,
     Settings,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useFeatures } from "@/lib/features";
 import type { Permission } from "@/lib/permissions";
 import { usePermissions } from "@/lib/usePermissions";
@@ -29,6 +30,8 @@ import { ROUTES } from "@/lib/constants";
 import { isDemoMode } from "@/lib/demo";
 import { logoutAdmin } from "./actions";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
+import { VisualSkinSelector } from "@/components/admin/VisualSkinSelector";
+import { VisualSkinProvider } from "@/components/admin/VisualSkinProvider";
 
 const sidebarLinks: {
     href: string;
@@ -143,42 +146,45 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
     });
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex h-full flex-col">
             {/* Logo */}
-            <div className="p-6 border-b border-border">
+            <div className="admin-sidebar-brand border-b border-border/60 p-5">
                 <Link href="/" className="flex items-center gap-3">
-                    <Image
-                        src="/logo.png"
-                        alt="NB Barber"
-                        width={40}
-                        height={40}
-                        className="h-10 w-10 object-contain"
-                    />
-                    <div>
-                        <span className="text-xl font-bold flex items-center gap-2">
+                    <span className="admin-brand-mark flex h-12 w-12 items-center justify-center rounded-xl">
+                        <Image
+                            src="/logo-transparent-512.png"
+                            alt="NB Barber"
+                            width={42}
+                            height={42}
+                            unoptimized
+                            className="h-10 w-10 object-contain"
+                        />
+                    </span>
+                    <div className="min-w-0">
+                        <span className="flex items-center gap-2 truncate text-xl font-bold">
                             NB Barber
                             {isDemoMode && (
-                                <span className="text-[10px] font-semibold tracking-wider text-amber-500 border border-amber-500/40 rounded px-1.5 py-0.5">
+                                <span className="admin-demo-pill rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wider">
                                     DEMO
                                 </span>
                             )}
                         </span>
-                        <p className="text-xs text-muted-foreground">Panel Admin</p>
+                        <p className="text-xs text-muted-foreground">Centro operativo</p>
                     </div>
                 </Link>
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 p-4 space-y-2">
+            <nav className="flex-1 space-y-1.5 p-4">
                 {filteredLinks.map((link) => (
                     <Link
                         key={link.href}
                         href={link.href}
                         id={!isMobile ? `sidebar-${link.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}` : undefined}
                         className={cn(
-                            "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+                            "admin-nav-link flex items-center gap-3 rounded-xl px-4 py-3 transition-colors",
                             pathname === link.href
-                                ? "bg-primary/10 text-primary"
+                                ? "admin-nav-link-active"
                                 : "text-muted-foreground hover:bg-primary/5 hover:text-foreground"
                         )}
                     >
@@ -189,16 +195,16 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
             </nav>
 
             {/* Bottom */}
-            <div className="p-4 border-t border-border space-y-2">
+            <div className="space-y-2 border-t border-border/60 p-4">
                 <Link
                     href="/"
-                    className="flex items-center gap-3 px-4 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/5 hover:text-foreground transition-colors"
+                    className="admin-nav-link flex items-center gap-3 rounded-xl px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
                 >
                     Volver al inicio
                 </Link>
                 <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer text-left"
+                    className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-4 py-2 text-left text-sm text-red-400 transition-colors hover:bg-red-500/10"
                 >
                     <LogOut className="h-4 w-4" />
                     Cerrar sesión
@@ -214,35 +220,45 @@ export default function AdminLayout({
     children: React.ReactNode;
 }) {
     return (
-        <div className="min-h-screen bg-background">
-            {/* Topbar / Header */}
-            <header className="fixed top-0 right-0 left-0 md:left-64 z-40 bg-background/80 backdrop-blur-md border-b border-border h-16 flex items-center justify-between px-4 md:px-6">
-                <div className="flex items-center gap-3">
-                    <Sheet>
-                        <SheetTrigger asChild className="md:hidden">
-                            <Button variant="ghost" size="icon" aria-label="Abrir menú admin">
-                                <Menu className="h-5 w-5" />
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent side="left" className="p-0 w-64">
-                            <SidebarContent isMobile={true} />
-                        </SheetContent>
-                    </Sheet>
-                    <span className="font-semibold text-foreground">NB Barber Admin</span>
-                </div>
-                <div className="flex items-center gap-2" />
-            </header>
+        <VisualSkinProvider>
+            <div className="admin-shell min-h-screen bg-background text-foreground">
+                {/* Topbar / Header */}
+                <header className="admin-topbar fixed left-0 right-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/70 px-4 backdrop-blur-xl md:left-72 md:px-6">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <Sheet>
+                            <SheetTrigger asChild className="md:hidden">
+                                <Button variant="ghost" size="icon" aria-label="Abrir menú admin">
+                                    <Menu className="h-5 w-5" />
+                                </Button>
+                            </SheetTrigger>
+                            <SheetContent side="left" className="admin-mobile-sheet w-72 p-0">
+                                <SidebarContent isMobile={true} />
+                            </SheetContent>
+                        </Sheet>
+                        <div className="min-w-0">
+                            <span className="block truncate font-semibold text-foreground">NB Barber Admin</span>
+                            <span className="hidden text-xs text-muted-foreground sm:block">
+                                Agenda, caja y fidelización en tiempo real
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <VisualSkinSelector />
+                        <ThemeToggle />
+                    </div>
+                </header>
 
-            {/* Desktop Sidebar */}
-            <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 border-r border-border bg-card flex-col z-50">
-                <SidebarContent />
-            </aside>
+                {/* Desktop Sidebar */}
+                <aside className="admin-sidebar fixed bottom-0 left-0 top-0 z-50 hidden w-72 flex-col border-r border-border/70 md:flex">
+                    <SidebarContent />
+                </aside>
 
-            {/* Main Content */}
-            <main className="md:ml-64 pt-16 min-h-screen">
-                <div className="p-6 md:p-8">{children}</div>
-            </main>
-            <WelcomeModal role="admin" />
-        </div>
+                {/* Main Content */}
+                <main className="admin-main min-h-screen pt-16 md:ml-72">
+                    <div className="admin-main-inner p-4 md:p-6 2xl:p-7">{children}</div>
+                </main>
+                <WelcomeModal role="admin" />
+            </div>
+        </VisualSkinProvider>
     );
 }
