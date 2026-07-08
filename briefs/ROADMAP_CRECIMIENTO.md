@@ -80,6 +80,7 @@ Cerrar la brecha entre "grilla de productos" y una tienda que convierte:
 - **Promos y combos**: cupones, kits de cuidado (bundle con precio de paquete).
 - **Suscripción de producto (recurrente)**: reenvío automático mensual del shampoo/cera → ingreso recurrente.
 - **UX de stock**: badges de "últimas unidades", estados de agotado prolijos.
+- **Datos bancarios editables desde `/admin/configuracion`** (hoy `BANK_TRANSFER_INFO` es constante en código, introducida en FASE 28; moverla a `app_settings` cuando la tienda escale).
 
 **Valor**: sube ticket promedio y suma un canal de ingreso además del sillón.
 
