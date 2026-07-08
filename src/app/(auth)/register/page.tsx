@@ -3,11 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Scissors, Mail, Lock, User, Phone, ArrowRight, Loader2 } from "lucide-react";
+import { Scissors, Mail, User, Phone, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { PasswordInput } from "@/components/shared/PasswordInput";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
@@ -137,34 +138,24 @@ export default function RegisterPage() {
 
                     <div className="space-y-2">
                         <Label htmlFor="password">Contraseña *</Label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                id="password"
-                                type="password"
-                                placeholder="••••••••"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="pl-10"
-                                disabled={isSubmitting}
-                            />
-                        </div>
+                        <PasswordInput
+                            id="password"
+                            placeholder="••••••••"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            disabled={isSubmitting}
+                        />
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="confirmPassword">Confirmar Contraseña *</Label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                id="confirmPassword"
-                                type="password"
-                                placeholder="••••••••"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="pl-10"
-                                disabled={isSubmitting}
-                            />
-                        </div>
+                        <PasswordInput
+                            id="confirmPassword"
+                            placeholder="••••••••"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            disabled={isSubmitting}
+                        />
                     </div>
                 </CardContent>
 
