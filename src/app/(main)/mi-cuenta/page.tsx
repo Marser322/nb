@@ -12,10 +12,19 @@ import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import {
     APPOINTMENT_STATUS_COLORS,
     APPOINTMENT_STATUS_LABELS,
+    BUSINESS_CONFIG,
     FULFILLMENT_LABELS,
     ORDER_STATUS_COLORS,
     ORDER_STATUS_LABELS,
@@ -43,6 +52,20 @@ type OrderWithRelations = Order & {
     items?: (OrderItem & { product?: Product | null })[];
 };
 
+type CancelTarget = {
+    type: "appointment" | "subscription";
+    id: string;
+    title: string;
+    detail: string;
+};
+
+const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+// FASE 22 C2: ventana de cancelación derivada de la config, no hardcodeada.
+const cancellationWindowLabel = BUSINESS_CONFIG.cancellationWindow % 60 === 0
+    ? `${BUSINESS_CONFIG.cancellationWindow / 60} hora${BUSINESS_CONFIG.cancellationWindow / 60 === 1 ? "" : "s"}`
+    : `${BUSINESS_CONFIG.cancellationWindow} minutos`;
+
 export default function MiCuentaPage() {
     const { features } = useFeatures();
     const router = useRouter();
@@ -54,6 +77,8 @@ export default function MiCuentaPage() {
     const [history, setHistory] = useState<HaircutHistoryWithRelations[]>([]);
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
     const [orders, setOrders] = useState<OrderWithRelations[]>([]);
+    const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
+    const [isCancelling, setIsCancelling] = useState(false);
 
     useEffect(() => {
         async function loadAccount() {
@@ -160,41 +185,58 @@ export default function MiCuentaPage() {
         };
     }, [lastExperience]);
 
-    const handleCancelSubscription = async (subId: string) => {
-        if (!window.confirm("¿Estás seguro de que deseas cancelar este turno fijo semanal?")) {
-            return;
-        }
-
-        try {
-            const { error } = await supabase
-                .from("subscriptions")
-                .update({ status: "cancelled", updated_at: new Date().toISOString() })
-                .eq("id", subId);
-
-            if (error) throw error;
-
-            setSubscriptions(prev => prev.filter(sub => sub.id !== subId));
-            toast.success("Turno fijo cancelado correctamente");
-        } catch (err) {
-            console.error("Error cancelling subscription:", err);
-            toast.error("No se pudo cancelar el turno fijo. Inténtalo de nuevo.");
-        }
+    const requestCancelAppointment = (appointment: AppointmentWithRelations) => {
+        setCancelTarget({
+            type: "appointment",
+            id: appointment.id,
+            title: appointment.service?.name || "Turno",
+            detail: `${format(parseISO(appointment.appointment_date), "EEEE d 'de' MMMM", { locale: es })} · ${appointment.start_time.slice(0, 5)} hs con ${appointment.barber?.name || "tu barbero"}`,
+        });
     };
 
-    const handleCancelAppointment = async (appointmentId: string) => {
-        if (!window.confirm("¿Estás seguro de que deseas cancelar este turno?")) {
+    const requestCancelSubscription = (sub: Subscription) => {
+        setCancelTarget({
+            type: "subscription",
+            id: sub.id,
+            title: sub.service?.name || "Turno fijo semanal",
+            detail: `Todos los ${WEEKDAYS[sub.day_of_week]} a las ${sub.start_time.slice(0, 5)} hs con ${sub.barber?.name || "tu barbero"}`,
+        });
+    };
+
+    const handleConfirmCancel = async () => {
+        if (!cancelTarget) return;
+        setIsCancelling(true);
+
+        if (cancelTarget.type === "subscription") {
+            try {
+                const { error } = await supabase
+                    .from("subscriptions")
+                    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+                    .eq("id", cancelTarget.id);
+
+                if (error) throw error;
+
+                setSubscriptions(prev => prev.filter(sub => sub.id !== cancelTarget.id));
+                toast.success("Turno fijo cancelado correctamente");
+                setCancelTarget(null);
+            } catch (err) {
+                console.error("Error cancelling subscription:", err);
+                toast.error("No se pudo cancelar el turno fijo. Inténtalo de nuevo.");
+            } finally {
+                setIsCancelling(false);
+            }
             return;
         }
 
         try {
             const { error } = await supabase.rpc("cancel_appointment", {
-                p_appointment_id: appointmentId,
+                p_appointment_id: cancelTarget.id,
             });
 
             if (error) {
                 console.error("RPC cancel_appointment error:", error);
                 if (error.message && error.message.includes("FUERA_DE_VENTANA")) {
-                    toast.error("Solo podés cancelar hasta 2 horas antes del turno");
+                    toast.error(`Solo podés cancelar hasta ${cancellationWindowLabel} antes del turno`);
                 } else if (error.message && error.message.includes("NO_CANCELABLE")) {
                     toast.error("Este turno no se puede cancelar");
                 } else {
@@ -203,11 +245,14 @@ export default function MiCuentaPage() {
                 return;
             }
 
-            setUpcomingAppointments(prev => prev.filter(a => a.id !== appointmentId));
+            setUpcomingAppointments(prev => prev.filter(a => a.id !== cancelTarget.id));
             toast.success("Reserva cancelada correctamente");
+            setCancelTarget(null);
         } catch (err) {
             console.error("Error cancelling appointment:", err);
             toast.error("Ocurrió un error al intentar cancelar la reserva.");
+        } finally {
+            setIsCancelling(false);
         }
     };
 
@@ -388,14 +433,14 @@ export default function MiCuentaPage() {
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="sm"
-                                                                    onClick={() => handleCancelAppointment(appointment.id)}
+                                                                    onClick={() => requestCancelAppointment(appointment)}
                                                                     className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs px-3 rounded-full h-8"
                                                                 >
                                                                     Cancelar
                                                                 </Button>
                                                             ) : (
                                                                 <span className="text-xs text-zinc-500 font-light">
-                                                                    No se puede cancelar (menos de 2 h)
+                                                                    No se puede cancelar (menos de {cancellationWindowLabel})
                                                                 </span>
                                                             )}
                                                         </div>
@@ -574,8 +619,7 @@ export default function MiCuentaPage() {
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {subscriptions.map((sub) => {
-                                            const weekdays = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-                                            const dayName = weekdays[sub.day_of_week];
+                                            const dayName = WEEKDAYS[sub.day_of_week];
 
                                             return (
                                                 <div key={sub.id} className="rounded-lg border border-primary/20 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 p-5 flex flex-col justify-between gap-4">
@@ -599,10 +643,10 @@ export default function MiCuentaPage() {
                                                         <span className="text-xs text-muted-foreground">
                                                             {sub.service && formatPrice(sub.service.price)} / sesión
                                                         </span>
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="sm" 
-                                                            onClick={() => handleCancelSubscription(sub.id)}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => requestCancelSubscription(sub)}
                                                             className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs px-3 rounded-full h-8"
                                                         >
                                                             Cancelar turno fijo
@@ -621,6 +665,42 @@ export default function MiCuentaPage() {
             </main>
 
             <Footer />
+
+            {/* FASE 22 C: dialog de confirmación de cancelación (turno o suscripción) */}
+            <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open && !isCancelling) setCancelTarget(null); }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Cancelar {cancelTarget?.type === "subscription" ? "turno fijo" : "turno"}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Esta acción no se puede deshacer.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {cancelTarget && (
+                        <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
+                            <p className="font-semibold text-foreground">{cancelTarget.title}</p>
+                            <p className="text-muted-foreground mt-1">{cancelTarget.detail}</p>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setCancelTarget(null)}
+                            disabled={isCancelling}
+                        >
+                            Volver
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleConfirmCancel}
+                            disabled={isCancelling}
+                        >
+                            {isCancelling ? "Cancelando…" : "Sí, cancelar"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
