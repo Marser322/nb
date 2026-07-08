@@ -642,11 +642,15 @@ Reglas para "action":
         reply = "¡Hola! Bienvenido a **New Brothers**. Soy tu Asesor de Estética Masculina personal. ¿En qué te puedo ayudar hoy? Podés consultarme sobre nuestros servicios, reservar turnos, recomendaciones de cortes o conocer nuestros locales.";
       }
       else if (
-        normalizedUserQuery.includes("mi cita") ||
-        normalizedUserQuery.includes("mi turno") ||
-        normalizedUserQuery.includes("mi reserva") ||
-        normalizedUserQuery.includes("proxima cita") ||
-        normalizedUserQuery.includes("proximo turno")
+        !normalizedUserQuery.includes("cancelar") &&
+        !normalizedUserQuery.includes("reprogramar") &&
+        (
+          normalizedUserQuery.includes("mi cita") ||
+          normalizedUserQuery.includes("mi turno") ||
+          normalizedUserQuery.includes("mi reserva") ||
+          normalizedUserQuery.includes("proxima cita") ||
+          normalizedUserQuery.includes("proximo turno")
+        )
       ) {
         if (!isLoggedIn) {
           reply = "Para consultar tu turno necesito que inicies sesión primero. Iniciá sesión y volvé a preguntarme.";
@@ -680,7 +684,11 @@ Reglas para "action":
           }))
         };
       }
-      else if (normalizedUserQuery.includes("reserva") || normalizedUserQuery.includes("turno") || normalizedUserQuery.includes("agendar") || normalizedUserQuery.includes("cita") || normalizedUserQuery.includes("hora") || normalizedUserQuery.includes("disponib") || normalizedUserQuery.includes("libre")) {
+      else if (
+        !normalizedUserQuery.includes("cancelar") &&
+        !normalizedUserQuery.includes("reprogramar") &&
+        (wantsAvailability || normalizedUserQuery.includes("reserva") || normalizedUserQuery.includes("turno") || normalizedUserQuery.includes("agendar") || normalizedUserQuery.includes("cita") || normalizedUserQuery.includes("hora"))
+      ) {
         if (!activeFeatures.reservas_online) {
           reply = "Disculpanos. El sistema de reservas online está desactivado temporalmente por mantenimiento. Por favor, volvé a intentar más tarde o comunicate al local.";
         } else {
