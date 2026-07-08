@@ -16,9 +16,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { useFeatures } from "@/lib/features";
 import { createClient } from "@/lib/supabase/client";
+import { BANK_TRANSFER_INFO } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
+import { normalizeUyPhone } from "@/lib/whatsapp";
 import { useCartStore } from "@/stores/cartStore";
 import type { Branch, FulfillmentType } from "@/types/database.types";
+
+const hasBankTransferInfo = Boolean(
+    BANK_TRANSFER_INFO.bank && BANK_TRANSFER_INFO.account && BANK_TRANSFER_INFO.holder
+);
 
 type PaymentMethod = "efectivo" | "transferencia";
 
@@ -130,6 +136,10 @@ export default function CheckoutPage() {
         }
         if (fulfillment === "delivery" && !contactPhone.trim()) {
             toast.error("Ingresá un teléfono de contacto");
+            return;
+        }
+        if (contactPhone.trim() && !normalizeUyPhone(contactPhone)) {
+            toast.error("Ingresá un teléfono uruguayo válido (ej: 099 123 456)");
             return;
         }
 
@@ -351,10 +361,18 @@ export default function CheckoutPage() {
 
                                 {paymentMethod === "transferencia" && (
                                     <div className="mt-4 p-4 bg-muted/50 rounded-lg text-sm space-y-2 border border-border">
-                                        <p className="font-semibold text-primary">Datos bancarios:</p>
-                                        <p>Banco: <span className="text-foreground">Santander</span></p>
-                                        <p>Cuenta: <span className="text-foreground">1234 5678 9012</span></p>
-                                        <p>Titular: <span className="text-foreground">NB Barber S.A.</span></p>
+                                        {hasBankTransferInfo ? (
+                                            <>
+                                                <p className="font-semibold text-primary">Datos bancarios:</p>
+                                                <p>Banco: <span className="text-foreground">{BANK_TRANSFER_INFO.bank}</span></p>
+                                                <p>Cuenta: <span className="text-foreground">{BANK_TRANSFER_INFO.account}</span></p>
+                                                <p>Titular: <span className="text-foreground">{BANK_TRANSFER_INFO.holder}</span></p>
+                                            </>
+                                        ) : (
+                                            <p className="text-muted-foreground">
+                                                Te pasamos los datos bancarios por WhatsApp al confirmar el pedido.
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </CardContent>
