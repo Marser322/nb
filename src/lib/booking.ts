@@ -1,5 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { generateTimeSlots } from "@/lib/utils";
+import { generateTimeSlots, generateTimeSlotsFromRange, calculateEndTime } from "@/lib/utils";
 import { BUSINESS_CONFIG } from "@/lib/constants";
 import { Database, DayAvailability } from "@/types/database.types";
 
@@ -214,5 +214,58 @@ export async function fetchAvailability(
             blocks: typeof row.blocks === "string" ? JSON.parse(row.blocks) : (row.blocks || []),
         })) ?? []
     );
+}
+
+/**
+ * Determina si un día de disponibilidad (resultado de fetchAvailability) tiene al
+ * menos un hueco libre para un servicio de `durationMinutes`. Replica la misma lógica
+ * de superposición que `isSlotAvailable` del wizard de reserva (booked + break + blocks),
+ * pero como función pura reusable (sin estado de UI ni chequeo de "hoy en el pasado").
+ */
+export function dayHasFreeSlot(day: DayAvailability, durationMinutes: number = 30): boolean {
+    if (!day.is_open || !day.open_time || !day.close_time) return false;
+
+    const slotDuration = day.slot_minutes || 30;
+    const slotsNeeded = Math.ceil(durationMinutes / slotDuration);
+    const timeSlots = generateTimeSlotsFromRange(
+        day.open_time.slice(0, 5),
+        day.close_time.slice(0, 5),
+        slotDuration
+    );
+    const closeTimeStr = day.close_time.slice(0, 5);
+
+    return timeSlots.some((time, startIdx) => {
+        const endTime = calculateEndTime(time, durationMinutes);
+        if (endTime > closeTimeStr) return false;
+
+        for (let i = 0; i < slotsNeeded; i++) {
+            const slotToCheck = timeSlots[startIdx + i];
+            if (!slotToCheck) return false;
+
+            const slotEndToCheck = calculateEndTime(slotToCheck, slotDuration);
+
+            const isBooked = day.booked.some((apt) => {
+                const aptStart = apt.start.slice(0, 5);
+                const aptEnd = apt.end.slice(0, 5);
+                return slotToCheck < aptEnd && aptStart < slotEndToCheck;
+            });
+            if (isBooked) return false;
+
+            if (day.break_start && day.break_end) {
+                const breakStart = day.break_start.slice(0, 5);
+                const breakEnd = day.break_end.slice(0, 5);
+                if (slotToCheck < breakEnd && breakStart < slotEndToCheck) return false;
+            }
+
+            const isBlocked = day.blocks.some((block) => {
+                const blockStart = block.start.slice(0, 5);
+                const blockEnd = block.end.slice(0, 5);
+                return slotToCheck < blockEnd && blockStart < slotEndToCheck;
+            });
+            if (isBlocked) return false;
+        }
+
+        return true;
+    });
 }
 
