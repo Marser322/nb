@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
+import { isDemoMode } from "@/lib/demo";
 
-export const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+export { isDemoMode };
 
 export function useDemoAdminLogin(): {
   loginAsDemoAdmin: () => Promise<void>;

@@ -79,7 +79,7 @@ export function HelpFab() {
                             ) : (
                                 <LogIn className="h-4 w-4 text-primary" aria-hidden="true" />
                             )}
-                            Entrar como Admin demo
+                            Entrar al panel admin demo
                         </DropdownMenuItem>
                     )}
                     {(tourKey || isDemoMode) && <DropdownMenuSeparator className="bg-border/70" />}

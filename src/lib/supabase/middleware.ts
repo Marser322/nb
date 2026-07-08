@@ -11,7 +11,7 @@ export async function updateSession(request: NextRequest) {
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
     if (!supabaseUrl || !supabaseKey) {
-        console.warn('⚠️ Supabase no configurado. Ejecutá /db-setup y configurá .env.local')
+        console.warn('Supabase no configurado. Ejecutá /db-setup y configurá .env.local')
         return supabaseResponse
     }
 

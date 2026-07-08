@@ -111,7 +111,8 @@ export function TourOverlay() {
 
     // Render Portal
     return createPortal(
-        <div className="fixed inset-0 z-[9999] pointer-events-none">
+        <>
+        <div className="fixed inset-0 z-[9998] pointer-events-none">
             {/* 1. Backdrop / Spotlight Effect */}
             <motion.div
                 initial={{ opacity: 0 }}
@@ -146,9 +147,10 @@ export function TourOverlay() {
                     />
                 )}
             </motion.div>
+        </div>
 
             {/* 2. Tooltip Card */}
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            <div className="fixed inset-0 z-[10001] pointer-events-none flex items-center justify-center">
                 <Tooltip
                     step={currentStep}
                     index={currentStepIndex}
@@ -160,7 +162,7 @@ export function TourOverlay() {
                     onClose={closeTour}
                 />
             </div>
-        </div>,
+        </>,
         document.body
     );
 }

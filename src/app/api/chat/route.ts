@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isDemoMode } from "@/lib/demo";
 import {
   STATIC_SERVICES,
   STATIC_BARBERS,
@@ -90,7 +91,6 @@ export async function POST(req: Request) {
     const lastMessage = messages[messages.length - 1];
     const userQuery = lastMessage?.content?.toLowerCase() || "";
     const normalizedUserQuery = userQuery.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
     const isDemoAdminQuery = /\b(panel|admin|administracion|gestion|demo|crm)\b/.test(normalizedUserQuery);
 
     // Resolve mode / persona / context parameter

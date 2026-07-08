@@ -83,13 +83,13 @@ export default function AdminLoginPage() {
 
             <Card className="w-full max-w-md mx-4 relative z-10 border-amber-500/20 bg-card/50 backdrop-blur-xl shadow-2xl">
                 <CardHeader className="space-y-1 text-center">
-                    <div className="w-20 h-20 mx-auto mb-4 relative rounded-full overflow-hidden border-2 border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+                    <div className="w-20 h-20 mx-auto mb-4 relative drop-shadow-[0_0_20px_rgba(245,158,11,0.25)]">
                         <Image
-                            src="/logo.png"
+                            src="/logo-transparent-512.png"
                             alt="NB Barber"
                             fill
                             sizes="80px"
-                            className="object-cover"
+                            className="object-contain"
                         />
                     </div>
                     <CardTitle className="text-2xl font-bold tracking-tight">Acceso Administrativo</CardTitle>
@@ -104,9 +104,9 @@ export default function AdminLoginPage() {
                                 <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
                             </div>
                             <div>
-                                <p className="text-sm font-semibold text-foreground">Demo lista para presentar</p>
+                                <p className="text-sm font-semibold text-foreground">Cuenta admin pública</p>
                                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                                    Entrá directo al CRM de New Brothers: agenda, clientes, caja, productos y reportes.
+                                    Entrá directo al CRM demo de New Brothers: agenda, clientes, caja, productos y reportes.
                                 </p>
                             </div>
                         </div>

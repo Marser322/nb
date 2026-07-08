@@ -60,13 +60,13 @@ export const APP_TOURS: Record<string, TourStep[]> = {
             icon: Images
         },
         {
-            target: '#demo-admin-cta',
-            title: 'Panel de gestión (demo)',
-            content: 'Detrás de la vidriera hay un CRM completo: agenda, caja, clientes, stock y liquidaciones. Entrá y recorré el panel de administración de demostración.',
+            target: '#admin-demo-entry',
+            title: 'Cuenta admin pública',
+            content: 'Este acceso abre el panel administrativo de demostración: agenda, clientes, caja, stock y reportes listos para presentar.',
             position: 'top',
             icon: LayoutDashboard,
             href: ROUTES.ADMIN_LOGIN,
-            ctaLabel: 'Ver el panel'
+            ctaLabel: 'Entrar al panel admin'
         },
         {
             target: '#hero-cta',
@@ -78,7 +78,7 @@ export const APP_TOURS: Record<string, TourStep[]> = {
     ],
     '/reservar': [
         {
-            target: '#booking-wizard-card',
+            target: 'body',
             title: 'Asistente de Reservas',
             content: 'Te damos la bienvenida al asistente de reservas. Te guiaremos paso a paso para agendar tu turno.',
             position: 'center',

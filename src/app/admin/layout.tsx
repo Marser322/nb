@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
+import { isDemoMode } from "@/lib/demo";
 import { logoutAdmin } from "./actions";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 
@@ -132,7 +133,7 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
                     <div>
                         <span className="text-xl font-bold flex items-center gap-2">
                             NB Barber
-                            {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && (
+                            {isDemoMode && (
                                 <span className="text-[10px] font-semibold tracking-wider text-amber-500 border border-amber-500/40 rounded px-1.5 py-0.5">
                                     DEMO
                                 </span>

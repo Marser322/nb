@@ -566,6 +566,7 @@ function ReservarPageContent() {
             {STEPS.map((step, index) => (
               <div key={step} className="flex items-center">
                 <div
+                  id={`step-indicator-${index}`}
                   className={cn(
                     "flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-full text-xs md:text-sm font-medium transition-all",
                     index < currentStep

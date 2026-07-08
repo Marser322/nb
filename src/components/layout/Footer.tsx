@@ -144,13 +144,6 @@ export function Footer() {
                         reservados.
                     </p>
                     <div className="flex items-center gap-4">
-                        <a
-                            href="#"
-                            className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground transition-colors hover:text-primary md:min-h-0 md:min-w-0"
-                            aria-label="Instagram de NB Barber"
-                        >
-                            <Instagram className="h-5 w-5" />
-                        </a>
                         {/* Hidden admin access - 5 clicks activates */}
                         <span
                             onClick={handleSecretClick}

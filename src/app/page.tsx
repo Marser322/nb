@@ -14,6 +14,7 @@ import { useFeatures } from "@/lib/features";
 import { buildWaLink } from "@/lib/whatsapp";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { useDemoAdminLogin } from "@/hooks/useDemoAdminLogin";
+import { isDemoMode } from "@/lib/demo";
 
 // Servicios destacados (luego vendrán de la BD)
 const services = [
@@ -49,7 +50,6 @@ const services = [
 export default function HomePage() {
   const { features } = useFeatures();
   const waLink = buildWaLink(BUSINESS_CONFIG.phone, "Hola, me gustaría reservar un turno.");
-  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const { loginAsDemoAdmin, isDemoLoading } = useDemoAdminLogin();
 
   return (
@@ -118,15 +118,15 @@ export default function HomePage() {
               )}
             </div>
 
-            <div className="mt-6 max-w-2xl overflow-hidden rounded-2xl border border-primary/35 bg-black/45 p-4 text-white shadow-2xl shadow-black/30 backdrop-blur-md md:p-5">
+            <div id="admin-demo-entry" className="mt-6 max-w-2xl overflow-hidden rounded-2xl border border-primary/35 bg-black/45 p-4 text-white shadow-2xl shadow-black/30 backdrop-blur-md md:p-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
                     <LayoutDashboard className="h-3.5 w-3.5" />
-                    Demo administrativa
+                    Cuenta admin pública
                   </div>
                   <p className="text-sm leading-relaxed text-zinc-200 md:text-base">
-                    Para dueños: agenda, clientes, caja, stock y reportes listos para recorrer.
+                    Para dueños: entrá al panel demo con agenda, clientes, caja, stock y reportes listos.
                   </p>
                 </div>
                 {isDemoMode ? (
