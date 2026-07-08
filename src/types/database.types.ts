@@ -51,6 +51,7 @@ export interface Service {
   image_url: string | null
   is_active: boolean
   sort_order: number
+  category?: string
   created_at: string
 }
 

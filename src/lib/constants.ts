@@ -174,6 +174,13 @@ export const COMPENSATION_MODEL_LABELS: Record<string, string> = {
 }
 
 
+// Categorías de servicios (códigos EN en DB, labels ES en UI)
+export const SERVICE_CATEGORIES = ['corte', 'barba', 'combo', 'tratamiento', 'color', 'otro'] as const
+export const SERVICE_CATEGORY_LABELS: Record<string, string> = {
+    corte: 'Cortes', barba: 'Barba', combo: 'Combos',
+    tratamiento: 'Tratamientos', color: 'Color', otro: 'Otros',
+}
+
 // Categorías de productos
 export const PRODUCT_CATEGORIES = [
     'Styling',
