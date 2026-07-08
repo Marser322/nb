@@ -176,9 +176,10 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
         setIsSavingNotes(true);
 
         const { error } = await supabase
-            .from("profiles")
-            .update({ notes: notes.trim() ? notes : null })
-            .eq("id", profile.id);
+            .rpc("update_client_notes", {
+                p_client_id: profile.id,
+                p_notes: notes.trim() ? notes : null,
+            });
 
         setIsSavingNotes(false);
 

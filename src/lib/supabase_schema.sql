@@ -1,11 +1,20 @@
 -- =====================================================
 -- NB BARBER - SCRIPT MAESTRO DE INSTALACIÓN
 -- Copia todo este contenido y pégalo en Supabase > SQL Editor
--- Actualizado 2026-07-07. Equivale a correr 001 → 018 sobre una DB fresca,
+-- Actualizado 2026-07-07. Equivale a correr 001 → 020 sobre una DB fresca,
 -- excepto 017_fix_service_images.sql (solo corrige DBs existentes con seeds viejos).
--- Incluye branches/cash_movements/reminders_config/communication_logs.
+-- Incluye branches/cash_movements/reminders_config/communication_logs,
+-- backend de tienda (019) y RBAC/permisos granulares con rol `gerente` (020).
 -- pg_cron (PARTE final) requiere habilitar la extensión primero en
 -- Dashboard > Database > Extensions.
+--
+-- OJO con 020 (RBAC) en DB EXISTENTE: el `ALTER TYPE user_role ADD VALUE
+-- 'gerente'` no puede compartir transacción con el uso de ese valor nuevo.
+-- Si corrés esto de una sola pasada en el SQL Editor y falla con un error de
+-- "unsafe use of new value of enum type", volvé a correr el archivo completo
+-- una segunda vez (el ALTER TYPE ya habrá quedado aplicado y el resto sí
+-- podrá usar 'gerente'). Ver supabase/migrations/020_rbac_permisos.sql para
+-- instrucciones detalladas de una migración por partes.
 -- =====================================================
 
 -- =====================================================
@@ -2407,3 +2416,183 @@ BEGIN
     REVOKE ALL ON FUNCTION decrement_stock(UUID, INTEGER) FROM PUBLIC, anon, authenticated;
   END IF;
 END $$;
+
+
+-- =====================================================
+-- PARTE FINAL: MIGRACION 020 — RBAC Y PERMISOS GRANULARES
+-- (rol `gerente`). Espejo de supabase/migrations/020_rbac_permisos.sql.
+-- Ver el comentario al inicio de este archivo sobre correrlo en DOS
+-- PASADAS en una DB existente (ALTER TYPE ADD VALUE + resto).
+-- =====================================================
+
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'gerente';
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '{}'::jsonb NOT NULL;
+
+COMMENT ON COLUMN profiles.permissions IS
+  'Overrides de permisos por persona. Clave = permiso (ver role_permissions), valor true=concede, false=revoca. Si la clave no está presente, se usa el default de role_permissions para el rol de la persona.';
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role       user_role NOT NULL,
+  permission TEXT NOT NULL,
+  PRIMARY KEY (role, permission)
+);
+
+ALTER TABLE role_permissions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can read role permissions" ON role_permissions;
+CREATE POLICY "Anyone can read role permissions" ON role_permissions
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admins manage role permissions" ON role_permissions;
+CREATE POLICY "Admins manage role permissions" ON role_permissions
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+INSERT INTO role_permissions (role, permission) VALUES
+  ('barbero', 'agenda.own'),
+  ('barbero', 'clients.view'),
+  ('barbero', 'cash.operate'),
+  ('gerente', 'panel.access'),
+  ('gerente', 'agenda.all'),
+  ('gerente', 'cash.operate'),
+  ('gerente', 'products.manage'),
+  ('gerente', 'services.manage'),
+  ('gerente', 'clients.manage'),
+  ('gerente', 'reports.view'),
+  ('admin', 'panel.access'),
+  ('admin', 'agenda.own'),
+  ('admin', 'agenda.all'),
+  ('admin', 'finances.view'),
+  ('admin', 'finances.manage'),
+  ('admin', 'cash.operate'),
+  ('admin', 'products.manage'),
+  ('admin', 'services.manage'),
+  ('admin', 'clients.view'),
+  ('admin', 'clients.manage'),
+  ('admin', 'staff.manage'),
+  ('admin', 'branches.manage'),
+  ('admin', 'reports.view'),
+  ('admin', 'settings.manage')
+ON CONFLICT DO NOTHING;
+
+CREATE OR REPLACE FUNCTION current_profile_role()
+RETURNS user_role
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT role FROM profiles
+  WHERE (auth_user_id = auth.uid() OR id = auth.uid())
+  LIMIT 1;
+$$;
+
+GRANT EXECUTE ON FUNCTION current_profile_role() TO authenticated;
+
+CREATE OR REPLACE FUNCTION has_permission(perm TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_role      user_role;
+  v_overrides JSONB;
+BEGIN
+  SELECT role, permissions INTO v_role, v_overrides
+  FROM profiles
+  WHERE (auth_user_id = auth.uid() OR id = auth.uid())
+  LIMIT 1;
+
+  IF v_role IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  IF v_role = 'admin' THEN
+    RETURN TRUE;
+  END IF;
+
+  IF v_overrides IS NOT NULL AND v_overrides ? perm THEN
+    RETURN COALESCE((v_overrides ->> perm)::boolean, FALSE);
+  END IF;
+
+  RETURN EXISTS (
+    SELECT 1 FROM role_permissions rp
+    WHERE rp.role = v_role AND rp.permission = perm
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION has_permission(TEXT) TO authenticated;
+
+DROP POLICY IF EXISTS "Admins manage compensation" ON barber_compensation;
+CREATE POLICY "Admins manage compensation" ON barber_compensation
+  FOR ALL USING (is_admin() OR has_permission('finances.manage'))
+  WITH CHECK (is_admin() OR has_permission('finances.manage'));
+
+DROP POLICY IF EXISTS "Staff view compensation with finances permission" ON barber_compensation;
+CREATE POLICY "Staff view compensation with finances permission" ON barber_compensation
+  FOR SELECT USING (has_permission('finances.view'));
+
+DROP POLICY IF EXISTS "Admins manage settlements" ON barber_settlements;
+CREATE POLICY "Admins manage settlements" ON barber_settlements
+  FOR ALL USING (is_admin() OR has_permission('finances.manage'))
+  WITH CHECK (is_admin() OR has_permission('finances.manage'));
+
+DROP POLICY IF EXISTS "Staff view settlements with finances permission" ON barber_settlements;
+CREATE POLICY "Staff view settlements with finances permission" ON barber_settlements
+  FOR SELECT USING (has_permission('finances.view'));
+
+DROP POLICY IF EXISTS "Admins manage cash movements" ON cash_movements;
+CREATE POLICY "Admins manage cash movements" ON cash_movements
+  FOR ALL USING (is_admin() OR has_permission('cash.operate'))
+  WITH CHECK (is_admin() OR has_permission('cash.operate'));
+
+DROP POLICY IF EXISTS "Admins manage services" ON services;
+CREATE POLICY "Admins manage services" ON services
+  FOR ALL USING (is_admin() OR has_permission('services.manage'))
+  WITH CHECK (is_admin() OR has_permission('services.manage'));
+
+DROP POLICY IF EXISTS "Admins manage products" ON products;
+CREATE POLICY "Admins manage products" ON products
+  FOR ALL USING (is_admin() OR has_permission('products.manage'))
+  WITH CHECK (is_admin() OR has_permission('products.manage'));
+
+DROP POLICY IF EXISTS "Admins manage branches" ON branches;
+CREATE POLICY "Admins manage branches" ON branches
+  FOR ALL USING (is_admin() OR has_permission('branches.manage'))
+  WITH CHECK (is_admin() OR has_permission('branches.manage'));
+
+DROP POLICY IF EXISTS "Admins manage appointments" ON appointments;
+CREATE POLICY "Admins manage appointments" ON appointments
+  FOR ALL USING (is_admin() OR has_permission('agenda.all'))
+  WITH CHECK (is_admin() OR has_permission('agenda.all'));
+
+DROP POLICY IF EXISTS "Staff can view profiles" ON profiles;
+CREATE POLICY "Staff can view profiles" ON profiles
+  FOR SELECT USING (
+    is_admin()
+    OR current_barber_id() IS NOT NULL
+    OR has_permission('clients.view')
+    OR has_permission('clients.manage')
+    OR has_permission('staff.manage')
+  );
+
+DROP POLICY IF EXISTS "Admins update profiles" ON profiles;
+CREATE POLICY "Admins update profiles" ON profiles
+  FOR UPDATE USING (is_admin() OR has_permission('staff.manage'))
+  WITH CHECK (is_admin() OR has_permission('staff.manage'));
+
+CREATE OR REPLACE FUNCTION update_client_notes(p_client_id UUID, p_notes TEXT)
+RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT (is_admin() OR has_permission('clients.manage')) THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+
+  UPDATE profiles SET notes = p_notes WHERE id = p_client_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION update_client_notes(UUID, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION update_client_notes(UUID, TEXT) TO authenticated;

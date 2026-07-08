@@ -59,7 +59,19 @@ export async function updateSession(request: NextRequest) {
             .limit(1)
             .maybeSingle()
 
-        if (profile?.role !== 'admin') {
+        const role = profile?.role
+        let allowed = role === 'admin' || role === 'gerente'
+
+        // Staff sin rol admin/gerente puede entrar si tiene el permiso
+        // explícito panel.access (override puntual vía profiles.permissions).
+        if (!allowed && role) {
+            const { data: hasPanelAccess } = await supabase.rpc('has_permission', {
+                perm: 'panel.access',
+            })
+            allowed = Boolean(hasPanelAccess)
+        }
+
+        if (!allowed) {
             const url = request.nextUrl.clone()
             url.pathname = '/admin-login'
             url.searchParams.set('error', 'forbidden')
