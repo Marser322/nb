@@ -408,6 +408,57 @@ export default function MiCuentaPage() {
                             </Card>
                         </section>
 
+                        <Card id="visit-history-card" className="border-border bg-card/70">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <History className="h-5 w-5 text-primary" />
+                                    Historial de visitas
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {recentAppointments.length === 0 ? (
+                                    <div className="py-10 text-center">
+                                        <History className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
+                                        <p className="font-semibold text-foreground">Todavía no tenés visitas registradas</p>
+                                        <p className="text-sm text-muted-foreground mt-2">
+                                            Cuando completes una visita, la vas a ver acá.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {recentAppointments.map((appointment) => {
+                                            const visitRepeatHref = `${ROUTES.RESERVAR}?serviceId=${appointment.service_id}&barberId=${appointment.barber_id}`;
+
+                                            return (
+                                                <div key={appointment.id} className="rounded-lg border border-border bg-muted/20 p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                                    <div>
+                                                        <p className="font-bold text-foreground">{appointment.service?.name || "Servicio NB"}</p>
+                                                        <p className="text-sm text-muted-foreground">
+                                                            {format(parseISO(appointment.appointment_date), "d 'de' MMMM, yyyy", { locale: es })} · {appointment.barber?.name || "Barbero NB"}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-3">
+                                                        {appointment.service && (
+                                                            <span className="text-sm font-medium text-primary">{formatPrice(appointment.service.price)}</span>
+                                                        )}
+                                                        <Badge variant="outline" className={APPOINTMENT_STATUS_COLORS[appointment.status]}>
+                                                            {APPOINTMENT_STATUS_LABELS[appointment.status]}
+                                                        </Badge>
+                                                        <Button asChild size="sm" variant="outline" className="h-8 rounded-full px-3 text-xs">
+                                                            <Link href={visitRepeatHref}>
+                                                                <Repeat className="mr-1.5 h-3.5 w-3.5" />
+                                                                Repetir
+                                                            </Link>
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+
                         {features.tienda && (
                             <Card id="orders-card" className="border-border bg-card/70">
                                 <CardHeader>
