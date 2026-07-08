@@ -7,8 +7,8 @@ import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const DEMO_EMAIL = process.env.NEXT_PUBLIC_DEMO_ADMIN_EMAIL || "demo@nbbarber.uy";
-const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_ADMIN_PASSWORD || "DemoNB2026!";
+const DEMO_EMAIL = process.env.DEMO_ADMIN_EMAIL || process.env.NEXT_PUBLIC_DEMO_ADMIN_EMAIL || "demo@nbbarber.uy";
+const DEMO_PASSWORD = process.env.DEMO_ADMIN_PASSWORD || process.env.NEXT_PUBLIC_DEMO_ADMIN_PASSWORD || "DemoNB2026!";
 const DEMO_NAME = "Admin Demo";
 
 const PROFILE_GRANT_HINT = [

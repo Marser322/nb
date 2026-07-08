@@ -65,13 +65,18 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_SITE_URL=
 ```
 
-Variables demo publicas (solo para proyectos descartables/solo-demo):
+Variables demo (solo para proyectos descartables/solo-demo):
 
 ```bash
 NEXT_PUBLIC_DEMO_MODE=true
-NEXT_PUBLIC_DEMO_ADMIN_EMAIL=demo@nbbarber.uy
-NEXT_PUBLIC_DEMO_ADMIN_PASSWORD=DemoNB2026!
+DEMO_ADMIN_EMAIL=demo@nbbarber.uy
+DEMO_ADMIN_PASSWORD=DemoNB2026!
+SUPABASE_SERVICE_ROLE_KEY=
 ```
+
+`NEXT_PUBLIC_DEMO_MODE` es publica porque solo prende la UI demo. `DEMO_ADMIN_EMAIL`, `DEMO_ADMIN_PASSWORD` y `SUPABASE_SERVICE_ROLE_KEY` deben quedar como variables server-side, sin prefijo `NEXT_PUBLIC_`. La ruta `/api/demo-admin/login` usa esas variables para crear o reparar automaticamente el usuario demo y luego iniciar una sesion real de Supabase.
+
+Compatibilidad legacy: si ya existen `NEXT_PUBLIC_DEMO_ADMIN_EMAIL` y `NEXT_PUBLIC_DEMO_ADMIN_PASSWORD`, el login demo las usa como fallback. Para una demo nueva, preferir las variables server-side.
 
 Variables opcionales del asistente IA:
 
@@ -80,13 +85,15 @@ GEMINI_API_KEY=
 OPENAI_API_KEY=
 ```
 
-No cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel ni en variables publicas del front. Si se despliega una Edge Function que lo requiera, configurarlo solo como secreto de Supabase:
+No cargar `SUPABASE_SERVICE_ROLE_KEY` con prefijo `NEXT_PUBLIC_`. En Vercel puede configurarse como variable server-side para el auto-provisionado demo. Si se despliega una Edge Function que lo requiera, configurarlo tambien como secreto de Supabase:
 
 ```bash
 supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-Admin demo: para aprovisionar `demo@nbbarber.uy`, poner temporalmente `SUPABASE_URL` (opcional si ya coincide con `NEXT_PUBLIC_SUPABASE_URL`) y `SUPABASE_SERVICE_ROLE_KEY` en `.env` o `.env.local` local, apuntando a la DB destino, y correr:
+Admin demo: el recorrido recomendado es entrar a `/admin-login` y usar **Entrar como Admin demo**. Ese boton llama a `/api/demo-admin/login`, crea o repara `demo@nbbarber.uy`, confirma email, resetea password y asegura `profiles.role='admin'`.
+
+Plan B manual: poner temporalmente `SUPABASE_URL` (opcional si ya coincide con `NEXT_PUBLIC_SUPABASE_URL`) y `SUPABASE_SERVICE_ROLE_KEY` en `.env` o `.env.local` local, apuntando a la DB destino, y correr:
 
 ```bash
 npm run seed:demo-admin
@@ -99,7 +106,7 @@ GRANT USAGE ON SCHEMA public TO service_role;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.profiles TO service_role;
 ```
 
-En Vercel setear solo las 3 `NEXT_PUBLIC_DEMO_*` para la demo y redeployar. No cargar `SUPABASE_SERVICE_ROLE_KEY` en Vercel.
+En Vercel setear `NEXT_PUBLIC_DEMO_MODE=true`, `DEMO_ADMIN_EMAIL`, `DEMO_ADMIN_PASSWORD` y `SUPABASE_SERVICE_ROLE_KEY` como variables de la demo y redeployar. La service role key nunca debe estar en variables `NEXT_PUBLIC_*`.
 
 ## 4. Backup diario desde el VPS
 
