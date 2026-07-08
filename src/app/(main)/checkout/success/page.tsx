@@ -3,19 +3,33 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Home, Loader2, ShoppingBag } from "lucide-react";
+import { CheckCircle2, Home, Loader2, MessageCircle, ShoppingBag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
-import { FULFILLMENT_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, ROUTES } from "@/lib/constants";
+import {
+    BANK_TRANSFER_INFO,
+    BUSINESS_CONFIG,
+    FULFILLMENT_LABELS,
+    ORDER_STATUS_COLORS,
+    ORDER_STATUS_LABELS,
+    PAYMENT_METHOD_LABELS,
+    ROUTES,
+} from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
+import { buildWaLink } from "@/lib/whatsapp";
+
+const hasBankTransferInfo = Boolean(
+    BANK_TRANSFER_INFO.bank && BANK_TRANSFER_INFO.account && BANK_TRANSFER_INFO.holder
+);
 
 type SuccessOrder = {
     id: string;
     total: number;
     status: string;
     fulfillment: string;
+    payment_method: string | null;
     created_at: string;
     branch?: { name: string | null } | null;
 };
@@ -33,7 +47,7 @@ function CheckoutSuccessContent() {
 
             const { data } = await supabase
                 .from("orders")
-                .select("id, total, status, fulfillment, created_at, branch:branches(name)")
+                .select("id, total, status, fulfillment, payment_method, created_at, branch:branches(name)")
                 .eq("id", orderId)
                 .maybeSingle();
 
@@ -45,6 +59,12 @@ function CheckoutSuccessContent() {
     }, [orderId, supabase]);
 
     const shortId = orderId ? orderId.slice(0, 8).toUpperCase() : "pendiente";
+    const waLink = order
+        ? buildWaLink(
+              BUSINESS_CONFIG.phone,
+              `Hola! Acabo de hacer el pedido #${shortId} por ${formatPrice(order.total)} por transferencia. Te paso el comprobante.`
+          )
+        : "";
 
     return (
         <div className="min-h-[80vh] flex items-center justify-center bg-background px-4">
@@ -93,10 +113,50 @@ function CheckoutSuccessContent() {
                                         <span className="font-medium text-foreground text-right">{order.branch.name}</span>
                                     </p>
                                 )}
+                                {order.payment_method && (
+                                    <p className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Pago:</span>
+                                        <span className="font-medium text-foreground">
+                                            {PAYMENT_METHOD_LABELS[order.payment_method] || order.payment_method}
+                                        </span>
+                                    </p>
+                                )}
                                 <p className="flex justify-between gap-4">
                                     <span className="text-muted-foreground">Total:</span>
                                     <span className="font-semibold text-primary">{formatPrice(order.total)}</span>
                                 </p>
+
+                                {order.payment_method === "efectivo" && (
+                                    <p className="text-xs text-muted-foreground pt-2">
+                                        Pagás al retirar{order.branch?.name ? ` en ${order.branch.name}` : ""}.
+                                    </p>
+                                )}
+
+                                {order.payment_method === "transferencia" && (
+                                    <div className="mt-2 p-3 bg-background/60 rounded-lg border border-border/50 space-y-2">
+                                        {hasBankTransferInfo ? (
+                                            <>
+                                                <p className="font-semibold text-primary text-xs">Datos bancarios:</p>
+                                                <p>Banco: <span className="text-foreground">{BANK_TRANSFER_INFO.bank}</span></p>
+                                                <p>Cuenta: <span className="text-foreground">{BANK_TRANSFER_INFO.account}</span></p>
+                                                <p>Titular: <span className="text-foreground">{BANK_TRANSFER_INFO.holder}</span></p>
+                                            </>
+                                        ) : (
+                                            <p className="text-muted-foreground text-xs">
+                                                Te pasamos los datos bancarios por WhatsApp al confirmar el pedido.
+                                            </p>
+                                        )}
+                                        {waLink && (
+                                            <Button asChild size="sm" className="w-full mt-2">
+                                                <a href={waLink} target="_blank" rel="noopener">
+                                                    <MessageCircle className="mr-2 h-4 w-4" />
+                                                    Enviar comprobante por WhatsApp
+                                                </a>
+                                            </Button>
+                                        )}
+                                    </div>
+                                )}
+
                                 <p className="text-xs text-muted-foreground pt-2">
                                     Podés seguir el estado de tu pedido en Mi cuenta.
                                 </p>
