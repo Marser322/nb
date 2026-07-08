@@ -11,6 +11,8 @@ import {
     Package,
     Clock,
     Filter,
+    Activity,
+    ArrowUpRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +48,23 @@ interface CompletedMetricRow {
     service: ServiceMetric | ServiceMetric[] | null;
     barber: BarberMetric | BarberMetric[] | null;
 }
+
+interface StatCardConfig {
+    title: string;
+    value: string | number;
+    icon: typeof TrendingUp;
+    tone: "green" | "gold" | "blue" | "amber" | "red";
+    meta: string;
+    sparkline: keyof typeof SPARKLINE_PATHS;
+}
+
+const SPARKLINE_PATHS = {
+    steady: "M2 38 C18 30 24 34 38 24 C52 14 66 22 78 17 C94 10 104 18 118 10 C128 5 134 9 138 6",
+    revenue: "M2 42 C15 38 22 40 34 30 C47 18 56 28 68 21 C82 12 92 18 104 15 C118 12 126 8 138 10",
+    clients: "M2 36 C16 28 28 33 42 24 C55 16 66 25 80 18 C94 12 104 21 118 14 C129 9 134 15 138 12",
+    alert: "M2 26 C15 18 25 42 38 32 C51 20 62 40 76 26 C90 12 101 36 114 22 C126 10 134 30 138 24",
+    stock: "M2 18 C14 34 27 16 40 32 C54 48 66 22 80 36 C94 50 104 26 118 40 C128 50 134 35 138 44",
+} as const;
 
 export default function AdminDashboardPage() {
     const [stats, setStats] = useState<DashboardStats>({
@@ -174,13 +193,14 @@ export default function AdminDashboardPage() {
         return true;
     });
 
-    const statCards = [
+    const statCards: StatCardConfig[] = [
         {
             title: "Citas este Mes",
             value: stats.citasMes,
             icon: TrendingUp,
-            color: "text-green-400",
-            bgColor: "bg-green-400/10",
+            tone: "green",
+            meta: "Flujo de agenda",
+            sparkline: "steady",
         },
         // Las ganancias del dueño solo se muestran a quien tenga finances.view
         // (admin siempre; gerente no, por defecto).
@@ -190,8 +210,9 @@ export default function AdminDashboardPage() {
                       title: "Ingresos del Mes",
                       value: formatPrice(stats.ingresosMes),
                       icon: DollarSign,
-                      color: "text-primary",
-                      bgColor: "bg-primary/10",
+                      tone: "gold" as const,
+                      meta: "Caja mensual",
+                      sparkline: "revenue" as const,
                   },
               ]
             : []),
@@ -199,47 +220,83 @@ export default function AdminDashboardPage() {
             title: "Clientes Nuevos",
             value: stats.clientesNuevos,
             icon: UserPlus,
-            color: "text-blue-400",
-            bgColor: "bg-blue-400/10",
+            tone: "blue",
+            meta: "Alta de perfiles",
+            sparkline: "clients",
         },
         {
             title: "Clientes Inactivos",
             value: stats.clientesInactivos,
             icon: UserRoundX,
-            color: stats.clientesInactivos > 0 ? "text-amber-400" : "text-green-400",
-            bgColor: stats.clientesInactivos > 0 ? "bg-amber-400/10" : "bg-green-400/10",
+            tone: stats.clientesInactivos > 0 ? "amber" : "green",
+            meta: stats.clientesInactivos > 0 ? "Reactivar ahora" : "Base saludable",
+            sparkline: "alert",
         },
         {
             title: "Productos Bajo Stock",
             value: stats.productosLowStock,
             icon: Package,
-            color: stats.productosLowStock > 0 ? "text-red-400" : "text-green-400",
-            bgColor: stats.productosLowStock > 0 ? "bg-red-400/10" : "bg-green-400/10",
+            tone: stats.productosLowStock > 0 ? "red" : "green",
+            meta: stats.productosLowStock > 0 ? "Atención stock" : "Stock cubierto",
+            sparkline: "stock",
         },
     ];
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
-                <p className="text-muted-foreground">
-                    {format(new Date(), "EEEE, d 'de' MMMM yyyy", { locale: es })}
-                </p>
+            <div className="admin-hero rounded-2xl p-5 md:p-6">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="max-w-2xl space-y-3">
+                        <div className="admin-chip inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                            <Activity className="h-3.5 w-3.5" aria-hidden="true" />
+                            Centro de mando
+                        </div>
+                        <div>
+                            <h1 className="font-display text-3xl font-bold leading-tight md:text-5xl">
+                                Dashboard
+                            </h1>
+                            <p className="mt-2 max-w-xl text-sm text-muted-foreground md:text-base">
+                                {format(new Date(), "EEEE, d 'de' MMMM yyyy", { locale: es })}. Una vista compacta para leer agenda, caja, clientes y stock sin perder ritmo.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:min-w-[420px]">
+                        <div className="admin-chip rounded-xl p-3">
+                            <p className="text-xs text-muted-foreground">Citas hoy</p>
+                            <p className="mt-1 text-2xl font-bold">{filteredCitasHoy.length}</p>
+                        </div>
+                        <div className="admin-chip rounded-xl p-3">
+                            <p className="text-xs text-muted-foreground">Barberos activos</p>
+                            <p className="mt-1 text-2xl font-bold">{barbers.length}</p>
+                        </div>
+                        <div className="admin-chip col-span-2 rounded-xl p-3 sm:col-span-1">
+                            <p className="text-xs text-muted-foreground">Sucursales</p>
+                            <p className="mt-1 text-2xl font-bold">{branches.length}</p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Stats Grid */}
-            <div id="admin-stats" className="grid grid-cols-2 xl:grid-cols-5 gap-4">
+            <div id="admin-stats" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 {statCards.map((stat) => (
-                    <Card key={stat.title} className="border-border/50">
-                        <CardContent className="p-4 md:p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                                    <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                    <Card key={stat.title} data-tone={stat.tone} className="admin-kpi-card border-border/50 py-0">
+                        <CardContent className="relative z-10 p-4">
+                            <div className="mb-4 flex items-start justify-between gap-3">
+                                <div className="admin-stat-icon rounded-xl p-2">
+                                    <stat.icon className="h-5 w-5" />
                                 </div>
+                                <span className="admin-chip inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] text-muted-foreground">
+                                    <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                                    {stat.meta}
+                                </span>
                             </div>
-                            <p className="text-2xl md:text-3xl font-bold">{stat.value}</p>
+                            <p className="text-3xl font-bold tracking-tight">{stat.value}</p>
                             <p className="text-sm text-muted-foreground">{stat.title}</p>
+                            <div className="mt-4 h-14">
+                                <MiniSparkline variant={stat.sparkline} />
+                            </div>
                         </CardContent>
                     </Card>
                 ))}
@@ -254,8 +311,8 @@ export default function AdminDashboardPage() {
             />
 
             {/* Citas de Hoy */}
-            <Card className="border-border/50">
-                <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <Card className="admin-section-card border-border/50">
+                <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
                         <CardTitle className="flex items-center gap-2">
                             <Clock className="h-5 w-5 text-primary" />
@@ -271,7 +328,7 @@ export default function AdminDashboardPage() {
                         {/* Selector de Sucursal */}
                         <Select value={branchFilter} onValueChange={setBranchFilter}>
                             <SelectTrigger className="w-[160px] text-base md:h-9 md:text-xs">
-                                <Filter className="h-3 w-3 mr-1" />
+                                <Filter className="mr-1 h-3 w-3" />
                                 <SelectValue placeholder="Sucursal" />
                             </SelectTrigger>
                             <SelectContent>
@@ -287,7 +344,7 @@ export default function AdminDashboardPage() {
                         {/* Selector de Barbero */}
                         <Select value={barberFilter} onValueChange={setBarberFilter}>
                             <SelectTrigger className="w-[160px] text-base md:h-9 md:text-xs">
-                                <Filter className="h-3 w-3 mr-1" />
+                                <Filter className="mr-1 h-3 w-3" />
                                 <SelectValue placeholder="Barbero" />
                             </SelectTrigger>
                             <SelectContent>
@@ -307,12 +364,12 @@ export default function AdminDashboardPage() {
                     {isLoading ? (
                         <div className="space-y-3">
                             {[...Array(3)].map((_, i) => (
-                                <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
+                                <div key={i} className="h-16 animate-pulse rounded-lg bg-muted/50" />
                             ))}
                         </div>
                     ) : filteredCitasHoy.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                            <Calendar className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
+                        <div className="admin-empty-state rounded-xl py-8 text-center text-muted-foreground">
+                            <Calendar className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" />
                             <p>No hay citas programadas para hoy con los filtros seleccionados</p>
                         </div>
                     ) : (
@@ -320,10 +377,10 @@ export default function AdminDashboardPage() {
                             {filteredCitasHoy.map((cita) => (
                                 <div
                                     key={cita.id}
-                                    className="flex items-center justify-between p-4 rounded-lg bg-card border border-border/50"
+                                    className="admin-list-row flex items-center justify-between rounded-xl border p-4"
                                 >
                                     <div className="flex items-center gap-4">
-                                        <div className="text-center min-w-[60px]">
+                                        <div className="admin-chip min-w-[64px] rounded-xl px-3 py-2 text-center">
                                             <p className="text-lg font-bold">{cita.start_time.slice(0, 5)}</p>
                                             <p className="text-xs text-muted-foreground">
                                                 {cita.end_time.slice(0, 5)}
@@ -332,7 +389,7 @@ export default function AdminDashboardPage() {
                                         <div>
                                             <p className="font-medium">{cita.service?.name || "Servicio"}</p>
                                             <p className="text-sm text-muted-foreground">
-                                                <Scissors className="inline h-3 w-3 mr-1" />
+                                                <Scissors className="mr-1 inline h-3 w-3" />
                                                 {cita.barber?.name || "Barbero"}
                                             </p>
                                         </div>
@@ -345,7 +402,7 @@ export default function AdminDashboardPage() {
                                             {APPOINTMENT_STATUS_LABELS[cita.status]}
                                         </Badge>
                                         {cita.service && (
-                                            <p className="text-sm font-semibold text-primary mt-1">
+                                            <p className="mt-1 text-sm font-semibold text-primary">
                                                 {formatPrice(cita.service.price)}
                                             </p>
                                         )}
@@ -357,6 +414,17 @@ export default function AdminDashboardPage() {
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+function MiniSparkline({ variant }: { variant: keyof typeof SPARKLINE_PATHS }) {
+    const path = SPARKLINE_PATHS[variant];
+
+    return (
+        <svg className="h-full w-full" viewBox="0 0 140 54" preserveAspectRatio="none" aria-hidden="true">
+            <path className="admin-sparkline-fill" d={`${path} L138 54 L2 54 Z`} />
+            <path className="admin-sparkline-line" d={path} />
+        </svg>
     );
 }
 

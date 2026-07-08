@@ -5,6 +5,7 @@ import { TourOverlay } from "@/components/tour/TourOverlay";
 import { HelpFab } from "@/components/tour/HelpFab";
 import { AiAssistant } from "@/components/chat/AiAssistant";
 import { ThemeProvider } from "@/components/theme-provider";
+import { VisualSkinProvider } from "@/components/admin/VisualSkinProvider";
 import { BUSINESS_CONFIG } from "@/lib/constants";
 import "./globals.css";
 
@@ -97,11 +98,13 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          {children}
-          <TourOverlay />
-          <HelpFab />
-          <AiAssistant />
-          <Toaster position="top-right" richColors />
+          <VisualSkinProvider>
+            {children}
+            <TourOverlay />
+            <HelpFab />
+            <AiAssistant />
+            <Toaster position="top-right" richColors />
+          </VisualSkinProvider>
         </ThemeProvider>
       </body>
     </html>

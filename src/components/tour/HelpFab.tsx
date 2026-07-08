@@ -40,9 +40,10 @@ export function HelpFab() {
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button
+                        variant="ghost"
                         size="icon"
                         aria-label="Abrir ayuda"
-                        className="h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-110 hover:bg-primary/90"
+                        className="nb-assistive-fab nb-assistive-fab-help h-14 w-14 rounded-full"
                     >
                         <HelpCircle className="h-6 w-6" aria-hidden="true" />
                         <span className="sr-only">Ayuda</span>
@@ -52,7 +53,7 @@ export function HelpFab() {
                     align="end"
                     side="top"
                     sideOffset={12}
-                    className="glass-card w-64 border-border/60 bg-card/95 p-2 shadow-2xl shadow-foreground/10"
+                    className="nb-assistive-menu w-64 rounded-2xl p-2"
                 >
                     <DropdownMenuLabel className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                         Ayuda rápida
@@ -62,7 +63,7 @@ export function HelpFab() {
                             className="cursor-pointer gap-3 rounded-md px-3 py-2"
                             onSelect={() => startTour(tourKey, APP_TOURS[tourKey])}
                         >
-                            <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+                            <Sparkles className="h-4 w-4" aria-hidden="true" />
                             Ver tour de esta página
                         </DropdownMenuItem>
                     )}
@@ -75,27 +76,26 @@ export function HelpFab() {
                             }}
                         >
                             {isDemoLoading ? (
-                                <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
+                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                             ) : (
-                                <LogIn className="h-4 w-4 text-primary" aria-hidden="true" />
+                                <LogIn className="h-4 w-4" aria-hidden="true" />
                             )}
                             Entrar al panel admin demo
                         </DropdownMenuItem>
                     )}
-                    {(tourKey || isDemoMode) && <DropdownMenuSeparator className="bg-border/70" />}
+                    {(tourKey || isDemoMode) && <DropdownMenuSeparator />}
                     <DropdownMenuItem asChild className="cursor-pointer gap-3 rounded-md px-3 py-2">
                         <Link href={ROUTES.CONTACTO}>
-                            <Mail className="h-4 w-4 text-primary" aria-hidden="true" />
+                            <Mail className="h-4 w-4" aria-hidden="true" />
                             Contacto
                         </Link>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Pulse effect hint */}
-            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-primary"></span>
+            {/* Status bead */}
+            <span className="nb-assistive-badge absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full" aria-hidden="true">
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
             </span>
         </motion.div>
     );

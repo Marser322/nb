@@ -43,8 +43,8 @@ export function CrmCards({
 
     return (
         <>
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <Card className="border-border/50 bg-card/50">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+                <Card className="admin-section-card border-border/50 bg-card/50">
                     <CardHeader className="flex flex-row items-start justify-between gap-4">
                         <div className="space-y-1">
                             <CardTitle className="flex items-center gap-2">
@@ -55,7 +55,7 @@ export function CrmCards({
                                 Clientes enfriándose, listos para recuperar con un mensaje.
                             </CardDescription>
                         </div>
-                        <Button asChild variant="outline" size="sm" className="shrink-0 border-border">
+                        <Button asChild variant="outline" size="sm" className="admin-chip shrink-0 border-border">
                             <Link href="/admin/clientes?filtro=inactivos">Ver todos</Link>
                         </Button>
                     </CardHeader>
@@ -63,11 +63,11 @@ export function CrmCards({
                         {isLoading ? (
                             <div className="space-y-3">
                                 {[...Array(5)].map((_, i) => (
-                                    <div key={i} className="h-14 rounded-lg bg-muted/40 animate-pulse" />
+                                    <div key={i} className="h-14 animate-pulse rounded-lg bg-muted/40" />
                                 ))}
                             </div>
                         ) : inactiveClients.length === 0 ? (
-                            <div className="py-10 text-center text-muted-foreground">
+                            <div className="admin-empty-state rounded-xl py-10 text-center text-muted-foreground">
                                 <UserRoundX className="mx-auto mb-3 h-10 w-10 text-muted-foreground/30" />
                                 <p>No hay clientes inactivos para reactivar.</p>
                             </div>
@@ -76,7 +76,7 @@ export function CrmCards({
                                 {inactiveClients.map((client) => (
                                     <div
                                         key={client.id}
-                                        className="flex items-center justify-between gap-3 rounded-lg border border-border/40 bg-background/40 p-3"
+                                        className="admin-list-row flex items-center justify-between gap-3 rounded-xl border p-3"
                                     >
                                         <div className="min-w-0">
                                             <p className="truncate font-medium text-foreground">
@@ -156,7 +156,7 @@ function RankingCard({
     const maxRevenue = Math.max(...items.map((item) => item.revenue), 0);
 
     return (
-        <Card className="border-border/50 bg-card/50">
+        <Card className="admin-section-card border-border/50 bg-card/50">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Icon className="h-5 w-5 text-primary" />
@@ -169,13 +169,13 @@ function RankingCard({
                     <div className="space-y-4">
                         {[...Array(4)].map((_, i) => (
                             <div key={i} className="space-y-2">
-                                <div className="h-4 w-2/3 rounded bg-muted/40 animate-pulse" />
-                                <div className="h-2 rounded-full bg-muted/30 animate-pulse" />
+                                <div className="h-4 w-2/3 animate-pulse rounded bg-muted/40" />
+                                <div className="h-2 animate-pulse rounded-full bg-muted/30" />
                             </div>
                         ))}
                     </div>
                 ) : items.length === 0 ? (
-                    <div className="py-10 text-center text-muted-foreground">
+                    <div className="admin-empty-state rounded-xl py-10 text-center text-muted-foreground">
                         <Icon className="mx-auto mb-3 h-10 w-10 text-muted-foreground/30" />
                         <p>{emptyText}</p>
                     </div>
@@ -199,9 +199,9 @@ function RankingCard({
                                             {formatPrice(item.revenue)}
                                         </p>
                                     </div>
-                                    <div className="h-2 overflow-hidden rounded-full bg-muted/40">
+                                    <div className="admin-progress-track h-2 overflow-hidden rounded-full bg-muted/40">
                                         <div
-                                            className="h-full rounded-full bg-primary"
+                                            className="admin-progress-bar h-full rounded-full bg-primary"
                                             style={{ width: `${width}%` }}
                                         />
                                     </div>
