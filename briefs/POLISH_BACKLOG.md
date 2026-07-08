@@ -26,7 +26,7 @@
 | 6 | **Home + lookbook** | Conversión hacia reserva; que el patrón lookbook→wizard (`?styleId=&serviceId=`) rinda al máximo. | ejecutado |
 | 7 | **Portal barbero (mi-agenda)** | Profundidad del día a día: agenda clara, ingresos del día, próxima cita a un vistazo. | ejecutado |
 | 8 | **Tienda + checkout (pulido menor)** | Solo terminación fina que no pise Tienda v2 del roadmap (PDP, cross-sell, etc. quedan allá). | ejecutado |
-| 9 | **Contacto / auth / detalles** | Terminación premium: recuperar contraseña, contacto, microcopy, estados vacíos. | brief listo (FASE_29) |
+| 9 | **Contacto / auth / detalles** | Terminación premium: recuperar contraseña, contacto, microcopy, estados vacíos. | ejecutado |
 
 ## Pre-análisis del ítem #1 (chat) — insumo listo, no re-explorar desde cero
 
@@ -50,4 +50,6 @@ Recolectado el 2026-07-08 sobre `src/app/api/chat/route.ts` y `src/components/ch
 | 2026-07-08 | #6 Home + lookbook | `FASE_25_polish_home_lookbook.md` | merge `daeb368` (`feat/polish-home-lookbook`) |
 | 2026-07-08 | #7 Portal barbero | `FASE_27_polish_portal_barbero.md` | merge `d13c95b` (`feat/polish-portal-barbero`) |
 | 2026-07-08 | #8 Tienda + checkout | `FASE_28_polish_tienda_checkout.md` | merge `acbc304` (`feat/polish-tienda-checkout`) |
-| 2026-07-08 | #9 Contacto / auth | `FASE_29_polish_contacto_auth.md` | pendiente de ejecución |
+| 2026-07-08 | #9 Contacto / auth | `FASE_29_polish_contacto_auth.md` | merge `fe912e9` (`feat/polish-contacto-auth`) |
+
+> **Cola completada (9/9, 2026-07-08).** Próximos ciclos de /polish: proponer áreas nuevas o re-pulir con lo aprendido; las features grandes viven en `ROADMAP_CRECIMIENTO.md`.
