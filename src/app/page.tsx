@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Calendar, Clock, LayoutDashboard, Loader2, Star, Scissors, Sparkles } from "lucide-react";
+import { ArrowRight, Calendar, Clock, LayoutDashboard, Loader2, Star, Scissors, Sparkles, Wand2, Droplets, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Header, Footer } from "@/components/layout";
@@ -21,13 +21,20 @@ import { createClient } from "@/lib/supabase/client";
 import { STATIC_SERVICES, STATIC_STYLES, getServiceIdForStyle } from "@/lib/static-data";
 import type { Service, Lookbook } from "@/types/database.types";
 
-// Iconos/imágenes locales para las cards de servicio; si hay más servicios que
-// assets, se usa el default de la última posición.
-const SERVICE_VISUALS = [
-  { icon: Scissors, image: "/images/hero/maquina-clippers.jpg" },
-  { icon: Sparkles, image: "/images/hero/detalle-corte.jpg" },
-  { icon: Star, image: "/images/hero/herramientas-barberia.jpg" },
-];
+// Icono e imagen local por categoría de servicio (evita el acople por índice:
+// un servicio nuevo se ve bien sin tocar código, fallback a "otro" si no matchea).
+const SERVICE_VISUALS_BY_CATEGORY: Record<string, { icon: typeof Star; image: string }> = {
+  corte: { icon: Scissors, image: "/images/hero/maquina-clippers.jpg" },
+  barba: { icon: Wand2, image: "/images/hero/detalle-barba.jpg" },
+  combo: { icon: Sparkles, image: "/images/hero/detalle-corte.jpg" },
+  tratamiento: { icon: Droplets, image: "/images/hero/detalle-corte.jpg" },
+  color: { icon: Palette, image: "/images/hero/maquina-clippers.jpg" },
+  otro: { icon: Star, image: "/images/hero/herramientas-barberia.jpg" },
+};
+
+function getServiceVisual(category?: string | null) {
+  return SERVICE_VISUALS_BY_CATEGORY[category || "otro"] || SERVICE_VISUALS_BY_CATEGORY.otro;
+}
 
 type StyleItem = Lookbook & { serviceId?: string | null };
 
@@ -38,20 +45,24 @@ export default function HomePage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [services, setServices] = useState<Service[]>(STATIC_SERVICES.slice(0, 3));
+  const [hasMoreServices, setHasMoreServices] = useState(false);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [featuredStyles, setFeaturedStyles] = useState<StyleItem[]>([]);
 
   // Cargar servicios activos y estilos del lookbook desde la DB, con fallback estático
-  // (mismo patrón que el wizard, FASE 21).
+  // (mismo patrón que el wizard, FASE 21). Se pide hasta 4 para saber si hay más de 3
+  // y mostrar el link "Ver todos" sin depender de un count aparte.
   useEffect(() => {
     async function loadData() {
       setIsLoadingServices(true);
       const [servicesRes, lookbookRes] = await Promise.all([
-        supabase.from("services").select("*").eq("is_active", true).order("sort_order").limit(3),
+        supabase.from("services").select("*").eq("is_active", true).order("sort_order").limit(4),
         supabase.from("lookbook").select("*").order("created_at", { ascending: false }),
       ]);
 
-      const loadedServices = servicesRes?.data && servicesRes.data.length > 0 ? servicesRes.data : STATIC_SERVICES.slice(0, 3);
+      const allLoadedServices = servicesRes?.data && servicesRes.data.length > 0 ? servicesRes.data : STATIC_SERVICES.slice(0, 3);
+      const loadedServices = allLoadedServices.slice(0, 3);
+      setHasMoreServices(allLoadedServices.length > 3);
       const loadedStyles: StyleItem[] =
         lookbookRes?.data && lookbookRes.data.length > 0
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -276,7 +287,7 @@ export default function HomePage() {
               ))
             ) : (
               services.map((service, index) => {
-                const visual = SERVICE_VISUALS[index] ?? SERVICE_VISUALS[SERVICE_VISUALS.length - 1];
+                const visual = getServiceVisual(service.category);
                 const ServiceIcon = visual.icon;
                 const cardImage = service.image_url || visual.image;
 
@@ -364,6 +375,18 @@ export default function HomePage() {
                   Reservar Cita
                 </Link>
               </Button>
+            </div>
+          )}
+
+          {features.reservas_online && hasMoreServices && (
+            <div className="text-center mt-6">
+              <Link
+                href={ROUTES.RESERVAR}
+                className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1"
+              >
+                Ver todos los servicios
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           )}
         </div>

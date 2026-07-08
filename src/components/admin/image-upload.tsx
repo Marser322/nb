@@ -9,7 +9,7 @@ import { toast } from "sonner";
 interface ImageUploadProps {
     value: string;
     onChange: (url: string) => void;
-    folder: "avatars" | "products";
+    folder: "avatars" | "products" | "services";
     placeholder?: string;
 }
 

@@ -21,6 +21,7 @@ export const STATIC_SERVICES: Service[] = [
     image_url: "/images/hero/maquina-clippers.jpg",
     is_active: true,
     sort_order: 1,
+    category: "corte",
     created_at: new Date().toISOString(),
   },
   {
@@ -32,6 +33,7 @@ export const STATIC_SERVICES: Service[] = [
     image_url: "/images/hero/detalle-corte.jpg",
     is_active: true,
     sort_order: 2,
+    category: "combo",
     created_at: new Date().toISOString(),
   },
   {
@@ -43,6 +45,7 @@ export const STATIC_SERVICES: Service[] = [
     image_url: "/images/hero/detalle-barba.jpg",
     is_active: true,
     sort_order: 3,
+    category: "barba",
     created_at: new Date().toISOString(),
   },
 ];

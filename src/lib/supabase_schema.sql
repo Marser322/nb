@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS barbers (
 );
 
 -- TABLA: SERVICES
+-- FASE 26 / migración 021: columna `category` incluida (códigos EN, labels ES en constants.ts).
 CREATE TABLE IF NOT EXISTS services (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
@@ -80,14 +81,15 @@ CREATE TABLE IF NOT EXISTS services (
     image_url TEXT,
     is_active BOOLEAN DEFAULT true,
     sort_order INTEGER DEFAULT 0,
+    category TEXT NOT NULL DEFAULT 'corte' CHECK (category IN ('corte', 'barba', 'combo', 'tratamiento', 'color', 'otro')),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- INSERTAR SERVICIOS INICIALES
-INSERT INTO services (name, description, price, duration_minutes, image_url, sort_order) VALUES
-    ('Corte Clásico', 'Corte de precisión adaptado a tu estilo personal', 450, 30, '/images/hero/maquina-clippers.jpg', 1),
-    ('Corte + Barba', 'El combo completo para el caballero moderno', 750, 60, '/images/hero/detalle-corte.jpg', 2),
-    ('Diseño de Barba', 'Perfilado y mantenimiento profesional', 350, 30, '/images/hero/detalle-barba.jpg', 3);
+INSERT INTO services (name, description, price, duration_minutes, image_url, sort_order, category) VALUES
+    ('Corte Clásico', 'Corte de precisión adaptado a tu estilo personal', 450, 30, '/images/hero/maquina-clippers.jpg', 1, 'corte'),
+    ('Corte + Barba', 'El combo completo para el caballero moderno', 750, 60, '/images/hero/detalle-corte.jpg', 2, 'combo'),
+    ('Diseño de Barba', 'Perfilado y mantenimiento profesional', 350, 30, '/images/hero/detalle-barba.jpg', 3, 'barba');
 
 -- TABLA: APPOINTMENTS
 CREATE TABLE IF NOT EXISTS appointments (
