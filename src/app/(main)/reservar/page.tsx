@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Header, Footer } from "@/components/layout";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { cn, formatPrice, generateTimeSlotsFromRange, calculateEndTime } from "@/lib/utils";
-import { BRANCHES, ROUTES } from "@/lib/constants";
+import { BRANCHES, ROUTES, SERVICE_CATEGORIES, SERVICE_CATEGORY_LABELS } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { Service, Barber, DayAvailability } from "@/types/database.types";
 import { toast } from "sonner";
@@ -244,6 +244,23 @@ function ReservarPageContent() {
     );
   }, [barbers, selectedBranch]);
 
+  // Agrupar servicios por categoría (paso 1). Con una sola categoría (o `category`
+  // ausente en la DB, columna de la migración 021 aún no corrida) queda lista plana,
+  // sin cambios de comportamiento. `category` puede venir undefined/null: fallback 'otro'.
+  const groupedServices = useMemo(() => {
+    const distinctCategories = new Set(services.map((s) => s.category || "otro"));
+    if (distinctCategories.size <= 1) return null;
+
+    const order = [...SERVICE_CATEGORIES, "otro"];
+    return order
+      .map((category) => ({
+        category,
+        label: SERVICE_CATEGORY_LABELS[category] || SERVICE_CATEGORY_LABELS.otro,
+        items: services.filter((s) => (s.category || "otro") === category),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [services]);
+
   // Obtener la configuración del día seleccionado
   const selectedDayConfig = useMemo(() => {
     if (!selectedDate || availability.length === 0) return null;
@@ -374,6 +391,56 @@ function ReservarPageContent() {
     setSelectedDate(null);
     setSelectedTime(null);
   };
+
+  // Card de servicio (paso 1). Extraída para reusarse tanto en la lista plana
+  // como en los grupos por categoría (FASE 26).
+  const renderServiceCard = (service: Service) => (
+    <Card
+      key={service.id}
+      role="button"
+      tabIndex={0}
+      aria-pressed={selectedService?.id === service.id}
+      className={cn(
+        "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative",
+        selectedService?.id === service.id ? "border-primary bg-primary/5" : "bg-card/50 hover:bg-card/80"
+      )}
+      onClick={() => handleServiceSelect(service)}
+      onKeyDown={(event) => handleSelectionKey(event, () => handleServiceSelect(service))}
+      onMouseEnter={() => setHoveredService(service)}
+      onMouseLeave={() => setHoveredService(null)}
+    >
+      <CardContent className="p-6 relative z-10">
+        <div className="flex items-start gap-4">
+          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border bg-muted lg:hidden">
+            <ImageWithFallback
+              src={service.image_url}
+              alt={service.name}
+              fill
+              sizes="64px"
+              className="object-cover"
+              fallbackClassName="h-full w-full"
+              iconClassName="h-6 w-6"
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex justify-between items-start mb-2 opacity-90 group-hover:opacity-100 transition-opacity">
+              <h3 className="font-bold text-lg">{service.name}</h3>
+              <Badge variant="secondary" className="bg-muted border-border group-hover:border-primary/30 transition-colors">
+                {service.duration_minutes} min
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4 group-hover:text-foreground transition-colors">
+              {service.description}
+            </p>
+            <p className="text-xl font-bold text-primary">
+              {formatPrice(service.price)}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+      <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/5 to-primary/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+    </Card>
+  );
 
   const handleBarberSelect = (barber: Barber) => {
     setSelectedBarber(barber);
@@ -867,53 +934,18 @@ function ReservarPageContent() {
                           </Card>
                         ))}
                       </div>
-                    ) : services.map((service) => (
-                      <Card
-                        key={service.id}
-                        role="button"
-                        tabIndex={0}
-                        aria-pressed={selectedService?.id === service.id}
-                        className={cn(
-                          "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative",
-                          selectedService?.id === service.id ? "border-primary bg-primary/5" : "bg-card/50 hover:bg-card/80"
-                        )}
-                        onClick={() => handleServiceSelect(service)}
-                        onKeyDown={(event) => handleSelectionKey(event, () => handleServiceSelect(service))}
-                        onMouseEnter={() => setHoveredService(service)}
-                        onMouseLeave={() => setHoveredService(null)}
-                      >
-                        <CardContent className="p-6 relative z-10">
-                          <div className="flex items-start gap-4">
-                            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border bg-muted lg:hidden">
-                              <ImageWithFallback
-                                src={service.image_url}
-                                alt={service.name}
-                                fill
-                                sizes="64px"
-                                className="object-cover"
-                                fallbackClassName="h-full w-full"
-                                iconClassName="h-6 w-6"
-                              />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex justify-between items-start mb-2 opacity-90 group-hover:opacity-100 transition-opacity">
-                                <h3 className="font-bold text-lg">{service.name}</h3>
-                                <Badge variant="secondary" className="bg-muted border-border group-hover:border-primary/30 transition-colors">
-                                  {service.duration_minutes} min
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground mb-4 group-hover:text-foreground transition-colors">
-                                {service.description}
-                              </p>
-                              <p className="text-xl font-bold text-primary">
-                                {formatPrice(service.price)}
-                              </p>
-                            </div>
-                          </div>
-                        </CardContent>
-                        <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/5 to-primary/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                      </Card>
-                    ))}
+                    ) : groupedServices ? (
+                      groupedServices.map((group) => (
+                        <div key={group.category} className="space-y-3">
+                          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                            {group.label}
+                          </h3>
+                          {group.items.map((service) => renderServiceCard(service))}
+                        </div>
+                      ))
+                    ) : (
+                      services.map((service) => renderServiceCard(service))
+                    )}
                   </div>
                 </div>
 
