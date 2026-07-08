@@ -24,6 +24,14 @@ export const BUSINESS_CONFIG = {
     timeSlotMinutes: 30,
 }
 
+// Datos bancarios para transferencias — completar con los datos reales del negocio.
+// Mientras estén vacíos, la UI usa el fallback honesto (coordinar por WhatsApp).
+export const BANK_TRANSFER_INFO = {
+    bank: '',
+    account: '',
+    holder: '',
+}
+
 // Duraciones de servicios (en minutos)
 export const SERVICE_DURATIONS = {
     CORTE_SIMPLE: 30,
