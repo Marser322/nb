@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -23,7 +24,7 @@ import {
     DialogTrigger,
     DialogFooter,
 } from "@/components/ui/dialog";
-import { Users, Plus, Loader2, Edit2, CalendarRange, Trash2, Calendar, Clock, DollarSign, Search } from "lucide-react";
+import { Users, Plus, Loader2, Edit2, CalendarRange, Trash2, Calendar, Clock, DollarSign, Search, ShieldCheck, Copy, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import type { Barber, Branch, WorkingHours, ScheduleBlock, BarberCompensation } from "@/types/database.types";
 import {
@@ -37,8 +38,32 @@ import { WorkingHoursEditor } from "@/components/admin/WorkingHoursEditor";
 import { COMPENSATION_MODEL_LABELS } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import { ImageUpload } from "@/components/admin/image-upload";
+import {
+    ALL_PERMISSIONS,
+    PERMISSION_LABELS,
+    ROLE_DEFAULT_PERMISSIONS,
+    type Permission,
+} from "@/lib/permissions";
+import { usePermissions } from "@/lib/usePermissions";
+
+type StaffRole = "barbero" | "gerente";
+
+const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
+    barbero: "Barbero",
+    gerente: "Gerente",
+};
+
+function defaultPermissionsForRole(role: StaffRole): Record<Permission, boolean> {
+    const defaults = ROLE_DEFAULT_PERMISSIONS[role] ?? [];
+    return ALL_PERMISSIONS.reduce((acc, perm) => {
+        acc[perm] = defaults.includes(perm);
+        return acc;
+    }, {} as Record<Permission, boolean>);
+}
 
 export default function AdminBarberosPage() {
+    const router = useRouter();
+    const { can, isLoaded: permissionsLoaded } = usePermissions();
     const [barbers, setBarbers] = useState<Barber[]>([]);
     const [branches, setBranches] = useState<Branch[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -67,9 +92,22 @@ export default function AdminBarberosPage() {
         branch_id: "",
         working_hours: null as WorkingHours | null,
     });
-    
+
     // Si usa horario personalizado (en caso contrario, guarda null y hereda de sucursal)
     const [useCustomHours, setUseCustomHours] = useState(false);
+
+    // Alta de staff con usuario de login (RBAC): solo aplica al crear (no al editar).
+    const [staffEmail, setStaffEmail] = useState("");
+    const [staffRole, setStaffRole] = useState<StaffRole>("barbero");
+    const [staffPermissions, setStaffPermissions] = useState<Record<Permission, boolean>>(
+        defaultPermissionsForRole("barbero")
+    );
+    const [isCreatingStaff, setIsCreatingStaff] = useState(false);
+    const [newStaffCredentials, setNewStaffCredentials] = useState<{
+        email: string;
+        tempPassword: string;
+        role: StaffRole;
+    } | null>(null);
 
     const [searchQuery, setSearchQuery] = useState("");
 
@@ -146,7 +184,7 @@ export default function AdminBarberosPage() {
 
     useEffect(() => {
         if (activeBarberForCompensation) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
+             
             loadCompensations(activeBarberForCompensation.id);
             setCompForm({
                 model: "commission",
@@ -213,18 +251,32 @@ export default function AdminBarberosPage() {
     };
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         loadBarbers(true);
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         loadBranches();
     }, [loadBarbers, loadBranches]);
 
     useEffect(() => {
+        if (permissionsLoaded && !can("staff.manage")) {
+            toast.error("No tenés permiso para gestionar el equipo");
+            router.replace("/admin/dashboard");
+        }
+    }, [permissionsLoaded, can, router]);
+
+    useEffect(() => {
         if (activeBarberForBlocks) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
+             
             loadBlocks(activeBarberForBlocks.id);
         }
     }, [activeBarberForBlocks, loadBlocks]);
+
+    const resetStaffFields = () => {
+        setStaffEmail("");
+        setStaffRole("barbero");
+        setStaffPermissions(defaultPermissionsForRole("barbero"));
+        setIsCreatingStaff(false);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -249,26 +301,68 @@ export default function AdminBarberosPage() {
                 toast.success("Barbero actualizado");
                 loadBarbers();
             }
-        } else {
-            const { error } = await supabase
-                .from("barbers")
-                .insert({
-                    ...dataToSave,
-                    is_active: true,
-                });
 
-            if (error) {
-                toast.error("Error al crear barbero");
-            } else {
-                toast.success("Barbero creado");
-                loadBarbers();
-            }
+            setIsDialogOpen(false);
+            setEditingBarber(null);
+            setFormData({ name: "", bio: "", avatar_url: "", branch_id: "", working_hours: null });
+            setUseCustomHours(false);
+            return;
         }
 
-        setIsDialogOpen(false);
-        setEditingBarber(null);
-        setFormData({ name: "", bio: "", avatar_url: "", branch_id: "", working_hours: null });
-        setUseCustomHours(false);
+        // Alta de staff nuevo: crea usuario de login + perfil con rol y
+        // permisos (y fila en `barbers` si el rol es barbero) vía endpoint
+        // server con service_role. Reemplaza el insert client-side directo.
+        if (!staffEmail.trim()) {
+            toast.error("Ingresá un email para que la persona pueda iniciar sesión");
+            return;
+        }
+
+        setIsCreatingStaff(true);
+        try {
+            const response = await fetch("/api/admin/staff", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    fullName: formData.name,
+                    email: staffEmail.trim(),
+                    role: staffRole,
+                    bio: formData.bio || null,
+                    avatarUrl: formData.avatar_url || null,
+                    branchId: formData.branch_id || null,
+                    permissionOverrides: staffPermissions,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.ok) {
+                toast.error(result?.message || "No se pudo crear el nuevo miembro del equipo");
+                return;
+            }
+
+            toast.success(
+                staffRole === "gerente"
+                    ? "Gerente creado. Compartile las credenciales temporales."
+                    : "Barbero creado con acceso al sistema. Compartile las credenciales temporales."
+            );
+            setNewStaffCredentials({
+                email: result.email,
+                tempPassword: result.tempPassword,
+                role: staffRole,
+            });
+
+            setIsDialogOpen(false);
+            setEditingBarber(null);
+            setFormData({ name: "", bio: "", avatar_url: "", branch_id: "", working_hours: null });
+            setUseCustomHours(false);
+            resetStaffFields();
+            loadBarbers();
+        } catch (error) {
+            console.error("Error creando staff:", error);
+            toast.error("No se pudo crear el nuevo miembro del equipo");
+        } finally {
+            setIsCreatingStaff(false);
+        }
     };
 
     const toggleActive = async (barber: Barber) => {
@@ -358,6 +452,7 @@ export default function AdminBarberosPage() {
             working_hours: barber.working_hours,
         });
         setUseCustomHours(barber.working_hours !== null);
+        resetStaffFields();
         setIsDialogOpen(true);
     };
 
@@ -365,8 +460,31 @@ export default function AdminBarberosPage() {
         setEditingBarber(null);
         setFormData({ name: "", bio: "", avatar_url: "", branch_id: "", working_hours: null });
         setUseCustomHours(false);
+        resetStaffFields();
         setIsDialogOpen(true);
     };
+
+    const handleStaffRoleChange = (role: StaffRole) => {
+        setStaffRole(role);
+        setStaffPermissions(defaultPermissionsForRole(role));
+    };
+
+    const copyStaffCredentials = () => {
+        if (!newStaffCredentials) return;
+        const text = `Email: ${newStaffCredentials.email}\nContraseña temporal: ${newStaffCredentials.tempPassword}`;
+        navigator.clipboard
+            .writeText(text)
+            .then(() => toast.success("Credenciales copiadas al portapapeles"))
+            .catch(() => toast.error("No se pudo copiar. Copiá manualmente."));
+    };
+
+    if (!permissionsLoaded || !can("staff.manage")) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -381,13 +499,13 @@ export default function AdminBarberosPage() {
                     <DialogTrigger asChild>
                         <Button id="admin-btn-new-barber" onClick={openNewDialog}>
                             <Plus className="h-4 w-4 mr-2" />
-                            Nuevo Barbero
+                            Nuevo Miembro del Equipo
                         </Button>
                     </DialogTrigger>
                     <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
                         <DialogHeader>
                             <DialogTitle>
-                                {editingBarber ? "Editar Barbero" : "Nuevo Barbero"}
+                                {editingBarber ? "Editar Barbero" : "Nuevo Miembro del Equipo"}
                             </DialogTitle>
                         </DialogHeader>
                         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
@@ -400,6 +518,74 @@ export default function AdminBarberosPage() {
                                     required
                                 />
                             </div>
+
+                            {!editingBarber && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-sm font-medium mb-2 block">Rol</label>
+                                            <Select
+                                                value={staffRole}
+                                                onValueChange={(v) => handleStaffRoleChange(v as StaffRole)}
+                                            >
+                                                <SelectTrigger className="bg-background/50 border-input/50">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="barbero">Barbero</SelectItem>
+                                                    <SelectItem value="gerente">Gerente</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-medium mb-2 block">Email de acceso</label>
+                                            <Input
+                                                type="email"
+                                                placeholder="persona@nbbarber.uy"
+                                                value={staffEmail}
+                                                onChange={(e) => setStaffEmail(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground -mt-2">
+                                        Se crea un usuario con contraseña temporal para que inicie sesión en{" "}
+                                        {staffRole === "gerente" ? "el panel admin" : "su portal de barbero y el panel admin"}.
+                                    </p>
+
+                                    <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3">
+                                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                            <ShieldCheck className="h-4 w-4 text-primary" />
+                                            Permisos ({STAFF_ROLE_LABELS[staffRole]})
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            Prellenados según el rol. Desmarcá o marcá para ajustar el acceso de esta persona.
+                                        </p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {ALL_PERMISSIONS.map((perm) => (
+                                                <label
+                                                    key={perm}
+                                                    className="flex items-center gap-2 text-xs text-foreground/90 cursor-pointer select-none"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={staffPermissions[perm]}
+                                                        onChange={(e) =>
+                                                            setStaffPermissions((prev) => ({
+                                                                ...prev,
+                                                                [perm]: e.target.checked,
+                                                            }))
+                                                        }
+                                                        className="h-3.5 w-3.5 rounded border-input accent-primary"
+                                                    />
+                                                    {PERMISSION_LABELS[perm]}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
                             <div>
                                 <label className="text-sm font-medium mb-2 block">Biografía</label>
                                 <Input
@@ -427,63 +613,76 @@ export default function AdminBarberosPage() {
                                     </div>
                                 </div>
                             </div>
-                            <div>
-                                <label className="text-sm font-medium mb-2 block">Sucursal</label>
-                                <Select
-                                    value={formData.branch_id || "none"}
-                                    onValueChange={(v) => setFormData({ ...formData, branch_id: v === "none" ? "" : v })}
-                                >
-                                    <SelectTrigger className="bg-background/50 border-input/50 focus:border-amber-500/50">
-                                        <SelectValue placeholder="Seleccionar sucursal" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">Sin asignar</SelectItem>
-                                        {branches.map((b) => (
-                                            <SelectItem key={b.id} value={b.id}>
-                                                {b.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            {(editingBarber || staffRole === "barbero") && (
+                                <>
+                                    <div>
+                                        <label className="text-sm font-medium mb-2 block">Sucursal</label>
+                                        <Select
+                                            value={formData.branch_id || "none"}
+                                            onValueChange={(v) => setFormData({ ...formData, branch_id: v === "none" ? "" : v })}
+                                        >
+                                            <SelectTrigger className="bg-background/50 border-input/50 focus:border-amber-500/50">
+                                                <SelectValue placeholder="Seleccionar sucursal" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">Sin asignar</SelectItem>
+                                                {branches.map((b) => (
+                                                    <SelectItem key={b.id} value={b.id}>
+                                                        {b.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
-                            <div className="space-y-3 pt-2">
-                                <div className="flex items-center gap-2">
-                                    <Switch
-                                        id="use-custom-hours"
-                                        checked={useCustomHours}
-                                        onCheckedChange={(checked) => {
-                                            setUseCustomHours(checked);
-                                            if (!checked) {
-                                                setFormData(prev => ({ ...prev, working_hours: null }));
-                                            } else {
-                                                setFormData(prev => ({ ...prev, working_hours: prev.working_hours || {} }));
-                                            }
-                                        }}
-                                        className="data-[state=checked]:bg-primary"
-                                    />
-                                    <label htmlFor="use-custom-hours" className="text-sm font-medium text-foreground cursor-pointer select-none">
-                                        Horario personalizado
-                                    </label>
-                                </div>
-                                {!useCustomHours ? (
-                                    <p className="text-xs text-muted-foreground italic pl-7">
-                                        Hereda automáticamente el horario de la sucursal asignada.
-                                    </p>
-                                ) : (
-                                    <WorkingHoursEditor
-                                        value={formData.working_hours}
-                                        onChange={(val) => setFormData({ ...formData, working_hours: val })}
-                                    />
-                                )}
-                            </div>
+                                    <div className="space-y-3 pt-2">
+                                        <div className="flex items-center gap-2">
+                                            <Switch
+                                                id="use-custom-hours"
+                                                checked={useCustomHours}
+                                                onCheckedChange={(checked) => {
+                                                    setUseCustomHours(checked);
+                                                    if (!checked) {
+                                                        setFormData(prev => ({ ...prev, working_hours: null }));
+                                                    } else {
+                                                        setFormData(prev => ({ ...prev, working_hours: prev.working_hours || {} }));
+                                                    }
+                                                }}
+                                                className="data-[state=checked]:bg-primary"
+                                            />
+                                            <label htmlFor="use-custom-hours" className="text-sm font-medium text-foreground cursor-pointer select-none">
+                                                Horario personalizado
+                                            </label>
+                                        </div>
+                                        {!useCustomHours ? (
+                                            <p className="text-xs text-muted-foreground italic pl-7">
+                                                Hereda automáticamente el horario de la sucursal asignada.
+                                            </p>
+                                        ) : (
+                                            <WorkingHoursEditor
+                                                value={formData.working_hours}
+                                                onChange={(val) => setFormData({ ...formData, working_hours: val })}
+                                            />
+                                        )}
+                                    </div>
+                                </>
+                            )}
 
                             <div className="flex justify-end gap-2 pt-4">
                                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                                     Cancelar
                                 </Button>
-                                <Button type="submit">
-                                    {editingBarber ? "Guardar Cambios" : "Crear Barbero"}
+                                <Button type="submit" disabled={isCreatingStaff}>
+                                    {isCreatingStaff ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Creando...
+                                        </>
+                                    ) : editingBarber ? (
+                                        "Guardar Cambios"
+                                    ) : (
+                                        "Crear Miembro del Equipo"
+                                    )}
                                 </Button>
                             </div>
                         </form>
@@ -1001,6 +1200,38 @@ export default function AdminBarberosPage() {
                             </form>
                         </div>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Diálogo con credenciales temporales tras crear staff nuevo */}
+            <Dialog open={newStaffCredentials !== null} onOpenChange={(open) => !open && setNewStaffCredentials(null)}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <KeyRound className="h-5 w-5 text-primary" />
+                            Credenciales temporales
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                            Compartile estos datos a la persona para que inicie sesión. No se van a volver a mostrar.
+                        </p>
+                        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2 font-mono text-sm">
+                            <p><span className="text-muted-foreground">Email:</span> {newStaffCredentials?.email}</p>
+                            <p><span className="text-muted-foreground">Contraseña:</span> {newStaffCredentials?.tempPassword}</p>
+                            <p className="text-muted-foreground">Rol: {newStaffCredentials && STAFF_ROLE_LABELS[newStaffCredentials.role]}</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground italic">
+                            Recomendale cambiar la contraseña en su primer inicio de sesión (Recuperar contraseña).
+                        </p>
+                    </div>
+                    <DialogFooter className="gap-2">
+                        <Button variant="outline" onClick={copyStaffCredentials}>
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copiar
+                        </Button>
+                        <Button onClick={() => setNewStaffCredentials(null)}>Listo</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

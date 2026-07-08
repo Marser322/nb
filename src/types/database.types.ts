@@ -1,7 +1,7 @@
 // Tipos de base de datos para NB Barber
 // Estos tipos se generarán automáticamente con Supabase CLI
 
-export type UserRole = 'cliente' | 'barbero' | 'admin'
+export type UserRole = 'cliente' | 'barbero' | 'admin' | 'gerente'
 export type AppointmentStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
 export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled'
 export type OrderType = 'online' | 'local'
@@ -16,6 +16,8 @@ export interface Profile {
   avatar_url: string | null
   role: UserRole
   notes: string | null
+  /** Overrides de permisos por persona (RBAC). Ver src/lib/permissions.ts */
+  permissions?: Record<string, boolean> | null
   created_at: string
 }
 

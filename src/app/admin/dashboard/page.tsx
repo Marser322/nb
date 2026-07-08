@@ -20,6 +20,7 @@ import { fetchClientsOverviewPage } from "@/lib/crm";
 import { createClient } from "@/lib/supabase/client";
 import type { Appointment, Service, Barber, Branch, ClientOverview } from "@/types/database.types";
 import { CrmCards, type RankingItem } from "@/components/admin/crm-cards";
+import { usePermissions } from "@/lib/usePermissions";
 import {
     Select,
     SelectContent,
@@ -64,6 +65,7 @@ export default function AdminDashboardPage() {
     const [barberFilter, setBarberFilter] = useState<string>("all");
     const [isLoading, setIsLoading] = useState(true);
     const supabase = useMemo(() => createClient(), []);
+    const { can: canSee } = usePermissions();
 
     const loadDashboard = useCallback(async () => {
         setIsLoading(true);
@@ -180,13 +182,19 @@ export default function AdminDashboardPage() {
             color: "text-green-400",
             bgColor: "bg-green-400/10",
         },
-        {
-            title: "Ingresos del Mes",
-            value: formatPrice(stats.ingresosMes),
-            icon: DollarSign,
-            color: "text-primary",
-            bgColor: "bg-primary/10",
-        },
+        // Las ganancias del dueño solo se muestran a quien tenga finances.view
+        // (admin siempre; gerente no, por defecto).
+        ...(canSee("finances.view")
+            ? [
+                  {
+                      title: "Ingresos del Mes",
+                      value: formatPrice(stats.ingresosMes),
+                      icon: DollarSign,
+                      color: "text-primary",
+                      bgColor: "bg-primary/10",
+                  },
+              ]
+            : []),
         {
             title: "Clientes Nuevos",
             value: stats.clientesNuevos,

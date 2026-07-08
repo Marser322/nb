@@ -20,6 +20,8 @@ import {
     Settings,
 } from "lucide-react";
 import { useFeatures } from "@/lib/features";
+import type { Permission } from "@/lib/permissions";
+import { usePermissions } from "@/lib/usePermissions";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -27,7 +29,13 @@ import { ROUTES } from "@/lib/constants";
 import { logoutAdmin } from "./actions";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 
-const sidebarLinks = [
+const sidebarLinks: {
+    href: string;
+    label: string;
+    icon: typeof LayoutDashboard;
+    /** Si se define, el link solo se muestra a quien tenga este permiso (admin siempre lo tiene). */
+    permission?: Permission;
+}[] = [
     {
         href: ROUTES.ADMIN_DASHBOARD,
         label: "Dashboard",
@@ -37,67 +45,80 @@ const sidebarLinks = [
         href: ROUTES.ADMIN_CITAS,
         label: "Citas",
         icon: Calendar,
+        permission: "agenda.all",
     },
     {
         href: ROUTES.ADMIN_CLIENTES,
         label: "Clientes",
         icon: Contact,
+        permission: "clients.view",
     },
     {
         href: ROUTES.ADMIN_MENSAJES,
         label: "Mensajes",
         icon: MessageSquare,
+        permission: "clients.view",
     },
     {
         href: ROUTES.ADMIN_PRODUCTOS,
         label: "Productos",
         icon: Package,
+        permission: "products.manage",
     },
     {
         href: ROUTES.ADMIN_PEDIDOS,
         label: "Pedidos",
         icon: ClipboardList,
+        permission: "products.manage",
     },
     {
         href: ROUTES.ADMIN_POS,
         label: "Punto de venta",
         icon: ShoppingCart,
+        permission: "cash.operate",
     },
     {
         href: ROUTES.ADMIN_CAJA,
         label: "Caja",
         icon: Wallet,
+        permission: "cash.operate",
     },
     {
         href: ROUTES.ADMIN_LIQUIDACIONES,
         label: "Liquidaciones",
         icon: Wallet,
+        permission: "finances.view",
     },
     {
         href: ROUTES.ADMIN_SUCURSALES,
         label: "Sucursales",
         icon: Building2,
+        permission: "branches.manage",
     },
     {
         href: ROUTES.ADMIN_BARBEROS,
         label: "Barberos",
         icon: Users,
+        permission: "staff.manage",
     },
     {
         href: ROUTES.ADMIN_SERVICIOS,
         label: "Servicios",
         icon: Sparkles,
+        permission: "services.manage",
     },
     {
         href: ROUTES.ADMIN_CONFIGURACION || "/admin/configuracion",
         label: "Configuración",
         icon: Settings,
+        permission: "settings.manage",
     },
 ];
 
 function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
     const pathname = usePathname();
     const { features } = useFeatures();
+    const { can, isLoaded: permissionsLoaded } = usePermissions();
 
     const handleLogout = async () => {
         try {
@@ -114,6 +135,9 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
         if (link.href === ROUTES.ADMIN_PRODUCTOS && !features.tienda) return false;
         if (link.href === ROUTES.ADMIN_PEDIDOS && !features.tienda) return false;
         if (link.href === ROUTES.ADMIN_POS && (!features.tienda || !features.contabilidad)) return false;
+        // Gating por permisos (RBAC): mientras no cargó el perfil, no mostramos
+        // de más — se revela recién cuando sabemos qué puede ver esta persona.
+        if (link.permission && (!permissionsLoaded || !can(link.permission))) return false;
         return true;
     });
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useFeatures } from "@/lib/features";
+import { usePermissions } from "@/lib/usePermissions";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ import type { Barber, BarberSettlement, SettlementPreview } from "@/types/databa
 
 export default function AdminLiquidacionesPage() {
     const { features, isLoaded } = useFeatures();
+    const { can, isLoaded: permissionsLoaded } = usePermissions();
     const router = useRouter();
 
     useEffect(() => {
@@ -65,6 +67,13 @@ export default function AdminLiquidacionesPage() {
             router.replace("/admin/dashboard");
         }
     }, [isLoaded, features.contabilidad, router]);
+
+    useEffect(() => {
+        if (permissionsLoaded && !can("finances.view")) {
+            toast.error("No tenés permiso para ver liquidaciones");
+            router.replace("/admin/dashboard");
+        }
+    }, [permissionsLoaded, can, router]);
 
     const supabase = createClient();
 
@@ -279,7 +288,7 @@ export default function AdminLiquidacionesPage() {
         }
     };
 
-    if (!isLoaded || !features.contabilidad) {
+    if (!isLoaded || !features.contabilidad || !permissionsLoaded || !can("finances.view")) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
