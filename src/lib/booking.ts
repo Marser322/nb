@@ -1,5 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { generateTimeSlots } from "@/lib/utils";
+import { generateTimeSlots, generateTimeSlotsFromRange, calculateEndTime } from "@/lib/utils";
 import { BUSINESS_CONFIG } from "@/lib/constants";
 import { Database, DayAvailability } from "@/types/database.types";
 
@@ -214,5 +214,56 @@ export async function fetchAvailability(
             blocks: typeof row.blocks === "string" ? JSON.parse(row.blocks) : (row.blocks || []),
         })) ?? []
     );
+}
+
+/**
+ * Indica si un día de disponibilidad (`get_availability`) tiene al menos un hueco
+ * libre para un servicio de la duración dada. Reusa la misma aritmética que
+ * `isSlotAvailable` del wizard de reserva (citas, descanso y bloqueos), sin el
+ * corte por "hora ya pasada" (ese chequeo depende del reloj del cliente y no
+ * corresponde a nivel día).
+ */
+export function dayHasFreeSlot(day: DayAvailability, durationMinutes: number): boolean {
+    if (!day.is_open || !day.open_time || !day.close_time) return false;
+
+    const startStr = day.open_time.slice(0, 5);
+    const endStr = day.close_time.slice(0, 5);
+    const slotMinutes = day.slot_minutes || 30;
+    const timeSlots = generateTimeSlotsFromRange(startStr, endStr, slotMinutes);
+    const slotsNeeded = Math.ceil(durationMinutes / slotMinutes);
+
+    return timeSlots.some((time, startIdx) => {
+        const endTime = calculateEndTime(time, durationMinutes);
+        if (endTime > endStr) return false;
+
+        for (let i = 0; i < slotsNeeded; i++) {
+            const slotToCheck = timeSlots[startIdx + i];
+            if (!slotToCheck) return false;
+
+            const slotEndToCheck = calculateEndTime(slotToCheck, slotMinutes);
+
+            const isBooked = day.booked.some((apt) => {
+                const aptStart = apt.start.slice(0, 5);
+                const aptEnd = apt.end.slice(0, 5);
+                return slotToCheck < aptEnd && aptStart < slotEndToCheck;
+            });
+            if (isBooked) return false;
+
+            if (day.break_start && day.break_end) {
+                const breakStart = day.break_start.slice(0, 5);
+                const breakEnd = day.break_end.slice(0, 5);
+                if (slotToCheck < breakEnd && breakStart < slotEndToCheck) return false;
+            }
+
+            const isBlocked = day.blocks.some((block) => {
+                const blockStart = block.start.slice(0, 5);
+                const blockEnd = block.end.slice(0, 5);
+                return slotToCheck < blockEnd && blockStart < slotEndToCheck;
+            });
+            if (isBlocked) return false;
+        }
+
+        return true;
+    });
 }
 
