@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Instagram, Hash, Star, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -14,11 +14,17 @@ import { STATIC_STYLES, getServiceIdForStyle } from "@/lib/static-data";
 import { useFeatures } from "@/lib/features";
 import { toast } from "sonner";
 import { buildWaLink } from "@/lib/whatsapp";
+import { createClient } from "@/lib/supabase/client";
+
+// Mismo tipo de referencia que usa el wizard (FASE 21): mezcla de la tabla
+// `lookbook` (DB) y `STATIC_STYLES` (fallback), con el `serviceId` propio de cada fila.
+type StyleItem = Lookbook & { serviceId?: string | null };
 
 export default function LookbookPage() {
     const { features, isLoaded } = useFeatures();
     const router = useRouter();
     const waLink = buildWaLink(BUSINESS_CONFIG.phone, "Hola, me gustaría reservar un turno.");
+    const supabase = useMemo(() => createClient(), []);
 
     useEffect(() => {
         if (isLoaded && !features.lookbook) {
@@ -27,9 +33,34 @@ export default function LookbookPage() {
         }
     }, [isLoaded, features.lookbook, router]);
 
-    const styles: Lookbook[] = STATIC_STYLES;
+    const [styles, setStyles] = useState<StyleItem[]>(STATIC_STYLES);
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
-    const isLoading = false;
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Cargar estilos desde la DB con fallback a STATIC_STYLES (mismo patrón que el wizard, FASE 21).
+    useEffect(() => {
+        async function loadStyles() {
+            setIsLoading(true);
+            const { data } = await supabase.from("lookbook").select("*").order("created_at", { ascending: false });
+            const loadedStyles: StyleItem[] =
+                data && data.length > 0
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    ? data.map((s: any) => ({
+                        id: s.id,
+                        title: s.title,
+                        image_url: s.image_url,
+                        instagram_url: s.instagram_url ?? null,
+                        tags: s.tags ?? [],
+                        is_featured: s.is_featured ?? false,
+                        created_at: s.created_at,
+                        serviceId: s.serviceId ?? null,
+                    }))
+                    : STATIC_STYLES;
+            setStyles(loadedStyles);
+            setIsLoading(false);
+        }
+        loadStyles();
+    }, [supabase]);
 
     if (!isLoaded || !features.lookbook) {
         return (
@@ -183,8 +214,8 @@ export default function LookbookPage() {
 
                                         {style.is_featured && (
                                             <div className="absolute top-3 left-3 z-20">
-                                                <Badge className="bg-amber-500 text-black border-none shadow-lg backdrop-blur-sm font-bold">
-                                                    <Star className="h-3 w-3 mr-1 fill-black" />
+                                                <Badge className="bg-primary text-primary-foreground border-none shadow-lg backdrop-blur-sm font-bold">
+                                                    <Star className="h-3 w-3 mr-1 fill-current" />
                                                     Destacado
                                                 </Badge>
                                             </div>
@@ -203,21 +234,27 @@ export default function LookbookPage() {
                                                 </div>
                                             )}
 
-                                             {features.reservas_online && getServiceIdForStyle(style.id) && (
-                                                 <Button asChild size="sm" className="w-full mt-3 rounded-full bg-primary hover:bg-primary/90 text-black font-bold text-xs h-8">
-                                                     <Link href={`/reservar?styleId=${style.id}&serviceId=${getServiceIdForStyle(style.id)}`}>
-                                                         Reservar Estilo
-                                                         <ArrowRight className="ml-1.5 h-3 w-3" />
-                                                     </Link>
-                                                 </Button>
-                                             )}
+                                             {features.reservas_online && (() => {
+                                                 const resolvedServiceId = style.serviceId ?? getServiceIdForStyle(style.id);
+                                                 const href = resolvedServiceId
+                                                     ? `/reservar?styleId=${style.id}&serviceId=${resolvedServiceId}`
+                                                     : `/reservar?styleId=${style.id}`;
+                                                 return (
+                                                     <Button asChild size="sm" className="w-full mt-3 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs h-8">
+                                                         <Link href={href}>
+                                                             Reservar Estilo
+                                                             <ArrowRight className="ml-1.5 h-3 w-3" />
+                                                         </Link>
+                                                     </Button>
+                                                 );
+                                             })()}
 
                                             {style.instagram_url && (
                                                 <a
                                                     href={style.instagram_url}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="flex items-center justify-center text-[10px] text-amber-400 font-bold hover:text-amber-300 uppercase tracking-widest mt-3 transition-colors"
+                                                    className="flex items-center justify-center text-[10px] text-primary font-bold hover:text-primary/80 uppercase tracking-widest mt-3 transition-colors"
                                                 >
                                                     <Instagram className="h-3 w-3 mr-1" />
                                                     Ver en Instagram

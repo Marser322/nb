@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Calendar, Clock, LayoutDashboard, Loader2, Star, Scissors, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,42 +16,66 @@ import { buildWaLink } from "@/lib/whatsapp";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { useDemoAdminLogin } from "@/hooks/useDemoAdminLogin";
 import { isDemoMode } from "@/lib/demo";
+import { formatPrice } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
+import { STATIC_SERVICES, STATIC_STYLES, getServiceIdForStyle } from "@/lib/static-data";
+import type { Service, Lookbook } from "@/types/database.types";
 
-// Servicios destacados (luego vendrán de la BD)
-const services = [
-  {
-    id: "1",
-    name: "Corte Clásico",
-    description: "Corte de precisión adaptado a tu estilo personal",
-    price: 450,
-    duration: 30,
-    icon: Scissors,
-    image: "/images/hero/maquina-clippers.jpg",
-  },
-  {
-    id: "2",
-    name: "Corte + Barba",
-    description: "El combo completo para el caballero moderno",
-    price: 750,
-    duration: 60,
-    icon: Sparkles,
-    image: "/images/hero/detalle-corte.jpg",
-  },
-  {
-    id: "3",
-    name: "Diseño de Barba",
-    description: "Perfilado y mantenimiento profesional",
-    price: 350,
-    duration: 30,
-    icon: Star,
-    image: "/images/hero/herramientas-barberia.jpg",
-  },
+// Iconos/imágenes locales para las cards de servicio; si hay más servicios que
+// assets, se usa el default de la última posición.
+const SERVICE_VISUALS = [
+  { icon: Scissors, image: "/images/hero/maquina-clippers.jpg" },
+  { icon: Sparkles, image: "/images/hero/detalle-corte.jpg" },
+  { icon: Star, image: "/images/hero/herramientas-barberia.jpg" },
 ];
+
+type StyleItem = Lookbook & { serviceId?: string | null };
 
 export default function HomePage() {
   const { features } = useFeatures();
   const waLink = buildWaLink(BUSINESS_CONFIG.phone, "Hola, me gustaría reservar un turno.");
   const { loginAsDemoAdmin, isDemoLoading } = useDemoAdminLogin();
+  const supabase = useMemo(() => createClient(), []);
+
+  const [services, setServices] = useState<Service[]>(STATIC_SERVICES.slice(0, 3));
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
+  const [featuredStyles, setFeaturedStyles] = useState<StyleItem[]>([]);
+
+  // Cargar servicios activos y estilos del lookbook desde la DB, con fallback estático
+  // (mismo patrón que el wizard, FASE 21).
+  useEffect(() => {
+    async function loadData() {
+      setIsLoadingServices(true);
+      const [servicesRes, lookbookRes] = await Promise.all([
+        supabase.from("services").select("*").eq("is_active", true).order("sort_order").limit(3),
+        supabase.from("lookbook").select("*").order("created_at", { ascending: false }),
+      ]);
+
+      const loadedServices = servicesRes?.data && servicesRes.data.length > 0 ? servicesRes.data : STATIC_SERVICES.slice(0, 3);
+      const loadedStyles: StyleItem[] =
+        lookbookRes?.data && lookbookRes.data.length > 0
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ? lookbookRes.data.map((s: any) => ({
+              id: s.id,
+              title: s.title,
+              image_url: s.image_url,
+              instagram_url: s.instagram_url ?? null,
+              tags: s.tags ?? [],
+              is_featured: s.is_featured ?? false,
+              created_at: s.created_at,
+              serviceId: s.serviceId ?? null,
+            }))
+          : STATIC_STYLES;
+
+      const featured = loadedStyles.filter((s) => s.is_featured);
+      const styleHighlights = (featured.length > 0 ? featured : loadedStyles).slice(0, 4);
+
+      setServices(loadedServices);
+      setFeaturedStyles(styleHighlights);
+      setIsLoadingServices(false);
+    }
+    loadData();
+  }, [supabase]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -245,71 +270,90 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
-            {services.map((service, index) => (
-              <motion.div
-                key={service.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -10 }}
-                className="group relative h-full"
-              >
-                <Card className="h-full border-border bg-card/50 backdrop-blur-md overflow-hidden transition-all duration-500 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10">
-                  {/* Dynamic Background Image on Hover */}
-                  <div className="absolute inset-0 z-0">
-                    <Image
-                      src={service.image}
-                      alt={service.name}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 33vw"
-                      className="object-cover opacity-0 group-hover:opacity-20 transition-all duration-700 group-hover:scale-110 grayscale group-hover:grayscale-0"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent z-10" />
-                  </div>
+            {isLoadingServices ? (
+              [...Array(3)].map((_, i) => (
+                <div key={i} className="h-full min-h-[340px] rounded-2xl border border-border bg-card/50 animate-pulse" />
+              ))
+            ) : (
+              services.map((service, index) => {
+                const visual = SERVICE_VISUALS[index] ?? SERVICE_VISUALS[SERVICE_VISUALS.length - 1];
+                const ServiceIcon = visual.icon;
+                const cardImage = service.image_url || visual.image;
 
-                  {/* Floating Accessory/Effect */}
-                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/20 blur-[60px] rounded-full group-hover:bg-primary/30 transition-all duration-500" />
-
-                  <CardContent className="p-8 relative z-20 flex flex-col h-full">
-                    <div className="mb-6 flex justify-between items-start">
-                      <div className="h-14 w-14 rounded-2xl bg-muted border border-border flex items-center justify-center group-hover:bg-primary group-hover:border-primary transition-all duration-500 group-hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]">
-                        <service.icon className="h-7 w-7 text-foreground group-hover:text-primary-foreground transition-colors" />
-                      </div>
-                      {/* Animated Badge on Hover */}
-                      <motion.div
-                        className="bg-primary/10 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                        animate={{ rotate: [0, 15, -15, 0] }}
-                        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                      >
-                        <Scissors className="h-4 w-4 text-primary" />
-                      </motion.div>
+                const cardContent = (
+                  <Card className="h-full border-border bg-card/50 backdrop-blur-md overflow-hidden transition-all duration-500 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10">
+                    {/* Dynamic Background Image on Hover */}
+                    <div className="absolute inset-0 z-0">
+                      <Image
+                        src={cardImage}
+                        alt={service.name}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 33vw"
+                        className="object-cover opacity-0 group-hover:opacity-20 transition-all duration-700 group-hover:scale-110 grayscale group-hover:grayscale-0"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent z-10" />
                     </div>
 
-                    <h3 className="text-2xl font-bold mb-3 text-foreground group-hover:text-primary transition-colors duration-300">
-                      {service.name}
-                    </h3>
+                    {/* Floating Accessory/Effect */}
+                    <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/20 blur-[60px] rounded-full group-hover:bg-primary/30 transition-all duration-500" />
 
-                    <p className="text-muted-foreground mb-8 leading-relaxed group-hover:text-foreground transition-colors duration-300">
-                      {service.description}
-                    </p>
-
-                    <div className="mt-auto flex items-center justify-between pt-6 border-t border-border group-hover:border-border/80 transition-colors">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                        <Clock className="h-4 w-4 text-primary" />
-                        {service.duration} min
+                    <CardContent className="p-8 relative z-20 flex flex-col h-full">
+                      <div className="mb-6 flex justify-between items-start">
+                        <div className="h-14 w-14 rounded-2xl bg-muted border border-border flex items-center justify-center group-hover:bg-primary group-hover:border-primary transition-all duration-500 group-hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]">
+                          <ServiceIcon className="h-7 w-7 text-foreground group-hover:text-primary-foreground transition-colors" />
+                        </div>
+                        {/* Animated Badge on Hover */}
+                        <motion.div
+                          className="bg-primary/10 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                          animate={{ rotate: [0, 15, -15, 0] }}
+                          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                        >
+                          <Scissors className="h-4 w-4 text-primary" />
+                        </motion.div>
                       </div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-sm text-primary">$</span>
+
+                      <h3 className="text-2xl font-bold mb-3 text-foreground group-hover:text-primary transition-colors duration-300">
+                        {service.name}
+                      </h3>
+
+                      <p className="text-muted-foreground mb-8 leading-relaxed group-hover:text-foreground transition-colors duration-300">
+                        {service.description}
+                      </p>
+
+                      <div className="mt-auto flex items-center justify-between pt-6 border-t border-border group-hover:border-border/80 transition-colors">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                          <Clock className="h-4 w-4 text-primary" />
+                          {service.duration_minutes} min
+                        </div>
                         <span className="text-2xl font-bold text-foreground group-hover:text-primary transition-colors text-glow">
-                          {service.price}
+                          {formatPrice(service.price)}
                         </span>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+                    </CardContent>
+                  </Card>
+                );
+
+                return (
+                  <motion.div
+                    key={service.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: index * 0.1 }}
+                    whileHover={{ y: -10 }}
+                    className="group relative h-full"
+                  >
+                    {features.reservas_online ? (
+                      <Link href={`${ROUTES.RESERVAR}?serviceId=${service.id}`} className="block h-full">
+                        {cardContent}
+                      </Link>
+                    ) : (
+                      cardContent
+                    )}
+                  </motion.div>
+                );
+              })
+            )}
           </div>
 
           {features.reservas_online && (
@@ -324,6 +368,80 @@ export default function HomePage() {
           )}
         </div>
       </section>
+
+      {/* Estilos destacados del Lookbook */}
+      {features.lookbook && featuredStyles.length > 0 && (
+        <section className="py-24 relative overflow-hidden bg-muted/35">
+          <div className="absolute inset-0 bg-noise opacity-5 pointer-events-none" />
+          <div className="container mx-auto px-4 relative z-10">
+            <motion.div
+              className="text-center mb-16"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">
+                Estilos que piden <span className="text-primary">hora</span>
+              </h2>
+              <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
+                Elegí tu referencia del Lookbook y llegá a la silla con el look ya decidido.
+              </p>
+            </motion.div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
+              {featuredStyles.map((style, index) => {
+                const resolvedServiceId = style.serviceId ?? getServiceIdForStyle(style.id);
+                const href = resolvedServiceId
+                  ? `${ROUTES.RESERVAR}?styleId=${style.id}&serviceId=${resolvedServiceId}`
+                  : `${ROUTES.RESERVAR}?styleId=${style.id}`;
+
+                return (
+                  <motion.div
+                    key={style.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: index * 0.1 }}
+                    className="group relative rounded-2xl overflow-hidden border border-border bg-card shadow-lg transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10"
+                  >
+                    <div className="relative aspect-[3/4]">
+                      <Image
+                        src={style.image_url}
+                        alt={style.title}
+                        fill
+                        sizes="(max-width: 768px) 50vw, 25vw"
+                        className="object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 p-4">
+                      <h3 className="font-bold text-white mb-2 leading-tight text-sm md:text-base">{style.title}</h3>
+                      {features.reservas_online && (
+                        <Button asChild size="sm" className="w-full rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs h-8">
+                          <Link href={href}>
+                            Reservar estilo
+                            <ArrowRight className="ml-1.5 h-3 w-3" />
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            <div className="text-center mt-12">
+              <Button size="lg" variant="outline" className="h-12 px-8 rounded-full" asChild>
+                <Link href={ROUTES.LOOKBOOK}>
+                  Ver todo el lookbook
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Why Choose Us */}
       {/* Transformations Section */}
