@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -15,10 +16,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Header, Footer } from "@/components/layout";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { BUSINESS_CONFIG, BRANCHES, ROUTES } from "@/lib/constants";
 import { useFeatures } from "@/lib/features";
+import { normalizeUyPhone, buildWaLink } from "@/lib/whatsapp";
+import { createClient } from "@/lib/supabase/client";
 
-const TEAM = [
+type TeamMember = {
+    slug: string;
+    name: string;
+    role: string;
+    bio: string;
+    image: string | null;
+};
+
+// Fallback estático: se muestra si la tabla `barbers` no tiene activos o la query falla
+// (mismo patrón que home/lookbook, FASE 25).
+const TEAM: TeamMember[] = [
     {
         slug: "carlos",
         name: "Carlos",
@@ -42,16 +56,46 @@ const TEAM = [
     },
 ];
 
-function normalizePhoneForWhatsApp(phone: string): string {
-    // Asume números de Uruguay (+598); acepta formatos "099 123 456" o "+598 99 123 456"
-    const digits = phone.replace(/\D/g, "");
-    if (digits.startsWith("598")) return digits;
-    return `598${digits.replace(/^0/, "")}`;
-}
+const DEFAULT_ROLE = "Barbero de la casa";
+const DEFAULT_BIO = "Profesional del equipo NB, listo para tu próximo corte.";
 
 export function ContactoContent() {
     const { features } = useFeatures();
     const hours = `${BUSINESS_CONFIG.workingHours.start}:00 - ${BUSINESS_CONFIG.workingHours.end}:00`;
+    const supabase = useMemo(() => createClient(), []);
+
+    const [team, setTeam] = useState<TeamMember[]>(TEAM);
+    const [isLoadingTeam, setIsLoadingTeam] = useState(true);
+
+    // Cargar el equipo real desde `barbers` (activos), con fallback al array estático
+    // si la query falla o viene vacía (patrón FASE 25, src/app/page.tsx:50-54).
+    useEffect(() => {
+        async function loadTeam() {
+            setIsLoadingTeam(true);
+            const { data } = await supabase
+                .from("barbers")
+                .select("id, name, bio, avatar_url")
+                .eq("is_active", true)
+                .order("created_at");
+
+            if (data && data.length > 0) {
+                setTeam(
+                    data.map((barber) => ({
+                        slug: barber.id,
+                        name: barber.name,
+                        role: DEFAULT_ROLE,
+                        bio: barber.bio || DEFAULT_BIO,
+                        image: barber.avatar_url,
+                    }))
+                );
+            } else {
+                setTeam(TEAM);
+            }
+            setIsLoadingTeam(false);
+        }
+
+        loadTeam();
+    }, [supabase]);
 
     return (
         <div className="min-h-screen bg-background">
@@ -168,38 +212,54 @@ export function ContactoContent() {
                         </motion.div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
-                            {TEAM.map((member, index) => (
-                                <motion.div
-                                    key={member.slug}
-                                    initial={{ opacity: 0, y: 24 }}
-                                    whileInView={{ opacity: 1, y: 0 }}
-                                    viewport={{ once: true }}
-                                    transition={{ delay: index * 0.1, duration: 0.6 }}
-                                    className="group relative rounded-2xl overflow-hidden border border-border bg-card/50 backdrop-blur-md transition-all duration-500 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10"
-                                >
-                                    <div className="relative aspect-square overflow-hidden bg-muted">
-                                        <Image
-                                            src={member.image}
-                                            alt={member.name}
-                                            fill
-                                            sizes="(max-width: 768px) 100vw, 33vw"
-                                            className="object-cover transition-transform duration-700 group-hover:scale-105"
-                                        />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" />
+                            {isLoadingTeam ? (
+                                Array.from({ length: 3 }).map((_, i) => (
+                                    <div
+                                        key={i}
+                                        className="rounded-2xl overflow-hidden border border-border bg-card/50"
+                                    >
+                                        <div className="aspect-square bg-muted animate-pulse" />
+                                        <div className="p-6 space-y-3">
+                                            <div className="h-5 w-2/3 rounded bg-muted animate-pulse" />
+                                            <div className="h-3 w-1/2 rounded bg-muted animate-pulse" />
+                                            <div className="h-16 w-full rounded bg-muted animate-pulse" />
+                                        </div>
                                     </div>
-                                    <div className="p-6 relative">
-                                        <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
-                                            {member.name}
-                                        </h3>
-                                        <p className="text-xs uppercase tracking-wider text-primary/80 mt-1 mb-3">
-                                            {member.role}
-                                        </p>
-                                        <p className="text-sm text-muted-foreground leading-relaxed group-hover:text-foreground transition-colors">
-                                            {member.bio}
-                                        </p>
-                                    </div>
-                                </motion.div>
-                            ))}
+                                ))
+                            ) : (
+                                team.map((member, index) => (
+                                    <motion.div
+                                        key={member.slug}
+                                        initial={{ opacity: 0, y: 24 }}
+                                        whileInView={{ opacity: 1, y: 0 }}
+                                        viewport={{ once: true }}
+                                        transition={{ delay: index * 0.1, duration: 0.6 }}
+                                        className="group relative rounded-2xl overflow-hidden border border-border bg-card/50 backdrop-blur-md transition-all duration-500 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10"
+                                    >
+                                        <div className="relative aspect-square overflow-hidden bg-muted">
+                                            <ImageWithFallback
+                                                src={member.image}
+                                                alt={member.name}
+                                                fill
+                                                sizes="(max-width: 768px) 100vw, 33vw"
+                                                className="object-cover transition-transform duration-700 group-hover:scale-105"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" />
+                                        </div>
+                                        <div className="p-6 relative">
+                                            <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
+                                                {member.name}
+                                            </h3>
+                                            <p className="text-xs uppercase tracking-wider text-primary/80 mt-1 mb-3">
+                                                {member.role}
+                                            </p>
+                                            <p className="text-sm text-muted-foreground leading-relaxed group-hover:text-foreground transition-colors">
+                                                {member.bio}
+                                            </p>
+                                        </div>
+                                    </motion.div>
+                                ))
+                            )}
                         </div>
                     </div>
                 </section>
@@ -236,11 +296,12 @@ export function ContactoContent() {
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
                             {BRANCHES.map((branch, index) => {
-                                const whatsappNumber = normalizePhoneForWhatsApp(branch.phone);
-                                const telHref = `tel:+${normalizePhoneForWhatsApp(branch.phone)}`;
-                                const waHref = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+                                const normalizedPhone = normalizeUyPhone(branch.phone);
+                                const telHref = normalizedPhone ? `tel:+${normalizedPhone}` : `tel:${branch.phone}`;
+                                const waHref = buildWaLink(
+                                    branch.phone,
                                     `Hola! Quiero consultar por un turno en ${branch.name}.`
-                                )}`;
+                                );
 
                                 return (
                                     <motion.article

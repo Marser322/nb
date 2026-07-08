@@ -3,11 +3,12 @@
 import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Scissors, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { Scissors, Mail, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { PasswordInput } from "@/components/shared/PasswordInput";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
@@ -42,6 +43,8 @@ function LoginPageContent() {
         if (error || !user) {
             if (error?.message.includes("Invalid login credentials")) {
                 toast.error("Email o contraseña incorrectos");
+            } else if (error?.message.includes("Email not confirmed")) {
+                toast.error("Tenés que confirmar tu email antes de entrar. Revisá tu casilla (y el spam).");
             } else {
                 toast.error("Error al iniciar sesión");
             }
@@ -116,18 +119,13 @@ function LoginPageContent() {
                                 ¿Olvidaste tu contraseña?
                             </Link>
                         </div>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                id="password"
-                                type="password"
-                                placeholder="••••••••"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="pl-10"
-                                disabled={isSubmitting}
-                            />
-                        </div>
+                        <PasswordInput
+                            id="password"
+                            placeholder="••••••••"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            disabled={isSubmitting}
+                        />
                     </div>
                 </CardContent>
 
