@@ -212,8 +212,46 @@
     background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.75), transparent);
     height: 1px;
   }
+}
 
-  html {
+/*
+ * ============================================================================
+ * SKINS VISUALES DEL ADMIN (FASE 22/23) — mapa de secciones
+ * ============================================================================
+ * Todo lo que sigue es exclusivo del panel /admin; el sitio público nunca
+ * recibe `data-visual-skin` (ver VisualSkinProvider, montado solo en
+ * src/app/admin/layout.tsx, y VisualSkinInitScript en el <head> del layout
+ * raíz, que solo actúa en rutas /admin). El público conserva siempre el
+ * branding NB dorado/negro definido en :root/.dark arriba.
+ *
+ * 1. Tokens `--assistive-*` (FAB de chat/ayuda) — por skin, claro y oscuro.
+ *    Estos componentes (HelpFab, AiAssistant) se montan en el layout RAÍZ,
+ *    fuera de `.admin-shell`, así que sus tokens cuelgan de `html[data-visual-skin]`
+ *    directamente (no de `.admin-shell`). Esto es seguro porque el atributo
+ *    solo existe en rutas /admin (ver arriba) — nunca hay fuga al público.
+ * 2. Clases `.nb-assistive-*` — estilos del FAB/menú/panel de chat y ayuda.
+ * 3. Tokens `--admin-*` a nivel `html[data-visual-skin]` (SIN `.admin-shell`) —
+ *    fallback para contenido portaleado fuera de `.admin-shell` (Radix
+ *    Sheet/DropdownMenu portalan a `document.body` por defecto), que solo
+ *    hereda variables CSS del árbol de ancestros real (html), no de `.admin-shell`.
+ * 4. Tokens `--admin-*` completos dentro de `.admin-shell` — la fuente de
+ *    verdad para todo el contenido NO portaleado (cards, sidebar, topbar).
+ * 5. Clases `.admin-*` — componentes del shell admin (topbar, sidebar, KPIs,
+ *    chips, listas, etc.) que consumen los tokens `--admin-*`.
+ *
+ * POR QUÉ ESTE BLOQUE NO ESTÁ EN NINGÚN `@layer` (decisión FASE 23):
+ * en Tailwind 4 las capas se declaran `theme, base, components, utilities`,
+ * y `utilities` SIEMPRE le gana a `components` en el cascade sin importar
+ * la especificidad del selector. Estas clases decoran componentes shadcn
+ * cuyas clases base (`bg-card`, `bg-background`, `size-9`, `shadow-sm`…)
+ * viven en `utilities`, así que dentro de `@layer components` este bloque
+ * solo funcionaría a fuerza de `!important` en casi cada declaración.
+ * El CSS SIN capa le gana a todas las capas por la regla estándar
+ * (unlayered > layered para declaraciones normales), lo que permite que
+ * el bloque pise las utilidades por cascade normal y CERO `!important`
+ * (salvo los de `prefers-reduced-motion`, que deben ganarle a todo).
+ */
+html {
     --assistive-surface: rgba(255, 249, 239, 0.88);
     --assistive-surface-strong: rgba(255, 253, 247, 0.96);
     --assistive-fg: #1f170b;
@@ -374,13 +412,13 @@
     position: relative;
     isolation: isolate;
     overflow: visible;
-    width: 3.5rem !important;
-    height: 3.5rem !important;
+    width: 3.5rem;
+    height: 3.5rem;
     min-width: 3.5rem;
     min-height: 3.5rem;
-    border: 1px solid var(--assistive-border) !important;
-    background: var(--assistive-fab-bg) !important;
-    color: var(--assistive-fab-fg) !important;
+    border: 1px solid var(--assistive-border);
+    background: var(--assistive-fab-bg);
+    color: var(--assistive-fab-fg);
     box-shadow:
       0 18px 46px var(--assistive-shadow),
       inset 0 1px 0 rgba(255, 255, 255, 0.28);
@@ -465,9 +503,9 @@
     --popover-foreground: var(--assistive-fg);
     --accent: color-mix(in srgb, var(--assistive-primary) 14%, transparent);
     --accent-foreground: var(--assistive-fg);
-    border-color: var(--assistive-border) !important;
-    background: var(--assistive-panel-bg) !important;
-    color: var(--assistive-fg) !important;
+    border-color: var(--assistive-border);
+    background: var(--assistive-panel-bg);
+    color: var(--assistive-fg);
     box-shadow: 0 26px 80px var(--assistive-shadow);
     backdrop-filter: blur(20px);
   }
@@ -495,21 +533,21 @@
 
   .nb-assistive-menu svg,
   .nb-assistive-icon svg {
-    color: var(--assistive-primary) !important;
+    color: var(--assistive-primary);
   }
 
   .nb-assistive-panel {
-    border-color: var(--assistive-border) !important;
-    background: var(--assistive-panel-bg) !important;
+    border-color: var(--assistive-border);
+    background: var(--assistive-panel-bg);
     color: var(--assistive-fg);
     box-shadow: 0 28px 90px var(--assistive-shadow);
   }
 
   .nb-assistive-panel-header,
   .nb-assistive-panel-footer {
-    border-color: color-mix(in srgb, var(--assistive-border) 78%, transparent) !important;
+    border-color: color-mix(in srgb, var(--assistive-border) 78%, transparent);
     background:
-      linear-gradient(90deg, color-mix(in srgb, var(--assistive-surface-strong) 92%, transparent), color-mix(in srgb, var(--assistive-primary) 8%, transparent)) !important;
+      linear-gradient(90deg, color-mix(in srgb, var(--assistive-surface-strong) 92%, transparent), color-mix(in srgb, var(--assistive-primary) 8%, transparent));
   }
 
   .nb-assistive-icon {
@@ -522,24 +560,24 @@
   }
 
   .nb-assistive-action {
-    border-color: color-mix(in srgb, var(--assistive-border) 85%, transparent) !important;
-    background: color-mix(in srgb, var(--assistive-surface) 82%, transparent) !important;
-    color: var(--assistive-muted) !important;
+    border-color: color-mix(in srgb, var(--assistive-border) 85%, transparent);
+    background: color-mix(in srgb, var(--assistive-surface) 82%, transparent);
+    color: var(--assistive-muted);
   }
 
   .nb-assistive-action:hover {
-    border-color: color-mix(in srgb, var(--assistive-primary) 34%, transparent) !important;
-    background: color-mix(in srgb, var(--assistive-primary) 14%, transparent) !important;
-    color: var(--assistive-fg) !important;
+    border-color: color-mix(in srgb, var(--assistive-primary) 34%, transparent);
+    background: color-mix(in srgb, var(--assistive-primary) 14%, transparent);
+    color: var(--assistive-fg);
   }
 
   .nb-assistive-input {
-    border-color: color-mix(in srgb, var(--assistive-border) 86%, transparent) !important;
-    background: color-mix(in srgb, var(--assistive-surface-strong) 74%, transparent) !important;
+    border-color: color-mix(in srgb, var(--assistive-border) 86%, transparent);
+    background: color-mix(in srgb, var(--assistive-surface-strong) 74%, transparent);
   }
 
   .nb-assistive-input:focus-visible {
-    border-color: color-mix(in srgb, var(--assistive-primary) 48%, transparent) !important;
+    border-color: color-mix(in srgb, var(--assistive-primary) 48%, transparent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--assistive-primary) 16%, transparent);
   }
 
@@ -550,23 +588,23 @@
   .group:hover .nb-assistive-hover-title,
   .nb-assistive-link-accent,
   .nb-assistive-price {
-    color: var(--assistive-primary) !important;
+    color: var(--assistive-primary);
   }
 
   .nb-assistive-link-accent svg {
-    color: currentColor !important;
+    color: currentColor;
   }
 
   .nb-assistive-user-message {
-    background: var(--assistive-fab-bg) !important;
-    color: var(--assistive-fab-fg) !important;
+    background: var(--assistive-fab-bg);
+    color: var(--assistive-fab-fg);
     box-shadow: 0 14px 36px color-mix(in srgb, var(--assistive-shadow) 72%, var(--assistive-primary) 28%);
   }
 
   .nb-assistive-send {
-    border: 1px solid var(--assistive-border) !important;
-    background: var(--assistive-fab-bg) !important;
-    color: var(--assistive-fab-fg) !important;
+    border: 1px solid var(--assistive-border);
+    background: var(--assistive-fab-bg);
+    color: var(--assistive-fab-fg);
     box-shadow: 0 10px 28px var(--assistive-shadow);
   }
 
@@ -687,12 +725,14 @@
     --admin-muted-fg: #7b6848;
     --admin-border: rgba(130, 98, 37, 0.22);
     --admin-primary: #b8871c;
-    --admin-primary-fg: #fff9ef;
+    /* Texto oscuro sobre dorado: 5.5:1 (el marfil #fff9ef daba 3.07:1). */
+    --admin-primary-fg: #1f170b;
     --admin-accent: #d4af37;
     --admin-accent-2: #7a4b16;
     --admin-positive: #228b4f;
     --admin-warning: #c47b13;
     --admin-danger: #b64235;
+    --admin-info: #2f7dc0;
     --admin-sidebar: rgba(39, 26, 9, 0.94);
     --admin-sidebar-fg: #fff4d7;
     --admin-topbar: rgba(255, 249, 239, 0.9);
@@ -749,6 +789,7 @@
     --admin-positive: #59d487;
     --admin-warning: #f3a43b;
     --admin-danger: #ff6b57;
+    --admin-info: #6fb4ea;
     --admin-sidebar: rgba(9, 7, 4, 0.92);
     --admin-sidebar-fg: #f8f1df;
     --admin-topbar: rgba(10, 8, 5, 0.86);
@@ -770,15 +811,18 @@
     --admin-card: #fafbff;
     --admin-card-soft: rgba(250, 251, 255, 0.68);
     --admin-muted: #e1e4ef;
-    --admin-muted-fg: #697089;
+    /* Gris azulado oscurecido: 4.85:1 sobre --admin-bg (el #697089 daba 4.31:1). */
+    --admin-muted-fg: #616881;
     --admin-border: rgba(76, 82, 122, 0.22);
-    --admin-primary: #6668f4;
+    /* Violeta oscurecido: 5.3:1 con texto blanco (el #6668f4 daba 4.33:1). */
+    --admin-primary: #5558e8;
     --admin-primary-fg: #ffffff;
     --admin-accent: #9b8cff;
     --admin-accent-2: #2f335a;
     --admin-positive: #2f9f72;
     --admin-warning: #c47a22;
     --admin-danger: #cc4f64;
+    --admin-info: #2f6fef;
     --admin-sidebar: rgba(13, 15, 26, 0.92);
     --admin-sidebar-fg: #f4f2ff;
     --admin-topbar: rgba(250, 251, 255, 0.9);
@@ -805,6 +849,7 @@
     --admin-positive: #54df99;
     --admin-warning: #f0a748;
     --admin-danger: #ff6a7d;
+    --admin-info: #7aa8ff;
     --admin-sidebar: rgba(5, 6, 10, 0.86);
     --admin-sidebar-fg: #f7f5ff;
     --admin-topbar: rgba(5, 6, 10, 0.86);
@@ -825,12 +870,14 @@
     --admin-muted-fg: #567087;
     --admin-border: rgba(56, 189, 248, 0.24);
     --admin-primary: #0ea5e9;
-    --admin-primary-fg: #f8fcff;
+    /* Texto azul noche sobre celeste: 6.9:1 (el #f8fcff daba 2.69:1). */
+    --admin-primary-fg: #03111f;
     --admin-accent: #a855f7;
     --admin-accent-2: #f973b8;
     --admin-positive: #12b981;
     --admin-warning: #f59e0b;
     --admin-danger: #ef466f;
+    --admin-info: var(--admin-primary);
     --admin-sidebar: rgba(3, 10, 28, 0.92);
     --admin-sidebar-fg: #eaf8ff;
     --admin-topbar: rgba(246, 251, 255, 0.9);
@@ -857,6 +904,7 @@
     --admin-positive: #5eead4;
     --admin-warning: #fbbf24;
     --admin-danger: #fb7185;
+    --admin-info: var(--admin-primary);
     --admin-sidebar: rgba(2, 7, 22, 0.82);
     --admin-sidebar-fg: #e9f8ff;
     --admin-topbar: rgba(2, 7, 22, 0.86);
@@ -877,12 +925,14 @@
     --admin-muted-fg: #7b5938;
     --admin-border: rgba(255, 106, 0, 0.22);
     --admin-primary: #f97316;
-    --admin-primary-fg: #fff8f1;
+    /* Texto marrón noche sobre naranja: 7:1 (el #fff8f1 daba 2.66:1). */
+    --admin-primary-fg: #140800;
     --admin-accent: #ffb000;
     --admin-accent-2: #22c55e;
     --admin-positive: #16a34a;
     --admin-warning: #f59e0b;
     --admin-danger: #dc2626;
+    --admin-info: #2f8fd1;
     --admin-sidebar: rgba(20, 10, 2, 0.94);
     --admin-sidebar-fg: #fff7ed;
     --admin-topbar: rgba(255, 250, 244, 0.9);
@@ -909,6 +959,7 @@
     --admin-positive: #39d173;
     --admin-warning: #ffb000;
     --admin-danger: #ff5a43;
+    --admin-info: #4fb2ff;
     --admin-sidebar: rgba(8, 5, 2, 0.88);
     --admin-sidebar-fg: #fff3e5;
     --admin-topbar: rgba(8, 5, 2, 0.86);
@@ -1093,7 +1144,7 @@
   }
 
   .admin-kpi-card[data-tone="blue"] {
-    --kpi-tone: #38bdf8;
+    --kpi-tone: var(--admin-info);
   }
 
   .admin-kpi-card[data-tone="amber"] {
@@ -1162,4 +1213,3 @@
       animation-duration: 0.01ms !important;
     }
   }
-}
