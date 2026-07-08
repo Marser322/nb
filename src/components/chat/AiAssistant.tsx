@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, X, Send, Scissors, Sparkles, Calendar, MapPin, DollarSign, ArrowRight, Wallet, Settings, Package } from "lucide-react";
+import { MessageSquare, X, Send, Scissors, Sparkles, Calendar, MapPin, DollarSign, ArrowRight, Wallet, Settings, Package, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePathname } from "next/navigation";
 import { useFeatures } from "@/lib/features";
+import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 
 type ServiceItem = {
@@ -64,7 +65,8 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
   const pathname = usePathname();
   const { features } = useFeatures();
   const [isOpen, setIsOpen] = useState(false);
-  
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
   // Determine mode and visibility
   const isAdminRoute = pathname.startsWith('/admin') && !pathname.startsWith('/admin-login');
   const isClientRoute = pathname === '/' || 
@@ -98,6 +100,17 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
     messagesEndRef.current?.scrollIntoView({ behavior, block: "nearest" });
   }, []);
 
+  // Detectar sesión iniciada (solo relevante en modo cliente, para el quick reply "Mi próximo turno")
+  useEffect(() => {
+    if (resolvedMode === 'admin') return;
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => setIsLoggedIn(!!user));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session?.user);
+    });
+    return () => subscription.unsubscribe();
+  }, [resolvedMode]);
+
   // Dynamic quick actions
   const getQuickActions = () => {
     if (resolvedMode === 'admin') {
@@ -114,7 +127,11 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
         { label: "Sucursales", icon: MapPin },
       ];
       if (features.reservas_online) {
+        actions.push({ label: "¿Hay lugar mañana?", icon: Calendar });
         actions.push({ label: "Reservar Turno", icon: Calendar });
+      }
+      if (isLoggedIn) {
+        actions.push({ label: "Mi próximo turno", icon: Clock });
       }
       return actions;
     }
