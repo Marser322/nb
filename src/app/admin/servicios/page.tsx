@@ -87,7 +87,6 @@ export default function AdminServiciosPage() {
     }, [supabase]);
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         loadServices(false);
     }, [loadServices]);
 
