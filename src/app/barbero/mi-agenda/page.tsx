@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { formatPrice, cn } from "@/lib/utils";
 import {
+    APPOINTMENT_STATUS,
     APPOINTMENT_STATUS_LABELS,
     APPOINTMENT_STATUS_COLORS,
 } from "@/lib/constants";
@@ -106,7 +107,7 @@ export default function BarberoAgendaPage() {
             .select("*, service:services(*), client:profiles(*)")
             .eq("barber_id", session.barberId)
             .eq("appointment_date", selectedDate)
-            .not("status", "eq", "cancelled")
+            .not("status", "eq", APPOINTMENT_STATUS.CANCELLED)
             .order("start_time");
 
         setAppointments(appointmentsData || []);
@@ -156,9 +157,9 @@ export default function BarberoAgendaPage() {
     // Estadísticas del día
     const stats = {
         total: appointments.length,
-        pendientes: appointments.filter((a) => a.status === "pending").length,
-        confirmadas: appointments.filter((a) => a.status === "confirmed").length,
-        completadas: appointments.filter((a) => a.status === "completed").length,
+        pendientes: appointments.filter((a) => a.status === APPOINTMENT_STATUS.PENDING).length,
+        confirmadas: appointments.filter((a) => a.status === APPOINTMENT_STATUS.CONFIRMED).length,
+        completadas: appointments.filter((a) => a.status === APPOINTMENT_STATUS.COMPLETED).length,
     };
 
     // Citas activas (pendiente/confirmada), ordenadas, para calcular "Ahora sigue"
@@ -166,7 +167,11 @@ export default function BarberoAgendaPage() {
     const activeAppointments = useMemo(
         () =>
             appointments
-                .filter((a) => a.status === "pending" || a.status === "confirmed")
+                .filter(
+                    (a) =>
+                        a.status === APPOINTMENT_STATUS.PENDING ||
+                        a.status === APPOINTMENT_STATUS.CONFIRMED
+                )
                 .sort((a, b) => a.start_time.localeCompare(b.start_time)),
         [appointments]
     );
@@ -299,14 +304,16 @@ export default function BarberoAgendaPage() {
                 </Card>
                 <Card className="border-border/50">
                     <CardContent className="p-4">
-                        <p className="text-3xl font-bold text-yellow-400">{stats.pendientes}</p>
+                        <p className="text-3xl font-bold text-primary">{stats.pendientes}</p>
                         <p className="text-sm text-muted-foreground">Pendientes</p>
                     </CardContent>
                 </Card>
                 <Card className="border-border/50">
                     <CardContent className="p-4">
-                        <p className="text-3xl font-bold text-blue-400">{stats.confirmadas}</p>
-                        <p className="text-sm text-muted-foreground">Confirmadas</p>
+                        <p className="text-3xl font-bold">{stats.confirmadas}</p>
+                        <p className="text-sm text-muted-foreground">
+                            Confirmadas · {stats.completadas} completadas
+                        </p>
                     </CardContent>
                 </Card>
                 <Card className="border-border/50">
@@ -437,11 +444,11 @@ export default function BarberoAgendaPage() {
                                             {cita.service && formatPrice(cita.service.price)}
                                         </p>
 
-                                        {cita.status === "pending" && (
+                                        {cita.status === APPOINTMENT_STATUS.PENDING && (
                                             <div className="flex gap-2">
                                                 <Button
                                                     size="sm"
-                                                    onClick={() => updateStatus(cita.id, "confirmed")}
+                                                    onClick={() => updateStatus(cita.id, APPOINTMENT_STATUS.CONFIRMED)}
                                                 >
                                                     <CheckCircle className="h-4 w-4 mr-1" />
                                                     Confirmar
@@ -449,24 +456,23 @@ export default function BarberoAgendaPage() {
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    className="text-red-400 border-red-400/30"
-                                                    onClick={() => updateStatus(cita.id, "cancelled")}
+                                                    className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                                                    onClick={() => updateStatus(cita.id, APPOINTMENT_STATUS.CANCELLED)}
                                                 >
                                                     <XCircle className="h-4 w-4" />
                                                 </Button>
                                             </div>
                                         )}
 
-                                        {cita.status === "confirmed" && (
+                                        {cita.status === APPOINTMENT_STATUS.CONFIRMED && (
                                             <div className="flex gap-2">
                                                 <Button
                                                     size="sm"
-                                                    className="bg-green-500 hover:bg-green-600"
                                                     onClick={() => {
                                                         if (features.contabilidad) {
                                                             setChargeApt(cita);
                                                         } else {
-                                                            updateStatus(cita.id, "completed");
+                                                            updateStatus(cita.id, APPOINTMENT_STATUS.COMPLETED);
                                                         }
                                                     }}
                                                 >
@@ -476,8 +482,8 @@ export default function BarberoAgendaPage() {
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    className="text-gray-400 border-gray-400/30"
-                                                    onClick={() => updateStatus(cita.id, "no_show")}
+                                                    className="text-muted-foreground"
+                                                    onClick={() => updateStatus(cita.id, APPOINTMENT_STATUS.NO_SHOW)}
                                                 >
                                                     <XCircle className="h-4 w-4 mr-1" />
                                                     No vino
@@ -485,9 +491,12 @@ export default function BarberoAgendaPage() {
                                             </div>
                                         )}
 
-                                        {cita.status === "completed" && (
-                                            <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-                                                ✓ Completada
+                                        {cita.status === APPOINTMENT_STATUS.COMPLETED && (
+                                            <Badge
+                                                variant="outline"
+                                                className={APPOINTMENT_STATUS_COLORS[APPOINTMENT_STATUS.COMPLETED]}
+                                            >
+                                                {APPOINTMENT_STATUS_LABELS[APPOINTMENT_STATUS.COMPLETED]}
                                             </Badge>
                                         )}
                                     </div>
