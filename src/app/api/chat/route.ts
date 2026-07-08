@@ -83,6 +83,84 @@ type ChatBranch = {
   hours?: string;
 };
 
+/**
+ * Parsea la respuesta de texto del LLM: si viene como bloque JSON con "content"/"data"
+ * (posiblemente envuelto en ```json), lo desestructura; si no, lo trata como texto plano.
+ */
+function parseAssistantText(text: string): { content: string; data: AssistantData | null } {
+  try {
+    const cleanJson = text.replace(/```json\n?|```/g, "").trim();
+    const parsed = JSON.parse(cleanJson);
+    if (parsed && typeof parsed === "object" && "content" in parsed) {
+      return { content: parsed.content, data: parsed.data ?? null };
+    }
+  } catch {
+    // Texto plano, no es JSON estructurado
+  }
+  return { content: text, data: null };
+}
+
+/**
+ * Llama a un proveedor LLM (Gemini u OpenAI) con timeout de 10s y manejo de errores.
+ * Devuelve el texto de la respuesta o null si el proveedor falló/no respondió a tiempo,
+ * para que el caller pueda seguir con la cascada (nunca lanza).
+ */
+async function callLLM(
+  provider: "gemini" | "openai",
+  apiKey: string,
+  systemPrompt: string,
+  messages: ChatMessage[]
+): Promise<string | null> {
+  try {
+    if (provider === "gemini") {
+      const geminiContents = messages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }]
+        }));
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: geminiContents,
+            systemInstruction: { parts: [{ text: systemPrompt }] }
+          }),
+          signal: AbortSignal.timeout(10000)
+        }
+      );
+
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    }
+
+    // OpenAI
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{ role: "system", content: systemPrompt }, ...messages]
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content ?? null;
+  } catch (err) {
+    console.error(`Error calling ${provider} LLM provider:`, err);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -306,104 +384,23 @@ Estructura JSON permitida en "data":
 4. { "type": "action", "label": "Texto del botón", "url": "/ruta" }
 `;
 
-    // 3. Connect with LLM Providers if keys are present
+    // 3. Connect with LLM Providers if keys are present (cascada secuencial real:
+    // Gemini -> si falla o no hay texto -> OpenAI -> si falla -> motor local)
     const geminiKey = process.env.GEMINI_API_KEY;
     const openAiKey = process.env.OPENAI_API_KEY;
+    const fullSystemPrompt = `${systemPrompt}\n${structuredOutputInstruction}`;
+
+    let llmText: string | null = null;
 
     if (geminiKey) {
-      const geminiContents = messages
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }]
-        }));
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: geminiContents,
-            systemInstruction: {
-              parts: [
-                {
-                  text: `${systemPrompt}\n${structuredOutputInstruction}`
-                }
-              ]
-            }
-          })
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          // Parse JSON if possible
-          try {
-            const cleanJson = text.replace(/```json\n?|```/g, "").trim();
-            const parsed = JSON.parse(cleanJson);
-            if (parsed && typeof parsed === "object" && "content" in parsed) {
-              return NextResponse.json({
-                role: "assistant",
-                content: parsed.content,
-                data: parsed.data
-              });
-            }
-          } catch {
-            // Treat as plain text
-          }
-
-          return NextResponse.json({
-            role: "assistant",
-            content: text
-          });
-        }
-      }
-    } else if (openAiKey) {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${openAiKey}`
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: `${systemPrompt}\n${structuredOutputInstruction}`
-            },
-            ...messages
-          ]
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const text = data.choices?.[0]?.message?.content;
-        if (text) {
-          try {
-            const cleanJson = text.replace(/```json\n?|```/g, "").trim();
-            const parsed = JSON.parse(cleanJson);
-            if (parsed && typeof parsed === "object" && "content" in parsed) {
-              return NextResponse.json({
-                role: "assistant",
-                content: parsed.content,
-                data: parsed.data
-              });
-            }
-          } catch {
-            // Treat as plain text
-          }
-
-          return NextResponse.json({
-            role: "assistant",
-            content: text
-          });
-        }
-      }
+      llmText = await callLLM("gemini", geminiKey, fullSystemPrompt, messages);
+    }
+    if (!llmText && openAiKey) {
+      llmText = await callLLM("openai", openAiKey, fullSystemPrompt, messages);
+    }
+    if (llmText) {
+      const { content, data } = parseAssistantText(llmText);
+      return NextResponse.json({ role: "assistant", content, data });
     }
 
     // 4. FALLBACK INTELIGENTE (Motor de Reglas Semántico Local)
