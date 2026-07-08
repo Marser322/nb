@@ -106,7 +106,16 @@ function ReservarPageContent() {
 
       if (paramBarberId) {
         const foundBarber = loadedBarbers.find((barber) => barber.id === paramBarberId);
-        if (foundBarber) setSelectedBarber(foundBarber);
+        if (foundBarber) {
+          setSelectedBarber(foundBarber);
+
+          // FASE 22 A2: si el barbero preseleccionado (rebook desde "Mi cuenta") tiene
+          // sucursal asignada, la auto-seleccionamos para evitar un paso redundante.
+          if (foundBarber.branch_id) {
+            const foundBranch = finalBranches.find((branch) => String(branch.id) === String(foundBarber.branch_id));
+            if (foundBranch) setSelectedBranch(foundBranch);
+          }
+        }
       }
 
       setIsLoading(false);

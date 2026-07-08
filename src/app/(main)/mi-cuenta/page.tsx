@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, differenceInWeeks } from "date-fns";
 import { es } from "date-fns/locale";
 import { Calendar, Clock, History, Loader2, MapPin, Package, Repeat, Scissors, ShoppingBag, User } from "lucide-react";
 import { Header, Footer } from "@/components/layout";
@@ -147,6 +147,18 @@ export default function MiCuentaPage() {
             barber: lastAppointment.barber,
         } satisfies HaircutHistoryWithRelations;
     }, [history, recentAppointments]);
+
+    // FASE 22 A1: fecha y cadencia de la última experiencia.
+    const lastExperienceMeta = useMemo(() => {
+        if (!lastExperience?.created_at) return null;
+        const date = parseISO(lastExperience.created_at);
+        const weeks = differenceInWeeks(new Date(), date);
+        return {
+            dateLabel: format(date, "d 'de' MMMM", { locale: es }),
+            cadenceLabel: weeks < 1 ? "Esta semana" : `Hace ${weeks} semana${weeks === 1 ? "" : "s"}`,
+            suggestRepeat: weeks >= 4,
+        };
+    }, [lastExperience]);
 
     const handleCancelSubscription = async (subId: string) => {
         if (!window.confirm("¿Estás seguro de que deseas cancelar este turno fijo semanal?")) {
@@ -298,11 +310,21 @@ export default function MiCuentaPage() {
                                                     <p className="text-sm text-muted-foreground">
                                                         {lastExperience.barber?.name || "Barbero NB"}
                                                     </p>
+                                                    {lastExperienceMeta && (
+                                                        <p className="text-xs text-primary/80 mt-1">
+                                                            {lastExperienceMeta.dateLabel} · {lastExperienceMeta.cadenceLabel}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
                                             {lastExperience.notes && (
                                                 <p className="rounded-lg border border-border bg-muted p-4 text-sm text-muted-foreground">
                                                     {lastExperience.notes}
+                                                </p>
+                                            )}
+                                            {lastExperienceMeta?.suggestRepeat && (
+                                                <p className="text-sm text-muted-foreground">
+                                                    ¿Volvemos a dejarlo impecable?
                                                 </p>
                                             )}
                                             <Button asChild className="w-full rounded-full">
