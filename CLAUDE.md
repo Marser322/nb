@@ -49,6 +49,7 @@ npm run lint    # eslint
 - Los estados de citas/órdenes y sus labels/colores viven en `src/lib/constants.ts` — no duplicar strings.
 - Integración lookbook→reserva vía query params (`/reservar?styleId=X&serviceId=Y`); reusar ese patrón para pre-cargar el wizard.
 - Skills de agentes vendorizadas en `.agents/skills/` (lock: `skills-lock.json`).
+- Loop de pulido vía `/polish` (skill en `.claude/skills/polish/`): cola, estados e historial en `briefs/POLISH_BACKLOG.md`; los briefs de polish siguen la numeración `FASE_NN` normal.
 - El repo vive en un disco externo: si git falla con "non-monotonic index", borrar los AppleDouble con `find .git -name '._*' -delete`.
 
 ## Roadmap y deuda conocida

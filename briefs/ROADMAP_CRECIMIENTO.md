@@ -112,6 +112,9 @@ Curadas por valor y diferenciación. Etiquetas: **[R]** ingreso recurrente · **
     retención, ranking de servicios, alerta de churn. Convierte el CRM en herramienta de decisión.
 11. **Try-on / recomendación de estilo con IA desde foto** **[D]** — extiende lookbook + chat:
     el cliente sube una foto y sugiere corte + servicio + barbero. Muy pocos en el rubro lo tienen.
+12. **Reserva end-to-end desde el chat** **[D]** — el asistente llama `book_appointment` y confirma
+    el turno dentro de la conversación (function calling). Detectada en el ciclo /polish FASE 20;
+    excluida de ese brief a propósito (el chat guía al wizard, no lo reemplaza — por ahora).
 
 ---
 
