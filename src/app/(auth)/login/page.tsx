@@ -43,6 +43,8 @@ function LoginPageContent() {
         if (error || !user) {
             if (error?.message.includes("Invalid login credentials")) {
                 toast.error("Email o contraseña incorrectos");
+            } else if (error?.message.includes("Email not confirmed")) {
+                toast.error("Tenés que confirmar tu email antes de entrar. Revisá tu casilla (y el spam).");
             } else {
                 toast.error("Error al iniciar sesión");
             }

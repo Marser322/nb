@@ -12,6 +12,7 @@ import { PasswordInput } from "@/components/shared/PasswordInput";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { ROUTES } from "@/lib/constants";
+import { normalizeUyPhone } from "@/lib/whatsapp";
 import { isDemoMode, useDemoAdminLogin } from "@/hooks/useDemoAdminLogin";
 
 export default function RegisterPage() {
@@ -41,6 +42,11 @@ export default function RegisterPage() {
 
         if (password.length < 6) {
             toast.error("La contraseña debe tener al menos 6 caracteres");
+            return;
+        }
+
+        if (phone.trim() && !normalizeUyPhone(phone)) {
+            toast.error("Ingresá un teléfono uruguayo válido (ej: 099 123 456)");
             return;
         }
 
