@@ -21,7 +21,7 @@
 | 1 | **Asistente IA (chat)** | Que responda las FAQs reales (disponibilidad viva vía `get_availability`, políticas, precios) y lleve al usuario a donde necesita con deep links; fallback local robusto; OpenAI como retry real ante fallo de Gemini. Pre-análisis hecho (ver abajo). | ejecutado |
 | 2 | **Wizard de reserva** | Deep links que salten pasos ya resueltos (auto-avance cuando hay selección por query params), menos fricción en el flujo de 6 pasos. | ejecutado |
 | 3 | **Mi cuenta / fidelización** | Explotar `haircut_history` para "lo mismo de la vez pasada": rebook en 1 toque desde la última cita. | ejecutado |
-| 4 | **Skins visuales del admin** (código GPT en `feat/visual-skins`, `27cd627`) | Estabilizar: anti-FOUC, skins sin fuga al sitio público (branding NB inmutable), CSS en `@layer components` sin `!important`, contraste 4 skins × claro/oscuro. | brief listo (FASE_23) |
+| 4 | **Skins visuales del admin** (código GPT en `feat/visual-skins`, `27cd627`) | Estabilizar: anti-FOUC, skins sin fuga al sitio público (branding NB inmutable), CSS en `@layer components` sin `!important`, contraste 4 skins × claro/oscuro. | ejecutado |
 | 5 | **Dashboard admin** | Que las métricas respondan las preguntas reales del dueño (¿cómo viene el mes?, ¿quién rinde?, ¿qué se cae?). Correrlo DESPUÉS de los skins (pegan de lleno en dashboard/crm-cards). | pendiente |
 | 6 | **Home + lookbook** | Conversión hacia reserva; que el patrón lookbook→wizard (`?styleId=&serviceId=`) rinda al máximo. | pendiente |
 | 7 | **Portal barbero (mi-agenda)** | Profundidad del día a día: agenda clara, ingresos del día, próxima cita a un vistazo. | pendiente |
@@ -45,4 +45,4 @@ Recolectado el 2026-07-08 sobre `src/app/api/chat/route.ts` y `src/components/ch
 | 2026-07-08 | #1 Asistente IA (chat) | `FASE_20_polish_chat.md` | merge `62d15d4` (`feat/polish-chat`) |
 | 2026-07-08 | #2 Wizard de reserva | `FASE_21_polish_wizard_reserva.md` | merge `d1e28a9` (`feat/polish-wizard-reserva`) |
 | 2026-07-08 | #3 Mi cuenta / fidelización | `FASE_22_polish_mi_cuenta.md` | merge `4fa1e20` (`feat/polish-mi-cuenta`) |
-| 2026-07-08 | #4 Skins visuales del admin | `FASE_23_polish_skins.md` | pendiente (sobre `feat/visual-skins`) |
+| 2026-07-08 | #4 Skins visuales del admin | `FASE_23_polish_skins.md` | merge `db9249a` (`feat/visual-skins`; Sonnet caído por API 500, terminado por Fable) |
