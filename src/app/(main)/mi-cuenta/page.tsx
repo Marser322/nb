@@ -6,7 +6,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO, differenceInWeeks } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar, Clock, History, Loader2, MapPin, Package, Repeat, Scissors, ShoppingBag, User } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Calendar, Clock, History, Loader2, MapPin, Package, Pencil, Repeat, Scissors, ShoppingBag, User } from "lucide-react";
 import { Header, Footer } from "@/components/layout";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { Button } from "@/components/ui/button";
@@ -20,6 +23,15 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import {
+    Form,
+    FormControl,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import {
     APPOINTMENT_STATUS_COLORS,
@@ -66,6 +78,18 @@ const cancellationWindowLabel = BUSINESS_CONFIG.cancellationWindow % 60 === 0
     ? `${BUSINESS_CONFIG.cancellationWindow / 60} hora${BUSINESS_CONFIG.cancellationWindow / 60 === 1 ? "" : "s"}`
     : `${BUSINESS_CONFIG.cancellationWindow} minutos`;
 
+const profileFormSchema = z.object({
+    full_name: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres"),
+    phone: z
+        .string()
+        .trim()
+        .regex(/^[0-9\s]{8,12}$/, "Ingresá un teléfono válido (8 a 12 dígitos)")
+        .optional()
+        .or(z.literal("")),
+});
+
+type ProfileFormValues = z.infer<typeof profileFormSchema>;
+
 export default function MiCuentaPage() {
     const { features } = useFeatures();
     const router = useRouter();
@@ -79,6 +103,13 @@ export default function MiCuentaPage() {
     const [orders, setOrders] = useState<OrderWithRelations[]>([]);
     const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
     const [isCancelling, setIsCancelling] = useState(false);
+    const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+    const profileForm = useForm<ProfileFormValues>({
+        resolver: zodResolver(profileFormSchema),
+        defaultValues: { full_name: "", phone: "" },
+    });
 
     useEffect(() => {
         async function loadAccount() {
@@ -153,6 +184,16 @@ export default function MiCuentaPage() {
 
         loadAccount();
     }, [router, supabase]);
+
+    // FASE 22 D: precargar el form de edición de perfil cuando se abre el dialog.
+    useEffect(() => {
+        if (isEditProfileOpen && profile) {
+            profileForm.reset({
+                full_name: profile.full_name || "",
+                phone: profile.phone || "",
+            });
+        }
+    }, [isEditProfileOpen, profile, profileForm]);
 
     const lastExperience = useMemo(() => {
         if (history[0]) return history[0];
@@ -256,6 +297,32 @@ export default function MiCuentaPage() {
         }
     };
 
+    const onSubmitProfile = async (values: ProfileFormValues) => {
+        if (!profile) return;
+        setIsSavingProfile(true);
+
+        try {
+            const nextFullName = values.full_name.trim();
+            const nextPhone = values.phone?.trim() || null;
+
+            const { error } = await supabase
+                .from("profiles")
+                .update({ full_name: nextFullName, phone: nextPhone })
+                .eq("id", profile.id);
+
+            if (error) throw error;
+
+            setProfile(prev => (prev ? { ...prev, full_name: nextFullName, phone: nextPhone } : prev));
+            toast.success("Perfil actualizado correctamente");
+            setIsEditProfileOpen(false);
+        } catch (err) {
+            console.error("Error updating profile:", err);
+            toast.error("No se pudo actualizar el perfil. Intentá de nuevo.");
+        } finally {
+            setIsSavingProfile(false);
+        }
+    };
+
     const repeatHref = lastExperience
         ? `${ROUTES.RESERVAR}?serviceId=${lastExperience.service_id}&barberId=${lastExperience.barber_id}`
         : ROUTES.RESERVAR;
@@ -304,11 +371,20 @@ export default function MiCuentaPage() {
                             </div>
 
                             <Card id="profile-card" className="border-border bg-card/70">
-                                <CardHeader>
+                                <CardHeader className="flex flex-row items-center justify-between gap-2">
                                     <CardTitle className="flex items-center gap-2">
                                         <User className="h-5 w-5 text-primary" />
                                         Perfil
                                     </CardTitle>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setIsEditProfileOpen(true)}
+                                        className="h-8 gap-1.5 rounded-full px-3 text-xs text-muted-foreground hover:text-foreground"
+                                    >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                        Editar
+                                    </Button>
                                 </CardHeader>
                                 <CardContent className="space-y-5">
                                     <div>
@@ -317,7 +393,13 @@ export default function MiCuentaPage() {
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground">Teléfono</p>
-                                        <p className="text-foreground">{profile?.phone || "Sin teléfono cargado"}</p>
+                                        {profile?.phone ? (
+                                            <p className="text-foreground">{profile.phone}</p>
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground italic">
+                                                Agregalo para que podamos avisarte de tu turno
+                                            </p>
+                                        )}
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground">Próximas reservas</p>
@@ -699,6 +781,61 @@ export default function MiCuentaPage() {
                             {isCancelling ? "Cancelando…" : "Sí, cancelar"}
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* FASE 22 D: dialog de edición de perfil */}
+            <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Editar perfil</DialogTitle>
+                        <DialogDescription>
+                            Mantené tus datos al día para que podamos avisarte de tus turnos.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Form {...profileForm}>
+                        <form onSubmit={profileForm.handleSubmit(onSubmitProfile)} className="space-y-4">
+                            <FormField
+                                control={profileForm.control}
+                                name="full_name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Nombre completo</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Tu nombre" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={profileForm.control}
+                                name="phone"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Teléfono</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="099 123 456" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setIsEditProfileOpen(false)}
+                                    disabled={isSavingProfile}
+                                >
+                                    Volver
+                                </Button>
+                                <Button type="submit" disabled={isSavingProfile}>
+                                    {isSavingProfile ? "Guardando…" : "Guardar cambios"}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
                 </DialogContent>
             </Dialog>
         </div>
