@@ -2,23 +2,24 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { useState, useEffect, Suspense, useMemo, type KeyboardEvent } from "react";
+import Link from "next/link";
+import { useState, useEffect, useRef, Suspense, useMemo, type KeyboardEvent } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { format, addDays, isBefore, startOfToday, isToday } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar, Clock, User, Scissors, ArrowRight, ArrowLeft, Check, MapPin, Sparkles, Repeat } from "lucide-react";
+import { Calendar, Clock, User, Scissors, ArrowRight, ArrowLeft, Check, MapPin, Sparkles, Repeat, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Header, Footer } from "@/components/layout";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { cn, formatPrice, generateTimeSlotsFromRange, calculateEndTime } from "@/lib/utils";
-import { BRANCHES } from "@/lib/constants";
+import { BRANCHES, ROUTES } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { Service, Barber, DayAvailability } from "@/types/database.types";
 import { toast } from "sonner";
 import { STATIC_STYLES, getBarberAvatarUrl, STATIC_SERVICES, STATIC_BARBERS } from "@/lib/static-data";
-import { bookAppointment, fetchAvailability } from "@/lib/booking";
+import { bookAppointment, fetchAvailability, dayHasFreeSlot } from "@/lib/booking";
 import { useFeatures } from "@/lib/features";
 
 interface Branch {
@@ -28,6 +29,16 @@ interface Branch {
   image: string;
   phone: string;
   tone: string;
+}
+
+// Referencia de estilo del wizard: mezcla de la tabla `lookbook` (DB) y `STATIC_STYLES`
+// (fallback). Solo se usan estos campos comunes en todo el flujo de reserva.
+interface StyleItem {
+  id: string;
+  title: string;
+  image_url: string;
+  serviceId?: string | null;
+  tags?: string[];
 }
 
 // Pasos del flujo de reserva
@@ -45,17 +56,17 @@ function ReservarPageContent() {
   const [draftChecked, setDraftChecked] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedStyle, setSelectedStyle] = useState<typeof STATIC_STYLES[0] | null>(
-    () => STATIC_STYLES.find((style) => style.id === paramStyleId) ?? null
-  );
+  const [selectedStyle, setSelectedStyle] = useState<StyleItem | null>(null);
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [hoveredService, setHoveredService] = useState<Service | null>(null);
+  const [isConfirmed, setIsConfirmed] = useState(false);
 
   const [services, setServices] = useState<Service[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [styles, setStyles] = useState<StyleItem[]>(STATIC_STYLES);
   const [availability, setAvailability] = useState<DayAvailability[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
@@ -63,20 +74,33 @@ function ReservarPageContent() {
   const [isRecurring, setIsRecurring] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
+  const stepContentRef = useRef<HTMLDivElement>(null);
 
-  // Cargar servicios, barberos y sucursales
+  // Cargar servicios, barberos, sucursales y lookbook
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
 
-      const [servicesRes, barbersRes, branchesRes] = await Promise.all([
+      const [servicesRes, barbersRes, branchesRes, lookbookRes] = await Promise.all([
         supabase.from("services").select("*").eq("is_active", true).order("sort_order"),
         supabase.from("barbers").select("*").eq("is_active", true),
         supabase.from("branches").select("*").eq("is_active", true).order("name"),
+        supabase.from("lookbook").select("*").order("created_at", { ascending: false }),
       ]);
 
       const loadedServices = servicesRes?.data && servicesRes.data.length > 0 ? servicesRes.data : STATIC_SERVICES;
       const loadedBarbers = barbersRes?.data && barbersRes.data.length > 0 ? barbersRes.data : STATIC_BARBERS;
+      const loadedStyles: StyleItem[] =
+        lookbookRes?.data && lookbookRes.data.length > 0
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ? lookbookRes.data.map((s: any) => ({
+              id: s.id,
+              title: s.title,
+              image_url: s.image_url,
+              serviceId: s.serviceId ?? null,
+              tags: s.tags ?? [],
+            }))
+          : STATIC_STYLES;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const loadedBranches = (branchesRes?.data || []).map((dbb: any) => {
         const staticB = BRANCHES.find((sb) => sb.name === dbb.name);
@@ -95,24 +119,64 @@ function ReservarPageContent() {
       setServices(loadedServices);
       setBarbers(loadedBarbers);
       setBranches(finalBranches);
+      setStyles(loadedStyles);
+
+      let resolvedService: Service | null = null;
+      let resolvedStyle: StyleItem | null = null;
+      let resolvedBarber: Barber | null = null;
 
       if (paramServiceId) {
         const numericServiceId = Number(paramServiceId);
-        const foundService = loadedServices.find((service) => service.id === paramServiceId)
-          || loadedServices.find((service) => Number.isFinite(numericServiceId) && service.sort_order === numericServiceId);
+        resolvedService = loadedServices.find((service) => service.id === paramServiceId)
+          || loadedServices.find((service) => Number.isFinite(numericServiceId) && service.sort_order === numericServiceId)
+          || null;
 
-        if (foundService) setSelectedService(foundService);
+        if (resolvedService) setSelectedService(resolvedService);
+      }
+
+      if (paramStyleId) {
+        // El Lookbook público (`/lookbook`) sigue usando ids estáticos aunque la DB
+        // tenga registros reales, así que buscamos primero en la lista cargada y,
+        // si no aparece, en STATIC_STYLES (compatibilidad con links viejos/estáticos).
+        resolvedStyle = loadedStyles.find((style) => style.id === paramStyleId)
+          ?? STATIC_STYLES.find((style) => style.id === paramStyleId)
+          ?? null;
+        if (resolvedStyle) setSelectedStyle(resolvedStyle);
       }
 
       if (paramBarberId) {
-        const foundBarber = loadedBarbers.find((barber) => barber.id === paramBarberId);
-        if (foundBarber) setSelectedBarber(foundBarber);
+        resolvedBarber = loadedBarbers.find((barber) => barber.id === paramBarberId) ?? null;
+        if (resolvedBarber) setSelectedBarber(resolvedBarber);
       }
+
+      // Sucursal única: se auto-selecciona (el paso Sucursal queda resuelto)
+      let resolvedBranch: Branch | null = null;
+      if (finalBranches.length === 1) {
+        resolvedBranch = finalBranches[0];
+        setSelectedBranch(resolvedBranch);
+      }
+
+      // Arranque inteligente: aterrizar en el primer paso sin resolver.
+      // El draft-check (efecto siguiente) tiene prioridad y puede pisar esto con el paso 5.
+      let landingStep = 0;
+      if (resolvedBranch) {
+        landingStep = 1;
+        if (resolvedService) {
+          landingStep = 2;
+          if (resolvedStyle) {
+            landingStep = 3;
+            if (resolvedBarber) {
+              landingStep = 4;
+            }
+          }
+        }
+      }
+      if (landingStep > 0) setCurrentStep(landingStep);
 
       setIsLoading(false);
     }
     loadData();
-  }, [paramBarberId, paramServiceId, supabase]);
+  }, [paramBarberId, paramServiceId, paramStyleId, supabase]);
 
   // Rehidratar borrador de sessionStorage
   useEffect(() => {
@@ -141,7 +205,9 @@ function ReservarPageContent() {
         // Rehidratar si los elementos existen en las listas cargadas
         const branch = branches.find((b) => String(b.id) === String(draft.branchId)) ?? null;
         const service = services.find((s) => s.id === draft.serviceId) ?? null;
-        const style = STATIC_STYLES.find((st) => st.id === draft.styleId) ?? null;
+        const style = styles.find((st) => st.id === draft.styleId)
+          ?? STATIC_STYLES.find((st) => st.id === draft.styleId)
+          ?? null;
         const barber = barbers.find((ba) => ba.id === draft.barberId) ?? null;
 
         if (branch && service && barber && draft.dateISO && draft.time) {
@@ -166,7 +232,7 @@ function ReservarPageContent() {
     }
 
     checkDraft();
-  }, [isLoading, draftChecked, branches, services, barbers, supabase]);
+  }, [isLoading, draftChecked, branches, services, barbers, styles, supabase]);
 
   // Filtrar barberos según la sucursal seleccionada (los barberos sin branch_id asignado se muestran en todas)
   const filteredBarbers = useMemo(() => {
@@ -216,12 +282,17 @@ function ReservarPageContent() {
     loadAvailability();
   }, [selectedBarber, supabase]);
 
-  // Generar próximos 14 días disponibles a partir de la respuesta del RPC
+  // Generar próximos 14 días disponibles a partir de la respuesta del RPC.
+  // Los días abiertos pero completos (sin hueco para la duración del servicio) se
+  // mantienen visibles y deshabilitados en vez de ocultarse.
   const availableDates = useMemo(() => {
     return availability
       .filter((day) => day.is_open)
-      .map((day) => new Date(day.day + "T00:00:00"));
-  }, [availability]);
+      .map((day) => ({
+        date: new Date(day.day + "T00:00:00"),
+        hasFreeSlot: selectedService ? dayHasFreeSlot(day, selectedService.duration_minutes) : true,
+      }));
+  }, [availability, selectedService]);
 
   // Verificar si un slot está disponible en el cliente
   const isSlotAvailable = (time: string): boolean => {
@@ -280,6 +351,13 @@ function ReservarPageContent() {
     return true;
   };
 
+  // Si el día elegido no deja ningún horario disponible (ni siquiera uno)
+  const hasAnyTimeSlot = useMemo(() => {
+    if (timeSlots.length === 0) return false;
+    return timeSlots.some((time) => isSlotAvailable(time));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeSlots, selectedDayConfig, selectedService, selectedDate]);
+
   const handleBranchSelect = (branch: Branch) => {
     setSelectedBranch(branch);
     setSelectedBarber(null);
@@ -326,15 +404,21 @@ function ReservarPageContent() {
     }
   };
 
+  const scrollToStepContent = () => {
+    stepContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const nextStep = () => {
     if (canProceed() && currentStep < STEPS.length - 1) {
       setCurrentStep(currentStep + 1);
+      scrollToStepContent();
     }
   };
 
   const prevStep = () => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
+      scrollToStepContent();
     }
   };
 
@@ -398,15 +482,7 @@ function ReservarPageContent() {
           : "¡Reserva confirmada en modo local! Te esperamos."
       );
 
-      // Reset form
-      setCurrentStep(0);
-      setSelectedBranch(null);
-      setSelectedService(null);
-      setSelectedStyle(null);
-      setSelectedBarber(null);
-      setSelectedDate(null);
-      setSelectedTime(null);
-      setIsRecurring(false);
+      setIsConfirmed(true);
       setIsSubmitting(false);
       return;
     }
@@ -473,7 +549,13 @@ function ReservarPageContent() {
     // Borrar draft tras submit exitoso
     sessionStorage.removeItem("nb-reserva-draft");
 
-    // Reset form
+    setIsConfirmed(true);
+    setIsSubmitting(false);
+  };
+
+  // Reinicia el wizard por completo (usado tras la pantalla de éxito)
+  const resetForm = () => {
+    setIsConfirmed(false);
     setCurrentStep(0);
     setSelectedBranch(null);
     setSelectedService(null);
@@ -482,8 +564,100 @@ function ReservarPageContent() {
     setSelectedDate(null);
     setSelectedTime(null);
     setIsRecurring(false);
-    setIsSubmitting(false);
   };
+
+  // Pantalla de éxito: cierra el ciclo de la reserva con resumen y CTAs.
+  // Guard después de todos los hooks del componente (regla de oro).
+  if (isConfirmed) {
+    const isRecurringVal = isRecurring && features.suscripciones;
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+
+        <main className="pb-16">
+          <div className="container mx-auto px-4 py-20 md:py-28 max-w-2xl">
+            <div className="text-center mb-10 animate-in fade-in duration-500">
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 border border-primary/30">
+                <Check className="h-10 w-10 text-primary" />
+              </div>
+              <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-3">
+                ¡Reserva confirmada!
+              </h1>
+              <p className="text-muted-foreground">
+                Te esperamos. Guardamos este resumen en tu cuenta para que lo consultes cuando quieras.
+              </p>
+            </div>
+
+            <Card className="overflow-hidden border border-border bg-card/50 backdrop-blur-sm animate-in fade-in duration-500">
+              <CardHeader className="bg-gradient-to-r from-card to-background border-b border-border">
+                <CardTitle className="text-lg">Resumen de tu turno</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 p-6">
+                <div className="flex justify-between py-2 border-b border-border/50 text-sm">
+                  <span className="text-muted-foreground">Sucursal</span>
+                  <span className="font-medium text-foreground">{selectedBranch?.name}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-border/50 text-sm">
+                  <span className="text-muted-foreground">Servicio</span>
+                  <span className="font-medium text-foreground">{selectedService?.name}</span>
+                </div>
+                {selectedStyle && (
+                  <div className="flex justify-between py-2 border-b border-border/50 text-sm items-center">
+                    <span className="text-muted-foreground">Referencia de Estilo</span>
+                    <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-2 py-1 rounded">
+                      <span className="font-bold text-xs text-primary">{selectedStyle.title}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-between py-2 border-b border-border/50 text-sm">
+                  <span className="text-muted-foreground">Barbero</span>
+                  <span className="font-medium text-foreground">{selectedBarber?.name}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-border/50 text-sm">
+                  <span className="text-muted-foreground">Fecha</span>
+                  <span className="font-bold text-foreground">
+                    {selectedDate && format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
+                  </span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-border/50 text-sm">
+                  <span className="text-muted-foreground">Hora</span>
+                  <span className="font-bold text-foreground">
+                    {selectedTime} - {selectedService && selectedTime && calculateEndTime(selectedTime, selectedService.duration_minutes)}
+                  </span>
+                </div>
+                {isRecurringVal && (
+                  <div className="flex justify-between py-2 border-b border-border/50 text-sm">
+                    <span className="text-muted-foreground">Turno fijo</span>
+                    <span className="font-medium text-primary">Activado (semanal)</span>
+                  </div>
+                )}
+                <div className="flex justify-between py-4 text-base">
+                  <span className="font-bold text-foreground">Total a pagar en local</span>
+                  <span className="font-bold text-primary text-lg">
+                    {selectedService && formatPrice(selectedService.price)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center animate-in fade-in duration-500">
+              <Button asChild size="lg" className="gap-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90">
+                <Link href={ROUTES.MI_CUENTA}>
+                  Ver mis reservas
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button variant="outline" size="lg" className="rounded-full" onClick={resetForm}>
+                Hacer otra reserva
+              </Button>
+            </div>
+          </div>
+        </main>
+
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -597,7 +771,7 @@ function ReservarPageContent() {
           </div>
 
           {/* Contenido del paso actual */}
-          <div className="max-w-4xl mx-auto">
+          <div ref={stepContentRef} className="max-w-4xl mx-auto scroll-mt-24">
             {/* Paso 1: Sucursal */}
             {currentStep === 0 && (
               <div className="space-y-4 animate-in fade-in duration-300">
@@ -644,10 +818,12 @@ function ReservarPageContent() {
                         <p className="text-xs text-muted-foreground mb-3">
                           {branch.tone}
                         </p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-2">
-                          <Check className="h-4 w-4 text-green-500" />
-                          Abierto hoy
-                        </p>
+                        {branch.phone && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-2">
+                            <Phone className="h-4 w-4 text-primary" />
+                            {branch.phone}
+                          </p>
+                        )}
                       </CardContent>
                       {selectedBranch?.id === branch.id && (
                         <div className="absolute top-4 right-4 bg-primary text-primary-foreground h-8 w-8 rounded-full flex items-center justify-center shadow-lg animate-in zoom-in">
@@ -816,7 +992,7 @@ function ReservarPageContent() {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {STATIC_STYLES.map((style) => (
+                  {styles.map((style) => (
                     <Card
                       key={style.id}
                       role="button"
@@ -949,15 +1125,18 @@ function ReservarPageContent() {
                     ¿Qué día te queda bien?
                   </h2>
                   <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
-                    {availableDates.map((date) => (
+                    {availableDates.map(({ date, hasFreeSlot }) => (
                       <button
                         key={date.toISOString()}
-                        onClick={() => handleDateSelect(date)}
+                        onClick={() => hasFreeSlot && handleDateSelect(date)}
+                        disabled={!hasFreeSlot}
+                        aria-disabled={!hasFreeSlot}
                         className={cn(
-                          "flex-shrink-0 flex min-h-11 min-w-[80px] flex-col items-center rounded-lg border p-3 transition-colors",
-                          selectedDate?.toDateString() === date.toDateString()
+                          "relative flex-shrink-0 flex min-h-11 min-w-[80px] flex-col items-center rounded-lg border p-3 transition-colors",
+                          !hasFreeSlot && "opacity-40 cursor-not-allowed bg-muted",
+                          hasFreeSlot && selectedDate?.toDateString() === date.toDateString()
                             ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:border-primary/50"
+                            : hasFreeSlot && "border-border hover:border-primary/50"
                         )}
                       >
                         <span className="text-[10px] uppercase text-muted-foreground">
@@ -967,6 +1146,11 @@ function ReservarPageContent() {
                         <span className="text-[10px] text-muted-foreground">
                           {format(date, "MMM", { locale: es })}
                         </span>
+                        {!hasFreeSlot && (
+                          <span className="mt-1 text-[9px] font-semibold uppercase tracking-wide text-destructive">
+                            Completo
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -978,31 +1162,58 @@ function ReservarPageContent() {
                       <Clock className="h-5 w-5 text-primary" />
                       ¿A qué hora?
                     </h2>
-                    <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-                      {isLoadingSlots ? (
-                        [...Array(12)].map((_, i) => (
+                    {isLoadingSlots ? (
+                      <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+                        {[...Array(12)].map((_, i) => (
                           <div key={i} className="h-9 bg-muted/40 rounded-lg animate-pulse" />
-                        ))
-                      ) : timeSlots.map((time) => {
-                        const available = isSlotAvailable(time);
-                        return (
-                          <button
-                            key={time}
-                            disabled={!available}
-                            onClick={() => setSelectedTime(time)}
-                            className={cn(
-                              "min-h-11 rounded-lg border p-2.5 text-center text-sm transition-colors",
-                              !available && "opacity-30 cursor-not-allowed bg-muted",
-                              available && selectedTime === time
-                                ? "border-primary bg-primary/10 text-primary"
-                                : available && "border-border hover:border-primary/50"
-                            )}
-                          >
-                            {time}
-                          </button>
-                        );
-                      })}
-                    </div>
+                        ))}
+                      </div>
+                    ) : hasAnyTimeSlot ? (
+                      <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+                        {timeSlots.map((time) => {
+                          const available = isSlotAvailable(time);
+                          return (
+                            <button
+                              key={time}
+                              disabled={!available}
+                              onClick={() => setSelectedTime(time)}
+                              className={cn(
+                                "min-h-11 rounded-lg border p-2.5 text-center text-sm transition-colors",
+                                !available && "opacity-30 cursor-not-allowed bg-muted",
+                                available && selectedTime === time
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : available && "border-border hover:border-primary/50"
+                              )}
+                            >
+                              {time}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-10 px-4 rounded-xl border border-border bg-card/25">
+                        <Clock className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+                        <p className="font-semibold text-foreground/80 text-sm">
+                          No quedan horarios este día para este servicio
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1 mb-4">
+                          Probá con otro día o elegí otro barbero.
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedDate(null);
+                            setSelectedTime(null);
+                            setCurrentStep(3);
+                            scrollToStepContent();
+                          }}
+                          className="rounded-full"
+                        >
+                          Cambiar barbero
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

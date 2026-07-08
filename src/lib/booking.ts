@@ -217,32 +217,30 @@ export async function fetchAvailability(
 }
 
 /**
- * Determina si un día de disponibilidad (resultado de fetchAvailability) tiene al
- * menos un hueco libre para un servicio de `durationMinutes`. Replica la misma lógica
- * de superposición que `isSlotAvailable` del wizard de reserva (booked + break + blocks),
- * pero como función pura reusable (sin estado de UI ni chequeo de "hoy en el pasado").
+ * Indica si un día de disponibilidad (`get_availability`) tiene al menos un hueco
+ * libre para un servicio de la duración dada. Reusa la misma aritmética que
+ * `isSlotAvailable` del wizard de reserva (citas, descanso y bloqueos), sin el
+ * corte por "hora ya pasada" (ese chequeo depende del reloj del cliente y no
+ * corresponde a nivel día).
  */
-export function dayHasFreeSlot(day: DayAvailability, durationMinutes: number = 30): boolean {
+export function dayHasFreeSlot(day: DayAvailability, durationMinutes: number): boolean {
     if (!day.is_open || !day.open_time || !day.close_time) return false;
 
-    const slotDuration = day.slot_minutes || 30;
-    const slotsNeeded = Math.ceil(durationMinutes / slotDuration);
-    const timeSlots = generateTimeSlotsFromRange(
-        day.open_time.slice(0, 5),
-        day.close_time.slice(0, 5),
-        slotDuration
-    );
-    const closeTimeStr = day.close_time.slice(0, 5);
+    const startStr = day.open_time.slice(0, 5);
+    const endStr = day.close_time.slice(0, 5);
+    const slotMinutes = day.slot_minutes || 30;
+    const timeSlots = generateTimeSlotsFromRange(startStr, endStr, slotMinutes);
+    const slotsNeeded = Math.ceil(durationMinutes / slotMinutes);
 
     return timeSlots.some((time, startIdx) => {
         const endTime = calculateEndTime(time, durationMinutes);
-        if (endTime > closeTimeStr) return false;
+        if (endTime > endStr) return false;
 
         for (let i = 0; i < slotsNeeded; i++) {
             const slotToCheck = timeSlots[startIdx + i];
             if (!slotToCheck) return false;
 
-            const slotEndToCheck = calculateEndTime(slotToCheck, slotDuration);
+            const slotEndToCheck = calculateEndTime(slotToCheck, slotMinutes);
 
             const isBooked = day.booked.some((apt) => {
                 const aptStart = apt.start.slice(0, 5);
