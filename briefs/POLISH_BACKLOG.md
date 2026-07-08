@@ -24,7 +24,7 @@
 | 4 | **Skins visuales del admin** (código GPT en `feat/visual-skins`, `27cd627`) | Estabilizar: anti-FOUC, skins sin fuga al sitio público (branding NB inmutable), CSS en `@layer components` sin `!important`, contraste 4 skins × claro/oscuro. | ejecutado |
 | 5 | **Dashboard admin** | Que las métricas respondan las preguntas reales del dueño (¿cómo viene el mes?, ¿quién rinde?, ¿qué se cae?). Correrlo DESPUÉS de los skins (pegan de lleno en dashboard/crm-cards). | ejecutado |
 | 6 | **Home + lookbook** | Conversión hacia reserva; que el patrón lookbook→wizard (`?styleId=&serviceId=`) rinda al máximo. | ejecutado |
-| 7 | **Portal barbero (mi-agenda)** | Profundidad del día a día: agenda clara, ingresos del día, próxima cita a un vistazo. | pendiente |
+| 7 | **Portal barbero (mi-agenda)** | Profundidad del día a día: agenda clara, ingresos del día, próxima cita a un vistazo. | brief listo (FASE_27) |
 | 8 | **Tienda + checkout (pulido menor)** | Solo terminación fina que no pise Tienda v2 del roadmap (PDP, cross-sell, etc. quedan allá). | pendiente |
 | 9 | **Contacto / auth / detalles** | Terminación premium: recuperar contraseña, contacto, microcopy, estados vacíos. | pendiente |
 
@@ -48,3 +48,4 @@ Recolectado el 2026-07-08 sobre `src/app/api/chat/route.ts` y `src/components/ch
 | 2026-07-08 | #4 Skins visuales del admin | `FASE_23_polish_skins.md` | merge `db9249a` (`feat/visual-skins`; Sonnet caído por API 500, terminado por Fable) |
 | 2026-07-08 | #5 Dashboard admin | `FASE_24_polish_dashboard.md` | merge `4df2309` (`feat/polish-dashboard`) |
 | 2026-07-08 | #6 Home + lookbook | `FASE_25_polish_home_lookbook.md` | merge `daeb368` (`feat/polish-home-lookbook`) |
+| 2026-07-08 | #7 Portal barbero | `FASE_27_polish_portal_barbero.md` | pendiente de ejecución |
