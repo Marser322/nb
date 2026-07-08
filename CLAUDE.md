@@ -29,7 +29,7 @@ npm run lint    # eslint
 - `src/components/` — `ui/` (shadcn), `chat/AiAssistant.tsx`, `shop/CartDrawer.tsx`, `layout/`, `home/`, `tour/`
 - `src/lib/constants.ts` — config del negocio, labels de estados, rutas
 - `src/lib/utils.ts` — `formatPrice` (UYU), `generateTimeSlots`, `calculateEndTime`, `canCancelAppointment` (ventana 2 h)
-- `supabase/migrations/999_FULL_SETUP.sql` — script maestro para DB fresca 001→018, excepto 017; espejo en `src/lib/supabase_schema.sql`
+- `supabase/migrations/999_FULL_SETUP.sql` — script maestro para DB fresca 001→019 + 021, excepto 017; **falta espejar la 020 (RBAC)**; espejo en `src/lib/supabase_schema.sql`
 
 ## Reglas de negocio
 
@@ -66,5 +66,6 @@ Plan activo de mejoras (auditoría 2026-07): ver historial.
 - **Drift resuelto**: `branches.is_active` es el nombre vigente (renombrado por la 011); CHECKs de `cash_movements` normalizados a códigos EN con labels ES en `constants.ts` (012); `cash_register` legacy migrada/eliminada (012).
 - **FASE 15 (demo polish, 2026-07-06)** completada en código: fix de imágenes de servicios (migración 017, seeds .png→.jpg), modo demo (`NEXT_PUBLIC_DEMO_MODE` + quick-login admin en `/admin-login` y `/login`, link "Acceso staff" en footer), og-image generado por código (`src/app/opengraph-image.tsx` + `public/logo-transparent.png` vía `scripts/make-logo-transparent.mjs`), spotlight del tour con agujero real.
 - **Drift resuelto**: `999_FULL_SETUP.sql` está sincronizado hasta la 018 (incluye 015 flags, 016 storage y 018 hardening CRM; la 017 sigue siendo corrección operativa para DBs existentes). En DB existente correr 011→018 en orden si aún no se aplicaron.
+- **FASE 26 (2026-07-08)** completada en código: CRUD completo de servicios en `/admin/servicios` (imagen vía bucket `media`, categorías, validación de duración, reordenamiento), migración `021_service_categories.sql` (correr a mano en DB existente), home con visuales por categoría y wizard agrupado por categoría.
 - **Pendiente (operativo, no código)**: ejecutar la Fase 6 según `DEPLOY.md` (proyecto Supabase sa-east-1, cron de backup en el VPS, deploy en Vercel/VPS); correr la migración 017 en la DB de desarrollo; crear el usuario demo `demo@nbbarber.uy` y promoverlo a admin (pasos en `briefs/FASE_15_demo_polish.md`, bloque B); setear las 3 vars `NEXT_PUBLIC_DEMO_*` en Vercel.
 - **Fases futuras**: Integración Mercado Pago, recordatorios automáticos por WhatsApp/Email (reminders_config / communication_logs).
