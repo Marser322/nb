@@ -10,6 +10,7 @@ import {
     XCircle,
     Phone,
     MessageSquare,
+    MessageCircle,
     ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { getBookingErrorMessage } from "@/lib/booking-errors";
 import { resolveBarberSession } from "@/lib/barber-session";
+import { buildWaLink } from "@/lib/whatsapp";
 import type { Appointment, Service, Profile } from "@/types/database.types";
 import { format, startOfToday, addDays } from "date-fns";
 import { es } from "date-fns/locale";
@@ -349,6 +351,14 @@ export default function BarberoAgendaPage() {
                                 const isPast =
                                     isToday && cita.start_time.slice(0, 5) < format(new Date(), "HH:mm");
                                 const isNext = nextAppointment?.id === cita.id;
+                                const nombreCliente = cita.client?.full_name?.split(" ")[0];
+                                const cuandoTexto = isToday
+                                    ? "de hoy"
+                                    : `del ${format(new Date(`${selectedDate}T12:00:00`), "d/MM")}`;
+                                const waMessage = `Hola${nombreCliente ? ` ${nombreCliente}` : ""}! Te escribo de NB Barber por tu cita ${cuandoTexto} a las ${cita.start_time.slice(0, 5)}.`;
+                                const waLink = cita.client?.phone
+                                    ? buildWaLink(cita.client.phone, waMessage)
+                                    : "";
 
                                 return (
                                 <div
@@ -389,9 +399,27 @@ export default function BarberoAgendaPage() {
                                                 {cita.client?.full_name || "Cliente sin nombre"}
                                             </div>
                                             {cita.client?.phone && (
-                                                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                                                    <Phone className="h-3 w-3" />
-                                                    {cita.client.phone}
+                                                <div className="flex items-center gap-2 mt-2">
+                                                    <a
+                                                        href={`tel:${cita.client.phone}`}
+                                                        className="inline-flex h-10 items-center gap-1.5 rounded-md border border-input px-3 text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+                                                        aria-label={`Llamar a ${cita.client.full_name || "cliente"}`}
+                                                    >
+                                                        <Phone className="h-3.5 w-3.5" />
+                                                        Llamar
+                                                    </a>
+                                                    {waLink && (
+                                                        <a
+                                                            href={waLink}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex h-10 items-center gap-1.5 rounded-md border border-input px-3 text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+                                                            aria-label={`Escribir por WhatsApp a ${cita.client.full_name || "cliente"}`}
+                                                        >
+                                                            <MessageCircle className="h-3.5 w-3.5" />
+                                                            WhatsApp
+                                                        </a>
+                                                    )}
                                                 </div>
                                             )}
                                             {cita.notes && (
