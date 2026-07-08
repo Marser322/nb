@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isDemoMode } from "@/lib/demo";
-import { BUSINESS_CONFIG, ROUTES } from "@/lib/constants";
+import { BUSINESS_CONFIG, ROUTES, SERVICE_CATEGORY_LABELS } from "@/lib/constants";
 import { canCancelAppointment } from "@/lib/utils";
 import { fetchAvailability, dayHasFreeSlot } from "@/lib/booking";
 import {
@@ -58,6 +58,7 @@ type ChatService = {
   price: number;
   duration_minutes?: number;
   description?: string;
+  category?: string;
 };
 
 type ChatBarber = {
@@ -514,7 +515,7 @@ Tus objetivos principales son:
 4. Si te preguntan por recomendaciones de cortes o estilos, sugiere uno de los estilos disponibles del Lookbook y menciónales que pueden reservarlo directamente.
 
 INFORMACIÓN OFICIAL DE LA BARBERÍA:
-- Servicios: ${JSON.stringify(services)}
+- Servicios: ${JSON.stringify(services.map(s => ({ ...s, category: SERVICE_CATEGORY_LABELS[s.category || "otro"] || SERVICE_CATEGORY_LABELS.otro })))}
 - Barberos: ${JSON.stringify(barbers.map(b => ({ name: b.name, bio: b.bio })))}
 - Sucursales: ${JSON.stringify(branches.map(b => ({ name: b.name, address: b.address, phone: b.phone, hours: b.hours })))}
 - Productos en tienda: ${activeFeatures.tienda ? JSON.stringify(products.map(p => ({ name: p.name, price: p.price, desc: p.description || "" }))) : 'La tienda online está desactivada actualmente.'}
