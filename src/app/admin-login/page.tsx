@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Eye, EyeOff, Lock, ArrowRight, Loader2, Mail } from "lucide-react";
+import { Eye, EyeOff, Lock, ArrowRight, Loader2, Mail, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -94,11 +94,51 @@ export default function AdminLoginPage() {
                     </div>
                     <CardTitle className="text-2xl font-bold tracking-tight">Acceso Administrativo</CardTitle>
                     <CardDescription>
-                        Ingresá tus credenciales de administrador
+                        Recorré el panel de gestión o ingresá con credenciales de administrador
                     </CardDescription>
                 </CardHeader>
+                {isDemoMode && (
+                    <div className="mx-6 mb-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 shadow-lg shadow-amber-500/10 space-y-3">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5 rounded-full bg-amber-500/20 p-2 text-amber-500">
+                                <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold text-foreground">Demo lista para presentar</p>
+                                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                                    Entrá directo al CRM de New Brothers: agenda, clientes, caja, productos y reportes.
+                                </p>
+                            </div>
+                        </div>
+                        <Button
+                            type="button"
+                            className="h-12 w-full rounded-full bg-amber-500 font-semibold text-black shadow-lg shadow-amber-500/20 hover:bg-amber-400"
+                            disabled={isDemoLoading}
+                            onClick={loginAsDemoAdmin}
+                        >
+                            {isDemoLoading ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Entrando al panel...
+                                </>
+                            ) : (
+                                <>
+                                    Entrar al panel administrativo
+                                    <ArrowRight className="ml-2 h-4 w-4" />
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                )}
                 <form onSubmit={handleLogin}>
                     <CardContent className="space-y-4">
+                        {isDemoMode && (
+                            <div className="flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                                <span className="h-px flex-1 bg-border" />
+                                Acceso manual
+                                <span className="h-px flex-1 bg-border" />
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
                             <div className="relative">
@@ -163,33 +203,6 @@ export default function AdminLoginPage() {
                         </Button>
                     </CardFooter>
                 </form>
-
-                {isDemoMode && (
-                    <div className="mx-6 mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
-                        <div>
-                            <p className="text-sm font-semibold text-foreground">Modo demo</p>
-                            <p className="text-xs text-muted-foreground">
-                                Este sitio es una demo pública: entrá al panel sin necesidad de credenciales propias.
-                            </p>
-                        </div>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="w-full border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-                            disabled={isDemoLoading}
-                            onClick={loginAsDemoAdmin}
-                        >
-                            {isDemoLoading ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Ingresando...
-                                </>
-                            ) : (
-                                "Entrar como Admin demo"
-                            )}
-                        </Button>
-                    </div>
-                )}
             </Card>
         </div>
     );

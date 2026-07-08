@@ -18,7 +18,7 @@ export function Footer() {
         setClickCount(newCount);
 
         if (newCount >= 5) {
-            router.push(ROUTES.ADMIN_DASHBOARD);
+            router.push(ROUTES.ADMIN_LOGIN);
             setClickCount(0);
         }
 
@@ -89,9 +89,9 @@ export function Footer() {
                             <li>
                                 <Link
                                     href={ROUTES.ADMIN_LOGIN}
-                                    className="inline-flex min-h-11 items-center text-xs text-muted-foreground/70 transition-colors hover:text-primary md:min-h-0"
+                                    className="inline-flex min-h-11 items-center text-sm font-medium text-primary transition-colors hover:text-primary/80 md:min-h-0"
                                 >
-                                    Acceso staff
+                                    Panel administrativo
                                 </Link>
                             </li>
                         </ul>

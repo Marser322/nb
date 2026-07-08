@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { ArrowRight, Calendar, Clock, LayoutDashboard, Star, Scissors, Sparkles } from "lucide-react";
+import { ArrowRight, Calendar, Clock, LayoutDashboard, Loader2, Star, Scissors, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Header, Footer } from "@/components/layout";
@@ -13,6 +13,7 @@ import { WhyChooseUsContent } from "@/components/home/WhyChooseUsContent";
 import { useFeatures } from "@/lib/features";
 import { buildWaLink } from "@/lib/whatsapp";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
+import { useDemoAdminLogin } from "@/hooks/useDemoAdminLogin";
 
 // Servicios destacados (luego vendrán de la BD)
 const services = [
@@ -49,6 +50,7 @@ export default function HomePage() {
   const { features } = useFeatures();
   const waLink = buildWaLink(BUSINESS_CONFIG.phone, "Hola, me gustaría reservar un turno.");
   const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const { loginAsDemoAdmin, isDemoLoading } = useDemoAdminLogin();
 
   return (
     <div className="min-h-screen bg-background">
@@ -116,6 +118,47 @@ export default function HomePage() {
               )}
             </div>
 
+            <div className="mt-6 max-w-2xl overflow-hidden rounded-2xl border border-primary/35 bg-black/45 p-4 text-white shadow-2xl shadow-black/30 backdrop-blur-md md:p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+                    <LayoutDashboard className="h-3.5 w-3.5" />
+                    Demo administrativa
+                  </div>
+                  <p className="text-sm leading-relaxed text-zinc-200 md:text-base">
+                    Para dueños: agenda, clientes, caja, stock y reportes listos para recorrer.
+                  </p>
+                </div>
+                {isDemoMode ? (
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="h-12 shrink-0 rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                    disabled={isDemoLoading}
+                    onClick={loginAsDemoAdmin}
+                  >
+                    {isDemoLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                    )}
+                    Entrar al panel
+                  </Button>
+                ) : (
+                  <Button
+                    size="lg"
+                    asChild
+                    className="h-12 shrink-0 rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Link href={ROUTES.ADMIN_LOGIN}>
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      Panel administrativo
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            </div>
+
             <div className="mt-16 grid grid-cols-3 gap-4 max-w-2xl">
               <div className="border-l border-primary/50 pl-4">
                 <p className="font-display text-4xl md:text-5xl font-bold text-white">5+</p>
@@ -166,13 +209,17 @@ export default function HomePage() {
                 </div>
                 <Button
                   size="lg"
-                  asChild
+                  type="button"
                   className="h-14 w-full rounded-full px-6 text-base font-semibold shadow-lg shadow-primary/20 md:w-auto"
+                  disabled={isDemoLoading}
+                  onClick={loginAsDemoAdmin}
                 >
-                  <Link href={ROUTES.ADMIN_LOGIN}>
-                    Ver el panel de gestión
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
+                  {isDemoLoading ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  ) : (
+                    <LayoutDashboard className="mr-2 h-5 w-5" />
+                  )}
+                  Entrar al panel demo
                 </Button>
               </div>
             </div>

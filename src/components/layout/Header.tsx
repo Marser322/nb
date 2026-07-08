@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { LayoutDashboard, Menu, ShoppingBag, User, LogOut, Lock } from "lucide-react";
+import { LayoutDashboard, Loader2, Menu, ShoppingBag, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -22,6 +22,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { useFeatures } from "@/lib/features";
+import { isDemoMode, useDemoAdminLogin } from "@/hooks/useDemoAdminLogin";
 
 const navLinks = [
     { href: ROUTES.HOME, label: "Inicio" },
@@ -30,8 +31,6 @@ const navLinks = [
     { href: ROUTES.LOOKBOOK, label: "Lookbook", feature: "lookbook" },
     { href: ROUTES.CONTACTO, label: "Contacto" },
 ];
-
-const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
 export function Header() {
     const { features } = useFeatures();
@@ -42,6 +41,7 @@ export function Header() {
     const openCart = useCartStore((state) => state.openCart);
     const supabase = createClient();
     const router = useRouter();
+    const { loginAsDemoAdmin, isDemoLoading } = useDemoAdminLogin();
 
     const filteredNavLinks = navLinks.filter(
         (link) => !("feature" in link) || features[link.feature as keyof typeof features]
@@ -137,19 +137,23 @@ export function Header() {
                         {/* Admin Access (Desktop) */}
                         {isDemoMode ? (
                             <Button
-                                variant="outline"
-                                className="hidden rounded-full border-primary/30 bg-primary/10 px-4 text-primary hover:bg-primary/15 hover:text-primary md:inline-flex"
-                                asChild
+                                type="button"
+                                className="hidden rounded-full border border-primary/40 bg-primary px-4 text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 md:inline-flex"
+                                disabled={isDemoLoading}
+                                onClick={loginAsDemoAdmin}
                             >
-                                <Link href={ROUTES.ADMIN_LOGIN}>
+                                {isDemoLoading ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
                                     <LayoutDashboard className="mr-2 h-4 w-4" />
-                                    Panel demo
-                                </Link>
+                                )}
+                                Entrar al panel
                             </Button>
                         ) : (
-                            <Button variant="ghost" size="icon" className="hidden md:inline-flex text-muted-foreground hover:text-primary" asChild>
-                                <Link href={ROUTES.ADMIN_LOGIN} aria-label="Acceso staff">
-                                    <Lock className="h-5 w-5" />
+                            <Button variant="outline" className="hidden rounded-full border-primary/30 bg-primary/10 px-4 text-primary hover:bg-primary/15 hover:text-primary md:inline-flex" asChild>
+                                <Link href={ROUTES.ADMIN_LOGIN}>
+                                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                                    Panel administrativo
                                 </Link>
                             </Button>
                         )}
@@ -294,23 +298,30 @@ export function Header() {
 
                                     <div className="border-t border-border pt-4 mt-auto">
                                         {isDemoMode ? (
-                                            <Button asChild className="w-full rounded-full">
-                                                <Link
-                                                    href={ROUTES.ADMIN_LOGIN}
-                                                    onClick={() => setIsMobileMenuOpen(false)}
-                                                >
+                                            <Button
+                                                type="button"
+                                                className="w-full rounded-full"
+                                                disabled={isDemoLoading}
+                                                onClick={() => {
+                                                    setIsMobileMenuOpen(false);
+                                                    void loginAsDemoAdmin();
+                                                }}
+                                            >
+                                                {isDemoLoading ? (
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                ) : (
                                                     <LayoutDashboard className="mr-2 h-4 w-4" />
-                                                    Panel demo
-                                                </Link>
+                                                )}
+                                                Entrar al panel demo
                                             </Button>
                                         ) : (
                                             <Link
                                                 href={ROUTES.ADMIN_LOGIN}
-                                                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary p-2"
+                                                className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 p-3 text-sm font-medium text-primary hover:bg-primary/15"
                                                 onClick={() => setIsMobileMenuOpen(false)}
                                             >
-                                                <Lock className="h-4 w-4" />
-                                                Acceso Administrativo
+                                                <LayoutDashboard className="h-4 w-4" />
+                                                Panel administrativo
                                             </Link>
                                         )}
                                     </div>
