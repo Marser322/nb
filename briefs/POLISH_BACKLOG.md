@@ -19,7 +19,7 @@
 | # | Área | Máximo valor a extraer | Estado |
 |---|------|------------------------|--------|
 | 1 | **Asistente IA (chat)** | Que responda las FAQs reales (disponibilidad viva vía `get_availability`, políticas, precios) y lleve al usuario a donde necesita con deep links; fallback local robusto; OpenAI como retry real ante fallo de Gemini. Pre-análisis hecho (ver abajo). | brief listo (FASE_20) |
-| 2 | **Wizard de reserva** | Deep links que salten pasos ya resueltos (auto-avance cuando hay selección por query params), menos fricción en el flujo de 6 pasos. | pendiente |
+| 2 | **Wizard de reserva** | Deep links que salten pasos ya resueltos (auto-avance cuando hay selección por query params), menos fricción en el flujo de 6 pasos. | brief listo (FASE_21) |
 | 3 | **Mi cuenta / fidelización** | Explotar `haircut_history` para "lo mismo de la vez pasada": rebook en 1 toque desde la última cita. | pendiente |
 | 4 | **Home + lookbook** | Conversión hacia reserva; que el patrón lookbook→wizard (`?styleId=&serviceId=`) rinda al máximo. | pendiente |
 | 5 | **Dashboard admin** | Que las métricas respondan las preguntas reales del dueño (¿cómo viene el mes?, ¿quién rinde?, ¿qué se cae?). | pendiente |
@@ -42,3 +42,4 @@ Recolectado el 2026-07-08 sobre `src/app/api/chat/route.ts` y `src/components/ch
 | Fecha | Ítem | Brief | Ejecución (commit/rama) |
 |-------|------|-------|-------------------------|
 | 2026-07-08 | #1 Asistente IA (chat) | `FASE_20_polish_chat.md` | pendiente (`feat/polish-chat`) |
+| 2026-07-08 | #2 Wizard de reserva | `FASE_21_polish_wizard_reserva.md` | pendiente (`feat/polish-wizard-reserva`) |
