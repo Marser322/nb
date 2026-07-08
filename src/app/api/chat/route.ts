@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { BUSINESS_CONFIG, ROUTES } from "@/lib/constants";
+import { canCancelAppointment } from "@/lib/utils";
+import { fetchAvailability, dayHasFreeSlot } from "@/lib/booking";
 import {
   STATIC_SERVICES,
   STATIC_BARBERS,
@@ -82,6 +85,29 @@ type ChatBranch = {
   phone?: string;
   hours?: string;
 };
+
+const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+/** Convierte un array de días (0=Domingo..6=Sábado) a un label legible ("Lunes a Sábado"). */
+function formatWorkingDaysLabel(days: readonly number[]): string {
+  if (days.length === 0) return "Consultá disponibilidad";
+  const sorted = [...days].sort((a, b) => a - b);
+  const isContiguous = sorted.every((d, i) => i === 0 || d === sorted[i - 1] + 1);
+  if (isContiguous) {
+    return sorted.length === 1
+      ? DAY_NAMES[sorted[0]]
+      : `${DAY_NAMES[sorted[0]]} a ${DAY_NAMES[sorted[sorted.length - 1]]}`;
+  }
+  return sorted.map((d) => DAY_NAMES[d]).join(", ");
+}
+
+/**
+ * Copy de horarios derivado de BUSINESS_CONFIG (única fuente de verdad para el copy
+ * de branding). La disponibilidad exacta en vivo sale del RPC get_availability.
+ */
+const businessHoursCopy = `${formatWorkingDaysLabel(BUSINESS_CONFIG.workingDays)}: ${String(
+  BUSINESS_CONFIG.workingHours.start
+).padStart(2, "0")}:00 - ${String(BUSINESS_CONFIG.workingHours.end).padStart(2, "0")}:00 (la disponibilidad exacta se confirma al reservar)`;
 
 /**
  * Parsea la respuesta de texto del LLM: si viene como bloque JSON con "content"/"data"
@@ -199,6 +225,59 @@ export async function POST(req: Request) {
       }
     }
 
+    // Sesión del cliente y su próxima cita (solo modo cliente; nunca rompe el chat si falla)
+    let isLoggedIn = false;
+    let nextAppointment: {
+      date: string;
+      startTime: string;
+      serviceName: string;
+      barberName: string;
+      canCancel: boolean;
+    } | null = null;
+
+    if (mode !== "admin") {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          isLoggedIn = true;
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("id")
+            .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+            .limit(1)
+            .maybeSingle();
+
+          if (profileData?.id) {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const { data: appt } = await supabase
+              .from("appointments")
+              .select("appointment_date, start_time, service:services(name), barber:barbers(name)")
+              .eq("client_id", profileData.id)
+              .gte("appointment_date", todayStr)
+              .in("status", ["pending", "confirmed"])
+              .order("appointment_date", { ascending: true })
+              .order("start_time", { ascending: true })
+              .limit(1)
+              .maybeSingle();
+
+            if (appt) {
+              const service = Array.isArray(appt.service) ? appt.service[0] : appt.service;
+              const barber = Array.isArray(appt.barber) ? appt.barber[0] : appt.barber;
+              nextAppointment = {
+                date: appt.appointment_date,
+                startTime: appt.start_time,
+                serviceName: service?.name || "tu servicio",
+                barberName: barber?.name || "tu barbero",
+                canCancel: canCancelAppointment(appt.appointment_date, appt.start_time),
+              };
+            }
+          }
+        }
+      } catch (sessionError) {
+        console.error("Error fetching user's next appointment for chat:", sessionError);
+      }
+    }
+
     // 1. Fetch live database values
     let dbServices: ChatService[] = [];
     let dbBarbers: ChatBarber[] = [];
@@ -291,9 +370,9 @@ export async function POST(req: Request) {
 
     // Static branches details matching BUSINESS_CONFIG
     const staticBranches: AssistantBranchItem[] = [
-      { id: 1, name: "New Brothers Central", address: "Av. Principal 1234, Centro", phone: "099 123 456", hours: "Lunes a Sábado: 09:00 - 20:00" },
-      { id: 2, name: "New Brothers Norte", address: "Shopping Norte, Local 5", phone: "098 765 432", hours: "Lunes a Sábado: 09:00 - 20:00" },
-      { id: 3, name: "New Brothers Beach", address: "Rambla Costanera 500", phone: "091 112 233", hours: "Lunes a Sábado: 09:00 - 20:00" }
+      { id: 1, name: "New Brothers Central", address: "Av. Principal 1234, Centro", phone: "099 123 456", hours: businessHoursCopy },
+      { id: 2, name: "New Brothers Norte", address: "Shopping Norte, Local 5", phone: "098 765 432", hours: businessHoursCopy },
+      { id: 3, name: "New Brothers Beach", address: "Rambla Costanera 500", phone: "091 112 233", hours: businessHoursCopy }
     ];
 
     const branches: AssistantBranchItem[] = dbBranches.length > 0
@@ -302,9 +381,67 @@ export async function POST(req: Request) {
           name: b.name,
           address: b.address || "",
           phone: b.phone || "",
-          hours: "Lunes a Sábado: 09:00 - 20:00"
+          hours: businessHoursCopy
         }))
       : staticBranches;
+
+    // 1b. Disponibilidad real (context injection, no function calling): si la consulta
+    // parece preguntar por turnos/horarios, resolvemos hasta 3 barberos activos contra
+    // get_availability (hoy -> +3 días) y armamos un resumen compacto. Si el RPC falla,
+    // simplemente se omite el bloque — nunca debe romper el chat.
+    const wantsAvailability = mode !== "admin" &&
+      /turno|hora|lugar|disponib|agenda|hoy|manana|libre/.test(normalizedUserQuery);
+    let availabilitySummary: string | null = null;
+
+    if (wantsAvailability) {
+      try {
+        const candidateBarbers = barbers.slice(0, 3);
+        const todayISO = new Date().toISOString().slice(0, 10);
+        const toDateObj = new Date();
+        toDateObj.setDate(toDateObj.getDate() + 3);
+        const toISO = toDateObj.toISOString().slice(0, 10);
+
+        const results = await Promise.all(
+          candidateBarbers.map(async (b) => {
+            try {
+              const days = await fetchAvailability(supabase, String(b.id), todayISO, toISO);
+              return { barberName: b.name, days };
+            } catch {
+              return null;
+            }
+          })
+        );
+
+        const dayMap = new Map<string, { open: boolean; range: string | null; barbersWithSlot: string[] }>();
+        for (const result of results) {
+          if (!result) continue;
+          for (const day of result.days) {
+            const entry = dayMap.get(day.day) ?? { open: day.is_open, range: null, barbersWithSlot: [] };
+            entry.open = entry.open || day.is_open;
+            if (day.is_open && day.open_time && day.close_time) {
+              entry.range = `${day.open_time.slice(0, 5)}-${day.close_time.slice(0, 5)}`;
+            }
+            if (day.is_open && dayHasFreeSlot(day, 30)) {
+              entry.barbersWithSlot.push(result.barberName);
+            }
+            dayMap.set(day.day, entry);
+          }
+        }
+
+        if (dayMap.size > 0) {
+          availabilitySummary = Array.from(dayMap.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([date, info]) => {
+              if (!info.open) return `${date}: cerrado`;
+              if (info.barbersWithSlot.length === 0) return `${date}: sin huecos libres`;
+              return `${date}${info.range ? ` (${info.range})` : ""}: hay lugar con ${info.barbersWithSlot.join(", ")}`;
+            })
+            .join("\n");
+        }
+      } catch (availabilityError) {
+        console.error("Error building live availability summary for chat:", availabilityError);
+      }
+    }
 
     // 2. Select system prompt and instructions
     let systemPrompt = "";
@@ -348,6 +485,26 @@ DEMO PÚBLICA DEL PANEL ADMIN:
 - No reveles contraseñas ni credenciales demo.`
         : "";
 
+      const availabilityPrompt = availabilitySummary
+        ? `
+
+DISPONIBILIDAD PRÓXIMOS DÍAS (datos reales):
+${availabilitySummary}`
+        : "";
+
+      const userAppointmentPrompt = nextAppointment
+        ? `
+
+CITA DEL USUARIO (datos reales, usuario con sesión iniciada):
+- Próxima cita: ${nextAppointment.date} a las ${nextAppointment.startTime.slice(0, 5)}, servicio "${nextAppointment.serviceName}" con ${nextAppointment.barberName}.
+- ${nextAppointment.canCancel ? "Todavía está dentro de la ventana para cancelar o reprogramar." : "Ya está fuera de la ventana para cancelar sin cargo."}
+- Si el usuario pregunta por su turno, respondé con estos datos e incluí un action hacia Mi Cuenta (${ROUTES.MI_CUENTA}) para gestionarlo.`
+        : isLoggedIn
+          ? `
+
+CITA DEL USUARIO: el usuario tiene sesión iniciada pero no tiene ninguna cita próxima agendada. Si pregunta por su turno, decíselo e invitalo a reservar.`
+          : "";
+
       systemPrompt = `Eres el Asistente Virtual Inteligente (conserje amable) de la barbería premium "New Brothers" en Uruguay. 
 Tus respuestas deben ser cálidas, educadas, atentas y serviciales, con una estética premium de lujo minimalista.
 Tus objetivos principales son:
@@ -363,14 +520,14 @@ INFORMACIÓN OFICIAL DE LA BARBERÍA:
 - Productos en tienda: ${activeFeatures.tienda ? JSON.stringify(products.map(p => ({ name: p.name, price: p.price, desc: p.description || "" }))) : 'La tienda online está desactivada actualmente.'}
 - Estilos (Lookbook): ${activeFeatures.lookbook ? JSON.stringify(lookbook.map(l => ({ id: l.id, name: l.title, tags: l.tags }))) : 'La galería de estilos está desactivada actualmente.'}
 - Políticas y FAQ:
-  * Cancelación de citas: Permitida hasta 2 horas antes de la cita.
+  * Cancelación de citas: Permitida hasta ${BUSINESS_CONFIG.cancellationWindow / 60} horas antes de la cita.
   * Medios de pago: Efectivo en el local, transferencia bancaria y pagos online vía MercadoPago o tarjetas.
   * Tolerancia: Agradecemos llegar 5-10 minutos antes. Pasados los 10 minutos de retraso, se puede tener que reprogramar.
 
 RESTRICCIONES IMPORTANTES:
 - Reservas online: ${activeFeatures.reservas_online ? 'ACTIVADAS. Debes empujar al usuario a reservar su turno y guiarlo a hacerlo.' : 'DESACTIVADAS por mantenimiento. Informa al usuario que la agenda online no está disponible temporalmente y no ofrezcas reservar.'}
 - Tienda online: ${activeFeatures.tienda ? 'ACTIVADA.' : 'DESACTIVADA. No recomiendes productos ni menciones la tienda.'}
-- Responde siempre en español. No inventes información que no esté en la lista oficial.${demoAdminPrompt}`;
+- Responde siempre en español. No inventes información que no esté en la lista oficial.${demoAdminPrompt}${availabilityPrompt}${userAppointmentPrompt}`;
     }
 
     // Add structured UI formats prompt instruction
@@ -382,6 +539,10 @@ Estructura JSON permitida en "data":
 2. { "type": "styles", "items": [{ "id": "uuid", "name": "...", "serviceId": "uuid", "tags": [] }] }
 3. { "type": "products", "items": [{ "name": "...", "price": 0, "desc": "..." }] }
 4. { "type": "action", "label": "Texto del botón", "url": "/ruta" }
+
+Reglas para "action":
+- Si el usuario muestra intención de reservar, SIEMPRE incluí un "action" hacia "${ROUTES.RESERVAR}" (o, si el servicio ya quedó claro en la conversación, hacia "${ROUTES.RESERVAR}?serviceId=<id>").
+- Si el usuario pregunta por su propia cita/turno o cómo cancelarla/reprogramarla, SIEMPRE incluí un "action" hacia "${ROUTES.MI_CUENTA}" con label "Ver en Mi Cuenta".
 `;
 
     // 3. Connect with LLM Providers if keys are present (cascada secuencial real:
@@ -409,10 +570,10 @@ Estructura JSON permitida en "data":
 
     if (mode === "admin") {
       // Admin Local Rules Fallback
-      if (userQuery.includes("hola") || userQuery.includes("buenas") || userQuery.includes("buen dia")) {
+      if (normalizedUserQuery.includes("hola") || normalizedUserQuery.includes("buenas") || normalizedUserQuery.includes("buen dia")) {
         reply = "¡Hola, Administrador! Soy tu Coach de Gestión de New Brothers. Estoy aquí para guiarte en el uso del CRM, resolver tus dudas operativas (caja, liquidaciones, stock, clientes) y ayudarte a optimizar el negocio. ¿En qué módulo puedo asistirte hoy?";
-      } 
-      else if (userQuery.includes("caja") || userQuery.includes("cobr") || userQuery.includes("ingreso") || userQuery.includes("egreso") || userQuery.includes("gasto")) {
+      }
+      else if (normalizedUserQuery.includes("caja") || normalizedUserQuery.includes("cobr") || normalizedUserQuery.includes("ingreso") || normalizedUserQuery.includes("egreso") || normalizedUserQuery.includes("gasto")) {
         if (!activeFeatures.contabilidad) {
           reply = "El módulo de Caja y Contabilidad está desactivado en la configuración actual. Podés activarlo en la sección de **Configuración** del panel para registrar movimientos e ingresos.";
         } else {
@@ -420,11 +581,11 @@ Estructura JSON permitida en "data":
           dataPayload = {
             type: "action",
             label: "Ir a Caja del Día",
-            url: "/admin/caja"
+            url: ROUTES.ADMIN_CAJA
           };
         }
-      } 
-      else if (userQuery.includes("liquida") || userQuery.includes("pago a barbero") || userQuery.includes("comision")) {
+      }
+      else if (normalizedUserQuery.includes("liquida") || normalizedUserQuery.includes("pago a barbero") || normalizedUserQuery.includes("comision")) {
         if (!activeFeatures.contabilidad) {
           reply = "El módulo de Contabilidad y Liquidaciones está desactivado actualmente. Activalo desde la sección de **Configuración**.";
         } else {
@@ -432,19 +593,19 @@ Estructura JSON permitida en "data":
           dataPayload = {
             type: "action",
             label: "Ir a Liquidaciones",
-            url: "/admin/liquidaciones"
+            url: ROUTES.ADMIN_LIQUIDACIONES
           };
         }
-      } 
-      else if (userQuery.includes("cita") || userQuery.includes("reserva") || userQuery.includes("agend")) {
+      }
+      else if (normalizedUserQuery.includes("cita") || normalizedUserQuery.includes("reserva") || normalizedUserQuery.includes("agend")) {
         reply = "En la sección de **Citas** podés visualizar la agenda del día. Para crear una cita manual (clientes walk-in), hacé clic en 'Nueva Cita', ingresá el nombre, teléfono, servicio, barbero y horario. Las citas online de clientes se reflejarán allí en tiempo real.";
         dataPayload = {
           type: "action",
           label: "Ver Citas del Día",
-          url: "/admin/citas"
+          url: ROUTES.ADMIN_CITAS
         };
-      } 
-      else if (userQuery.includes("tienda") || userQuery.includes("producto") || userQuery.includes("stock")) {
+      }
+      else if (normalizedUserQuery.includes("tienda") || normalizedUserQuery.includes("producto") || normalizedUserQuery.includes("stock")) {
         if (!activeFeatures.tienda) {
           reply = "El módulo de Tienda e-commerce está desactivado. Podés reactivarlo desde la sección **Configuración**.";
         } else {
@@ -452,39 +613,62 @@ Estructura JSON permitida en "data":
           dataPayload = {
             type: "action",
             label: "Ir a Inventario de Productos",
-            url: "/admin/productos"
+            url: ROUTES.ADMIN_PRODUCTOS
           };
         }
-      } 
-      else if (userQuery.includes("cliente") || userQuery.includes("fidel") || userQuery.includes("historial")) {
+      }
+      else if (normalizedUserQuery.includes("cliente") || normalizedUserQuery.includes("fidel") || normalizedUserQuery.includes("historial")) {
         reply = "En la sección de **Clientes** podés ver la base de datos completa de clientes registrados y walk-ins. Haciendo clic en un cliente podés agregar notas internas sobre sus preferencias (por ejemplo, 'usa cera mate') para recordarlo en su próxima visita.";
         dataPayload = {
           type: "action",
           label: "Ver Clientes",
-          url: "/admin/clientes"
+          url: ROUTES.ADMIN_CLIENTES
         };
-      } 
-      else if (userQuery.includes("configura") || userQuery.includes("módulo") || userQuery.includes("prender") || userQuery.includes("apagar")) {
+      }
+      else if (normalizedUserQuery.includes("configura") || normalizedUserQuery.includes("modulo") || normalizedUserQuery.includes("prender") || normalizedUserQuery.includes("apagar")) {
         reply = "En la sección de **Configuración** podés encender o apagar módulos de forma modular, como la tienda, el sistema de caja/liquidaciones, recordatorios de mensajes o el portal del barbero.";
         dataPayload = {
           type: "action",
           label: "Configuración de Módulos",
-          url: "/admin/configuracion"
+          url: ROUTES.ADMIN_CONFIGURACION
         };
-      } 
+      }
       else {
         reply = "Entendido. Como tu Coach de Gestión de **New Brothers**, te puedo asistir con la operativa del panel: cobro de citas, registro de movimientos en Caja, cálculo de Liquidaciones, control de stock en Productos, o personalización en Configuración. ¿Qué área querés optimizar?";
       }
     } else {
-      // Client Local Rules Fallback
-      if (userQuery.includes("hola") || userQuery.includes("buenas") || userQuery.includes("buen dia") || userQuery.includes("buena tarde")) {
+      // Client Local Rules Fallback (normalizedUserQuery en TODAS las ramas: sin tildes no rompe el match)
+      if (normalizedUserQuery.includes("hola") || normalizedUserQuery.includes("buenas") || normalizedUserQuery.includes("buen dia") || normalizedUserQuery.includes("buena tarde")) {
         reply = "¡Hola! Bienvenido a **New Brothers**. Soy tu Asesor de Estética Masculina personal. ¿En qué te puedo ayudar hoy? Podés consultarme sobre nuestros servicios, reservar turnos, recomendaciones de cortes o conocer nuestros locales.";
       }
-      else if (userQuery.includes("precio") || userQuery.includes("costo") || userQuery.includes("cuanto sale") || userQuery.includes("servicio") || userQuery.includes("menu")) {
+      else if (
+        normalizedUserQuery.includes("mi cita") ||
+        normalizedUserQuery.includes("mi turno") ||
+        normalizedUserQuery.includes("mi reserva") ||
+        normalizedUserQuery.includes("proxima cita") ||
+        normalizedUserQuery.includes("proximo turno")
+      ) {
+        if (!isLoggedIn) {
+          reply = "Para consultar tu turno necesito que inicies sesión primero. Iniciá sesión y volvé a preguntarme.";
+          dataPayload = { type: "action", label: "Iniciar sesión", url: ROUTES.LOGIN };
+        } else if (nextAppointment) {
+          reply = `Tu próxima cita es el **${nextAppointment.date}** a las **${nextAppointment.startTime.slice(0, 5)}**: **${nextAppointment.serviceName}** con **${nextAppointment.barberName}**.\n\n` +
+            (nextAppointment.canCancel
+              ? "Todavía estás a tiempo de cancelarla o reprogramarla desde Mi Cuenta."
+              : `Ya pasó la ventana de ${BUSINESS_CONFIG.cancellationWindow / 60} horas para cancelar sin cargo.`);
+          dataPayload = { type: "action", label: "Ver en Mi Cuenta", url: ROUTES.MI_CUENTA };
+        } else {
+          reply = "No encontré ninguna cita próxima agendada a tu nombre. ¿Querés reservar un turno ahora?";
+          if (activeFeatures.reservas_online) {
+            dataPayload = { type: "action", label: "Reservar Turno Ahora", url: ROUTES.RESERVAR };
+          }
+        }
+      }
+      else if (normalizedUserQuery.includes("precio") || normalizedUserQuery.includes("costo") || normalizedUserQuery.includes("cuanto sale") || normalizedUserQuery.includes("servicio") || normalizedUserQuery.includes("menu")) {
         reply = "En **New Brothers** ofrecemos servicios de cuidado premium adaptados a tu estilo:\n\n" +
           services.map(s => `• **${s.name}**: $${s.price} | Duración: ${s.duration_minutes || 30} min\n  _${s.description || ""}_`).join("\n") +
           (activeFeatures.reservas_online ? "\n\n¿Te gustaría agendar alguno de estos servicios hoy?" : "");
-        
+
         dataPayload = {
           type: "services",
           items: services.map(s => ({
@@ -496,19 +680,21 @@ Estructura JSON permitida en "data":
           }))
         };
       }
-      else if (userQuery.includes("reserva") || userQuery.includes("turno") || userQuery.includes("agendar") || userQuery.includes("cita") || userQuery.includes("hora")) {
+      else if (normalizedUserQuery.includes("reserva") || normalizedUserQuery.includes("turno") || normalizedUserQuery.includes("agendar") || normalizedUserQuery.includes("cita") || normalizedUserQuery.includes("hora") || normalizedUserQuery.includes("disponib") || normalizedUserQuery.includes("libre")) {
         if (!activeFeatures.reservas_online) {
           reply = "Disculpanos. El sistema de reservas online está desactivado temporalmente por mantenimiento. Por favor, volvé a intentar más tarde o comunicate al local.";
         } else {
-          reply = "Para agendar tu turno de forma rápida, podés hacer clic en el botón de abajo o visitar nuestra sección de reservas. Podrás elegir tu sucursal más cercana, tu barbero preferido y el horario de tu conveniencia.";
+          reply = availabilitySummary
+            ? `Esto es lo que encontré para los próximos días:\n\n${availabilitySummary}\n\nHacé clic abajo para elegir tu horario exacto.`
+            : "Para agendar tu turno de forma rápida, podés hacer clic en el botón de abajo o visitar nuestra sección de reservas. Podrás elegir tu sucursal más cercana, tu barbero preferido y el horario de tu conveniencia.";
           dataPayload = {
             type: "action",
             label: "Reservar Turno Ahora",
-            url: "/reservar"
+            url: ROUTES.RESERVAR
           };
         }
       }
-      else if (userQuery.includes("donde") || userQuery.includes("sucursal") || userQuery.includes("direccion") || userQuery.includes("local") || userQuery.includes("ubicacion")) {
+      else if (normalizedUserQuery.includes("donde") || normalizedUserQuery.includes("sucursal") || normalizedUserQuery.includes("direccion") || normalizedUserQuery.includes("local") || normalizedUserQuery.includes("ubicacion")) {
         reply = "Contamos con tres sucursales premium en Uruguay:\n\n" +
           branches.map(b => `📍 **${b.name}**\n  Dirección: ${b.address}\n  Teléfono: ${b.phone}\n  Horario: ${b.hours}`).join("\n\n");
         dataPayload = {
@@ -516,12 +702,12 @@ Estructura JSON permitida en "data":
           items: branches
         };
       }
-      else if (userQuery.includes("barbero") || userQuery.includes("cortar") || userQuery.includes("quien") || userQuery.includes("equipo") || userQuery.includes("personal")) {
+      else if (normalizedUserQuery.includes("barbero") || normalizedUserQuery.includes("cortar") || normalizedUserQuery.includes("quien") || normalizedUserQuery.includes("equipo") || normalizedUserQuery.includes("personal")) {
         reply = "Contamos con un equipo de profesionales altamente calificados listos para atenderte:\n\n" +
           barbers.map(b => `• **${b.name}**: ${b.bio || "Barbero profesional especialista en estética masculina."}`).join("\n") +
           (activeFeatures.reservas_online ? "\n\nPodés elegir a cualquiera de ellos al agendar tu turno." : "");
       }
-      else if (userQuery.includes("recomienda") || userQuery.includes("corte") || userQuery.includes("estilo") || userQuery.includes("look") || userQuery.includes("peinado") || userQuery.includes("lookbook")) {
+      else if (normalizedUserQuery.includes("recomienda") || normalizedUserQuery.includes("corte") || normalizedUserQuery.includes("estilo") || normalizedUserQuery.includes("look") || normalizedUserQuery.includes("peinado") || normalizedUserQuery.includes("lookbook")) {
         if (!activeFeatures.lookbook) {
           reply = "Actualmente la galería de estilos está en mantenimiento, pero te recomendamos nuestro Corte Clásico o Fade Degradado Alto.";
         } else {
@@ -539,7 +725,7 @@ Estructura JSON permitida en "data":
           };
         }
       }
-      else if (userQuery.includes("producto") || userQuery.includes("cera") || userQuery.includes("aceite") || userQuery.includes("shampoo") || userQuery.includes("tienda") || userQuery.includes("venta")) {
+      else if (normalizedUserQuery.includes("producto") || normalizedUserQuery.includes("cera") || normalizedUserQuery.includes("aceite") || normalizedUserQuery.includes("shampoo") || normalizedUserQuery.includes("tienda") || normalizedUserQuery.includes("venta")) {
         if (!activeFeatures.tienda) {
           reply = "La tienda de productos está desactivada temporalmente. ¡Pronto estará disponible de nuevo!";
         } else {
@@ -569,9 +755,22 @@ Estructura JSON permitida en "data":
         normalizedUserQuery.includes("retraso") ||
         normalizedUserQuery.includes("llego tarde")
       ) {
-        reply = `**Políticas de Cancelación:** Podés cancelar o modificar tu turno de forma gratuita hasta 2 horas antes de la cita acordada a través de la sección Mi Cuenta.\n\n**Tolerancia de Retraso:** Agradecemos llegar 5 o 10 minutos antes. Si te demorás más de 10 minutos, es posible que debamos reprogramar el turno para no retrasar a los demás clientes.`;
+        reply = `**Políticas de Cancelación:** Podés cancelar o modificar tu turno de forma gratuita hasta ${BUSINESS_CONFIG.cancellationWindow / 60} horas antes de la cita acordada a través de la sección Mi Cuenta.\n\n**Tolerancia de Retraso:** Agradecemos llegar 5 o 10 minutos antes. Si te demorás más de 10 minutos, es posible que debamos reprogramar el turno para no retrasar a los demás clientes.`;
+        dataPayload = { type: "action", label: "Gestionar mi turno", url: ROUTES.MI_CUENTA };
       }
-      else if (userQuery.includes("pago") || userQuery.includes("tarjeta") || userQuery.includes("mercado") || userQuery.includes("efectivo")) {
+      else if (
+        normalizedUserQuery.includes("contacto") ||
+        normalizedUserQuery.includes("telefono") ||
+        normalizedUserQuery.includes("whatsapp") ||
+        normalizedUserQuery.includes("llamar") ||
+        normalizedUserQuery.includes("como llego") ||
+        normalizedUserQuery.includes("como llegar")
+      ) {
+        reply = "Podés comunicarte con nosotros por teléfono, WhatsApp o visitando cualquiera de nuestras sucursales:\n\n" +
+          branches.map(b => `📍 **${b.name}**\n  ${b.address}\n  📞 ${b.phone}`).join("\n\n");
+        dataPayload = { type: "action", label: "Ver página de Contacto", url: ROUTES.CONTACTO };
+      }
+      else if (normalizedUserQuery.includes("pago") || normalizedUserQuery.includes("tarjeta") || normalizedUserQuery.includes("mercado") || normalizedUserQuery.includes("efectivo")) {
         reply = `**Medios de Pago:** Aceptamos efectivo en el local, transferencias bancarias y pagos online vía MercadoPago o tarjetas.`;
       }
       else if (isDemoMode && isDemoAdminQuery) {
@@ -579,7 +778,7 @@ Estructura JSON permitida en "data":
         dataPayload = {
           type: "action",
           label: "Entrar como Admin demo",
-          url: "/admin-login"
+          url: ROUTES.ADMIN_LOGIN
         };
       }
       else {
