@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Calendar, Scissors, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
+import { createClient } from "@/lib/supabase/client";
+import { resolveBarberSession } from "@/lib/barber-session";
 
 const sidebarLinks = [
     {
@@ -21,6 +24,26 @@ export default function BarberoLayout({
     children: React.ReactNode;
 }) {
     const pathname = usePathname();
+    const router = useRouter();
+    const supabase = useMemo(() => createClient(), []);
+    const [barberName, setBarberName] = useState<string | null>(null);
+
+    useEffect(() => {
+        let active = true;
+        resolveBarberSession(supabase).then((session) => {
+            if (active && session.status === "ok") {
+                setBarberName(session.barberName);
+            }
+        });
+        return () => {
+            active = false;
+        };
+    }, [supabase]);
+
+    const handleSignOut = useCallback(async () => {
+        await supabase.auth.signOut();
+        router.replace("/");
+    }, [supabase, router]);
 
     return (
         <div className="min-h-screen bg-background">
@@ -30,11 +53,19 @@ export default function BarberoLayout({
                     <Scissors className="h-6 w-6 text-primary" />
                     <span className="font-bold">NB Barber</span>
                 </Link>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                     <Button variant="ghost" size="icon" asChild>
                         <Link href="/" aria-label="Volver al inicio">
-                            <LogOut className="h-5 w-5" />
+                            <User className="h-5 w-5" />
                         </Link>
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Cerrar sesión"
+                        onClick={handleSignOut}
+                    >
+                        <LogOut className="h-5 w-5" />
                     </Button>
                 </div>
             </header>
@@ -59,7 +90,7 @@ export default function BarberoLayout({
                             <User className="h-5 w-5 text-primary" />
                         </div>
                         <div>
-                            <p className="font-medium text-sm">Barbero</p>
+                            <p className="font-medium text-sm">{barberName || "Barbero"}</p>
                             <p className="text-xs text-muted-foreground">En servicio</p>
                         </div>
                     </div>
@@ -85,14 +116,21 @@ export default function BarberoLayout({
                 </nav>
 
                 {/* Bottom */}
-                <div className="p-4 border-t border-border">
+                <div className="p-4 border-t border-border space-y-1">
                     <Link
                         href="/"
                         className="flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:bg-primary/5 hover:text-foreground transition-colors"
                     >
-                        <LogOut className="h-5 w-5" />
+                        <User className="h-5 w-5" />
                         Volver al inicio
                     </Link>
+                    <button
+                        onClick={handleSignOut}
+                        className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                    >
+                        <LogOut className="h-5 w-5" />
+                        Cerrar sesión
+                    </button>
                 </div>
             </aside>
 
