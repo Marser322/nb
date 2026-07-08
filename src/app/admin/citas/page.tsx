@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
+    AlertCircle,
     Calendar,
     Search,
     Filter,
@@ -11,6 +12,10 @@ import {
     User,
     Plus,
     Loader2,
+    DollarSign,
+    MapPin,
+    Scissors,
+    Timer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,8 +37,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatPrice } from "@/lib/utils";
 import {
+    APPOINTMENT_STATUS,
     APPOINTMENT_STATUS_LABELS,
-    APPOINTMENT_STATUS_COLORS,
     BUSINESS_CONFIG,
 } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
@@ -52,6 +57,21 @@ type AppointmentWithRelations = Appointment & {
     service?: Service;
     barber?: Barber;
     client?: Profile;
+};
+
+type AgendaMetricTone = "primary" | "pending" | "confirmed" | "completed" | "cancelled";
+
+type AgendaMetric = {
+    label: string;
+    value: string;
+    hint: string;
+    tone: AgendaMetricTone;
+    icon: typeof Calendar;
+};
+
+type TimelineGroup = {
+    hour: string;
+    appointments: AppointmentWithRelations[];
 };
 
 export default function AdminCitasPage() {
@@ -389,51 +409,179 @@ export default function AdminCitasPage() {
         }
     }, [branchFilter, barberFilter, barbers]);
 
+    const selectedDateDisplay = format(new Date(`${selectedDate}T12:00:00`), "EEEE, d 'de' MMMM", { locale: es });
+    const isToday = selectedDate === format(startOfToday(), "yyyy-MM-dd");
+    const selectedServiceForForm = services.find((service) => service.id === formData.serviceId);
+    const selectedBarberForForm = barbers.find((barber) => barber.id === formData.barberId);
+    const selectedBarberBranchName = selectedBarberForForm?.branch_id
+        ? branches.find((branch) => branch.id === selectedBarberForForm.branch_id)?.name || "Sin sucursal"
+        : null;
+
+    const agendaSummary = useMemo(() => {
+        const counts = appointments.reduce(
+            (acc, appointment) => {
+                acc.total += 1;
+                acc[appointment.status] = (acc[appointment.status] || 0) + 1;
+                return acc;
+            },
+            { total: 0 } as Record<string, number>
+        );
+
+        const activeAppointments = appointments
+            .filter((appointment) => appointment.status === APPOINTMENT_STATUS.PENDING || appointment.status === APPOINTMENT_STATUS.CONFIRMED)
+            .sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+        const nextAppointment = activeAppointments.find((appointment) => {
+            if (!isToday) return true;
+            return appointment.start_time.slice(0, 5) >= format(new Date(), "HH:mm");
+        }) || activeAppointments[0] || null;
+
+        const potentialRevenue = activeAppointments.reduce((sum, appointment) => sum + Number(appointment.service?.price || 0), 0);
+        const completedRevenue = appointments
+            .filter((appointment) => appointment.status === APPOINTMENT_STATUS.COMPLETED)
+            .reduce((sum, appointment) => sum + Number(appointment.service?.price || 0), 0);
+
+        return {
+            counts,
+            nextAppointment,
+            potentialRevenue,
+            completedRevenue,
+        };
+    }, [appointments, isToday]);
+
+    const agendaMetrics: AgendaMetric[] = useMemo(() => [
+        {
+            label: "Citas del día",
+            value: String(agendaSummary.counts.total || 0),
+            hint: `${filteredAppointments.length} visibles con filtros`,
+            tone: "primary",
+            icon: Calendar,
+        },
+        {
+            label: "Por confirmar",
+            value: String(agendaSummary.counts.pending || 0),
+            hint: "Necesitan acción del equipo",
+            tone: "pending",
+            icon: AlertCircle,
+        },
+        {
+            label: "Confirmadas",
+            value: String(agendaSummary.counts.confirmed || 0),
+            hint: "Listas para atender",
+            tone: "confirmed",
+            icon: CheckCircle,
+        },
+        {
+            label: "Ingresos previstos",
+            value: formatPrice(agendaSummary.potentialRevenue),
+            hint: `${formatPrice(agendaSummary.completedRevenue)} ya completados`,
+            tone: "completed",
+            icon: DollarSign,
+        },
+    ], [agendaSummary, filteredAppointments.length]);
+
+    const timelineGroups: TimelineGroup[] = useMemo(() => {
+        const groups = new Map<string, AppointmentWithRelations[]>();
+
+        filteredAppointments
+            .slice()
+            .sort((a, b) => a.start_time.localeCompare(b.start_time))
+            .forEach((appointment) => {
+                const hour = appointment.start_time.slice(0, 2);
+                const key = `${hour}:00`;
+                const group = groups.get(key) || [];
+                group.push(appointment);
+                groups.set(key, group);
+            });
+
+        return Array.from(groups.entries()).map(([hour, group]) => ({
+            hour,
+            appointments: group,
+        }));
+    }, [filteredAppointments]);
+
+    const nextAppointmentLabel = agendaSummary.nextAppointment
+        ? `${agendaSummary.nextAppointment.start_time.slice(0, 5)} · ${agendaSummary.nextAppointment.service?.name || "Servicio"}`
+        : "Sin próximas citas activas";
+
+    const activeFilterCount = [statusFilter, branchFilter, barberFilter].filter((filter) => filter !== "all").length + (searchQuery.trim() ? 1 : 0);
+
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-bold">Gestión de Citas</h1>
-                    <p className="text-muted-foreground">
-                        Administra las citas del día
-                    </p>
-                </div>
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button id="admin-btn-new-appointment">
-                            <Plus className="h-4 w-4 mr-2" />
-                            Nueva Cita
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-md">
-                        <DialogHeader>
-                            <DialogTitle>Crear Cita Manual</DialogTitle>
-                        </DialogHeader>
-                        <form onSubmit={handleCreateAppointment} className="space-y-4 mt-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-sm font-medium mb-2 block">Nombre Cliente</label>
-                                    <Input
-                                        placeholder="Juan Pérez"
-                                        value={formData.clientName}
-                                        onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-sm font-medium mb-2 block">Teléfono</label>
-                                    <Input
-                                        placeholder="099 123 456"
-                                        value={formData.clientPhone}
-                                        onChange={(e) => setFormData({ ...formData, clientPhone: e.target.value })}
-                                    />
-                                </div>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <section className="admin-agenda-hero rounded-2xl border p-5 md:p-6">
+                    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+                        <div className="max-w-3xl space-y-3">
+                            <div className="admin-chip inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]">
+                                <Calendar className="h-3.5 w-3.5" />
+                                Agenda operativa
                             </div>
+                            <div>
+                                <h1 className="font-display text-3xl font-black tracking-tight text-foreground md:text-5xl">
+                                    Citas
+                                </h1>
+                                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
+                                    {selectedDateDisplay}. Vista diaria para confirmar, cobrar, reprogramar y leer el ritmo del equipo sin perder contexto.
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                <span className="admin-agenda-pill">
+                                    {isToday ? "Hoy" : "Fecha seleccionada"}
+                                </span>
+                                <span className="admin-agenda-pill">
+                                    Próxima: {nextAppointmentLabel}
+                                </span>
+                                {activeFilterCount > 0 && (
+                                    <span className="admin-agenda-pill">
+                                        {activeFilterCount} filtros activos
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <DialogTrigger asChild>
+                            <Button id="admin-btn-new-appointment" className="admin-accent-button h-12 rounded-full px-5 font-semibold">
+                                <Plus className="h-4 w-4 mr-2" />
+                                Nueva cita
+                            </Button>
+                        </DialogTrigger>
+                    </div>
+
+                    <AgendaSummary metrics={agendaMetrics} />
+                </section>
+
+                <DialogContent className="max-w-2xl bg-card/95 border-border/60 backdrop-blur-xl">
+                    <DialogHeader>
+                        <DialogTitle>Crear cita manual</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleCreateAppointment} className="mt-2 space-y-5">
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Nombre del cliente</label>
+                                <Input
+                                    placeholder="Juan Pérez"
+                                    value={formData.clientName}
+                                    onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                                    className="admin-field-focus bg-background/50 border-input/50"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Teléfono</label>
+                                <Input
+                                    placeholder="099 123 456"
+                                    value={formData.clientPhone}
+                                    onChange={(e) => setFormData({ ...formData, clientPhone: e.target.value })}
+                                    className="admin-field-focus bg-background/50 border-input/50"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
                             <div>
                                 <label className="text-sm font-medium mb-2 block">Servicio</label>
                                 <Select value={formData.serviceId} onValueChange={(v) => setFormData({ ...formData, serviceId: v })}>
-                                    <SelectTrigger>
+                                    <SelectTrigger className="admin-field-focus">
                                         <SelectValue placeholder="Seleccionar servicio" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -448,7 +596,7 @@ export default function AdminCitasPage() {
                             <div>
                                 <label className="text-sm font-medium mb-2 block">Barbero</label>
                                 <Select value={formData.barberId} onValueChange={(v) => setFormData({ ...formData, barberId: v })}>
-                                    <SelectTrigger>
+                                    <SelectTrigger className="admin-field-focus">
                                         <SelectValue placeholder="Seleccionar barbero" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -463,50 +611,74 @@ export default function AdminCitasPage() {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-sm font-medium mb-2 block">Fecha</label>
-                                    <Input
-                                        type="date"
-                                        value={formData.date}
-                                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-sm font-medium mb-2 block">Hora</label>
-                                    <Select value={formData.time} onValueChange={(v) => setFormData({ ...formData, time: v })} disabled={!formData.barberId || isLoadingSlots}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={isLoadingSlots ? "Cargando..." : "Hora"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {generateTimeSlots().map((slot) => (
-                                                <SelectItem key={slot} value={slot} disabled={isSlotDisabled(slot)}>
-                                                    {slot}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            <div className="flex justify-end gap-2 pt-4">
-                                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                                    Cancelar
-                                </Button>
-                                <Button type="submit" disabled={isSubmitting}>
-                                    {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                                    Crear Cita
-                                </Button>
-                            </div>
-                        </form>
-                    </DialogContent>
-                </Dialog>
-            </div>
+                        </div>
 
-            {/* Filtros */}
-            <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between">
-                {/* Selector de fecha rápido */}
-                <div className="flex gap-2 overflow-x-auto pb-2 xl:pb-0 w-full xl:w-auto">
+                        {(selectedServiceForForm || selectedBarberForForm) && (
+                            <div className="admin-dialog-brief grid gap-3 rounded-xl border p-3 text-sm md:grid-cols-3">
+                                <div>
+                                    <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Servicio</span>
+                                    <p className="font-semibold text-foreground">{selectedServiceForForm?.name || "Sin elegir"}</p>
+                                </div>
+                                <div>
+                                    <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Duración</span>
+                                    <p className="font-semibold text-foreground">{selectedServiceForForm ? `${selectedServiceForForm.duration_minutes} min` : "Pendiente"}</p>
+                                </div>
+                                <div>
+                                    <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Equipo</span>
+                                    <p className="font-semibold text-foreground">{selectedBarberForForm ? `${selectedBarberForForm.name} · ${selectedBarberBranchName}` : "Pendiente"}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Fecha</label>
+                                <Input
+                                    type="date"
+                                    value={formData.date}
+                                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                    className="admin-field-focus bg-background/50 border-input/50"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Hora disponible</label>
+                                <Select value={formData.time} onValueChange={(v) => setFormData({ ...formData, time: v })} disabled={!formData.barberId || isLoadingSlots}>
+                                    <SelectTrigger className="admin-field-focus">
+                                        <SelectValue placeholder={isLoadingSlots ? "Revisando agenda..." : formData.barberId ? "Elegí un horario" : "Elegí barbero"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {generateTimeSlots().map((slot) => {
+                                            const disabled = isSlotDisabled(slot);
+                                            return (
+                                                <SelectItem key={slot} value={slot} disabled={disabled}>
+                                                    {slot} · {disabled ? "ocupado" : "libre"}
+                                                </SelectItem>
+                                            );
+                                        })}
+                                    </SelectContent>
+                                </Select>
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                    Los horarios ocupados consideran la duración del servicio elegido.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t border-border/40 pt-4">
+                            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                                Cancelar
+                            </Button>
+                            <Button type="submit" disabled={isSubmitting} className="admin-accent-button font-semibold">
+                                {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                Crear cita
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <section className="admin-agenda-filterbar rounded-2xl border p-3">
+                <div className="flex gap-2 overflow-x-auto pb-2 xl:pb-0">
                     {quickDates.map((date) => {
                         const dateStr = format(date, "yyyy-MM-dd");
                         const isSelected = selectedDate === dateStr;
@@ -514,35 +686,31 @@ export default function AdminCitasPage() {
                             <button
                                 key={dateStr}
                                 onClick={() => setSelectedDate(dateStr)}
-                                className={`flex-shrink-0 flex flex-col items-center p-2 rounded-lg border transition-colors min-w-[60px] ${isSelected
-                                    ? "border-primary bg-primary/10 text-primary"
-                                    : "border-border hover:border-primary/50"
-                                    }`}
+                                className={`admin-date-pill flex-shrink-0 ${isSelected ? "admin-date-pill-active" : ""}`}
+                                aria-pressed={isSelected}
                             >
-                                <span className="text-xs uppercase">
+                                <span className="text-[10px] uppercase tracking-[0.16em]">
                                     {format(date, "EEE", { locale: es })}
                                 </span>
-                                <span className="text-lg font-bold">{format(date, "d")}</span>
+                                <span className="text-lg font-black">{format(date, "d")}</span>
                             </button>
                         );
                     })}
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto xl:flex-1 xl:justify-end">
-                    {/* Buscador de cliente */}
-                    <div className="relative w-full md:max-w-[240px]">
+                <div className="grid gap-3 pt-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_180px] xl:pt-0">
+                    <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Buscar cliente/teléfono..."
+                            placeholder="Buscar cliente o teléfono..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 bg-background/50 border-input/50 focus:border-primary/50"
+                            className="admin-field-focus h-10 pl-9 bg-background/50 border-input/50"
                         />
                     </div>
 
-                    {/* Filtro de estado */}
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-full md:w-[180px]">
+                        <SelectTrigger className="admin-field-focus w-full">
                             <Filter className="h-4 w-4 mr-2" />
                             <SelectValue placeholder="Estado" />
                         </SelectTrigger>
@@ -552,13 +720,13 @@ export default function AdminCitasPage() {
                             <SelectItem value="confirmed">Confirmadas</SelectItem>
                             <SelectItem value="completed">Completadas</SelectItem>
                             <SelectItem value="cancelled">Canceladas</SelectItem>
+                            <SelectItem value="no_show">No se presentó</SelectItem>
                         </SelectContent>
                     </Select>
 
-                    {/* Filtro de sucursal */}
                     <Select value={branchFilter} onValueChange={setBranchFilter}>
-                        <SelectTrigger className="w-full md:w-[180px]">
-                            <Filter className="h-4 w-4 mr-2" />
+                        <SelectTrigger className="admin-field-focus w-full">
+                            <MapPin className="h-4 w-4 mr-2" />
                             <SelectValue placeholder="Sucursal" />
                         </SelectTrigger>
                         <SelectContent>
@@ -571,10 +739,9 @@ export default function AdminCitasPage() {
                         </SelectContent>
                     </Select>
 
-                    {/* Filtro de barbero */}
                     <Select value={barberFilter} onValueChange={setBarberFilter}>
-                        <SelectTrigger className="w-full md:w-[180px]">
-                            <Filter className="h-4 w-4 mr-2" />
+                        <SelectTrigger className="admin-field-focus w-full">
+                            <Scissors className="h-4 w-4 mr-2" />
                             <SelectValue placeholder="Barbero" />
                         </SelectTrigger>
                         <SelectContent>
@@ -589,26 +756,25 @@ export default function AdminCitasPage() {
                         </SelectContent>
                     </Select>
                 </div>
-            </div>
+            </section>
 
-            {/* Lista de citas */}
-            <Card className="border-border/50">
-                <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
+            <Card className="admin-section-card admin-agenda-board border-border/50">
+                <CardHeader className="gap-3">
+                    <CardTitle className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <span className="flex items-center gap-2">
-                            <Calendar className="h-5 w-5 text-primary" />
-                            {format(new Date(selectedDate), "EEEE, d 'de' MMMM", { locale: es })}
+                            <Clock className="h-5 w-5 text-primary" />
+                            Agenda del día
                         </span>
-                        <Badge variant="secondary">
-                            {filteredAppointments.length} citas
+                        <Badge variant="outline" className="w-fit border-primary/25 bg-primary/10 text-primary">
+                            {filteredAppointments.length} citas visibles
                         </Badge>
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             {[...Array(4)].map((_, i) => (
-                                <div key={i} className="h-20 bg-muted/50 rounded-lg animate-pulse" />
+                                <div key={i} className="h-28 animate-pulse rounded-2xl bg-muted/40" />
                             ))}
                         </div>
                     ) : filteredAppointments.length === 0 ? (
@@ -626,99 +792,21 @@ export default function AdminCitasPage() {
                             }
                         />
                     ) : (
-                        <div className="space-y-3">
-                            {filteredAppointments.map((cita) => (
-                                <div
-                                    key={cita.id}
-                                    className="flex flex-col md:flex-row md:items-center justify-between p-4 rounded-lg bg-card border border-border/50 gap-4"
-                                >
-                                    <div className="flex items-start gap-4">
-                                        {/* Hora */}
-                                        <div className="text-center min-w-[70px] bg-muted/50 rounded-lg p-2">
-                                            <p className="text-lg font-bold">{cita.start_time.slice(0, 5)}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {cita.end_time.slice(0, 5)}
-                                            </p>
-                                        </div>
-
-                                        {/* Info */}
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <p className="font-semibold">{cita.service?.name}</p>
-                                                <Badge
-                                                    variant="outline"
-                                                    className={APPOINTMENT_STATUS_COLORS[cita.status]}
-                                                >
-                                                    {APPOINTMENT_STATUS_LABELS[cita.status]}
-                                                </Badge>
-                                            </div>
-                                            <p className="text-sm text-muted-foreground">
-                                                <User className="inline h-3 w-3 mr-1" />
-                                                {cita.client?.full_name || cita.notes?.split(" - ")[0]?.replace("Cliente: ", "") || "Cliente"}
-                                                {" • "}
-                                                Barbero: {cita.barber?.name || "Sin asignar"}
-                                            </p>
-                                            {cita.service && (
-                                                <p className="text-sm font-semibold text-primary mt-1">
-                                                    {formatPrice(cita.service.price)}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Acciones */}
-                                    {cita.status === "pending" || cita.status === "confirmed" ? (
-                                        <div className="flex gap-2">
-                                            {cita.status === "pending" && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="h-10 border-primary/30 text-primary hover:bg-primary/10 md:h-8"
-                                                    onClick={() => updateStatus(cita.id, "confirmed")}
-                                                >
-                                                    <CheckCircle className="h-4 w-4 mr-1" />
-                                                    Confirmar
-                                                </Button>
-                                            )}
-                                            {cita.status === "confirmed" && (
-                                                <Button
-                                                    size="sm"
-                                                    className="h-10 bg-primary text-primary-foreground hover:bg-primary/90 md:h-8"
-                                                    onClick={() => {
-                                                        if (features.contabilidad) {
-                                                            setChargeApt(cita);
-                                                        } else {
-                                                            updateStatus(cita.id, "completed");
-                                                        }
-                                                    }}
-                                                >
-                                                    <CheckCircle className="h-4 w-4 mr-1" />
-                                                    Completar
-                                                </Button>
-                                            )}
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => openReschedule(cita)}
-                                                className="h-10 md:h-8"
-                                            >
-                                                <Clock className="h-4 w-4 mr-1" />
-                                                Reprogramar
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="h-10 border-destructive/30 text-destructive hover:bg-destructive/10 md:h-8"
-                                                onClick={() => updateStatus(cita.id, "cancelled")}
-                                            >
-                                                <XCircle className="h-4 w-4 mr-1" />
-                                                Cancelar
-                                            </Button>
-                                        </div>
-                                    ) : null}
-                                </div>
-                            ))}
-                        </div>
+                        <AgendaTimeline
+                            groups={timelineGroups}
+                            branches={branches}
+                            canCharge={features.contabilidad}
+                            onConfirm={(cita) => updateStatus(cita.id, "confirmed")}
+                            onComplete={(cita) => {
+                                if (features.contabilidad) {
+                                    setChargeApt(cita);
+                                } else {
+                                    updateStatus(cita.id, "completed");
+                                }
+                            }}
+                            onCancel={(cita) => updateStatus(cita.id, "cancelled")}
+                            onReschedule={openReschedule}
+                        />
                     )}
                 </CardContent>
             </Card>
@@ -734,46 +822,63 @@ export default function AdminCitasPage() {
 
             {/* Reprogramar cita */}
             <Dialog open={rescheduleApt !== null} onOpenChange={(open) => !open && setRescheduleApt(null)}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="max-w-xl bg-card/95 border-border/60 backdrop-blur-xl">
                     <DialogHeader>
                         <DialogTitle>Reprogramar cita</DialogTitle>
                     </DialogHeader>
                     {rescheduleApt && (
-                        <div className="space-y-4 mt-4">
-                            <p className="text-sm text-muted-foreground">
-                                {rescheduleApt.service?.name} · {rescheduleApt.client?.full_name || "Cliente"}
-                                {" · "}Barbero: {rescheduleApt.barber?.name || "Sin asignar"}
-                            </p>
-                            <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-5 mt-2">
+                            <div className="admin-dialog-brief rounded-xl border p-4">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <p className="text-sm font-semibold text-foreground">{rescheduleApt.service?.name || "Servicio"}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {getClientName(rescheduleApt)} · {rescheduleApt.barber?.name || "Sin asignar"}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-lg border border-border/50 bg-background/40 px-3 py-2 text-right">
+                                        <p className="text-sm font-bold text-foreground">{rescheduleApt.start_time.slice(0, 5)}</p>
+                                        <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">horario actual</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-2">
                                 <div>
                                     <label className="text-sm font-medium mb-2 block">Nueva fecha</label>
                                     <Input
                                         type="date"
                                         value={rescheduleDate}
                                         onChange={(e) => { setRescheduleDate(e.target.value); setRescheduleTime(""); }}
+                                        className="admin-field-focus bg-background/50 border-input/50"
                                     />
                                 </div>
                                 <div>
                                     <label className="text-sm font-medium mb-2 block">Nueva hora</label>
                                     <Select value={rescheduleTime} onValueChange={setRescheduleTime} disabled={isReschedLoadingSlots}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={isReschedLoadingSlots ? "Cargando..." : "Hora"} />
+                                        <SelectTrigger className="admin-field-focus">
+                                            <SelectValue placeholder={isReschedLoadingSlots ? "Revisando agenda..." : "Elegí un horario"} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {generateTimeSlots().map((slot) => (
-                                                <SelectItem key={slot} value={slot} disabled={isRescheduleSlotDisabled(slot)}>
-                                                    {slot}
-                                                </SelectItem>
-                                            ))}
+                                            {generateTimeSlots().map((slot) => {
+                                                const disabled = isRescheduleSlotDisabled(slot);
+                                                return (
+                                                    <SelectItem key={slot} value={slot} disabled={disabled}>
+                                                        {slot} · {disabled ? "ocupado" : "libre"}
+                                                    </SelectItem>
+                                                );
+                                            })}
                                         </SelectContent>
                                     </Select>
+                                    <p className="mt-2 text-xs text-muted-foreground">
+                                        Se excluye esta misma cita para calcular huecos disponibles.
+                                    </p>
                                 </div>
                             </div>
-                            <div className="flex justify-end gap-2 pt-4">
+                            <div className="flex justify-end gap-2 border-t border-border/40 pt-4">
                                 <Button type="button" variant="outline" onClick={() => setRescheduleApt(null)}>
                                     Cancelar
                                 </Button>
-                                <Button type="button" onClick={handleReschedule} disabled={isRescheduling}>
+                                <Button type="button" onClick={handleReschedule} disabled={isRescheduling} className="admin-accent-button font-semibold">
                                     {isRescheduling && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                                     Reprogramar
                                 </Button>
@@ -784,4 +889,193 @@ export default function AdminCitasPage() {
             </Dialog>
         </div>
     );
+}
+
+function AgendaSummary({ metrics }: { metrics: AgendaMetric[] }) {
+    return (
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {metrics.map((metric) => {
+                const Icon = metric.icon;
+                return (
+                    <div key={metric.label} className="admin-agenda-stat rounded-xl border p-4" data-tone={metric.tone}>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{metric.label}</p>
+                                <p className="mt-2 text-2xl font-black tracking-tight text-foreground">{metric.value}</p>
+                            </div>
+                            <span className="admin-agenda-stat-icon inline-flex h-10 w-10 items-center justify-center rounded-xl">
+                                <Icon className="h-5 w-5" aria-hidden="true" />
+                            </span>
+                        </div>
+                        <p className="mt-3 text-xs text-muted-foreground">{metric.hint}</p>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function AgendaTimeline({
+    groups,
+    branches,
+    canCharge,
+    onConfirm,
+    onComplete,
+    onCancel,
+    onReschedule,
+}: {
+    groups: TimelineGroup[];
+    branches: Branch[];
+    canCharge: boolean;
+    onConfirm: (appointment: AppointmentWithRelations) => void;
+    onComplete: (appointment: AppointmentWithRelations) => void;
+    onCancel: (appointment: AppointmentWithRelations) => void;
+    onReschedule: (appointment: AppointmentWithRelations) => void;
+}) {
+    return (
+        <div className="admin-timeline space-y-5">
+            {groups.map((group) => (
+                <section key={group.hour} className="admin-timeline-group">
+                    <div className="admin-time-marker">
+                        <span className="font-mono text-sm font-bold">{group.hour}</span>
+                        <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{group.appointments.length} citas</span>
+                    </div>
+                    <div className="space-y-3">
+                        {group.appointments.map((appointment) => (
+                            <AppointmentCard
+                                key={appointment.id}
+                                appointment={appointment}
+                                branchName={getBranchName(appointment, branches)}
+                                canCharge={canCharge}
+                                onConfirm={() => onConfirm(appointment)}
+                                onComplete={() => onComplete(appointment)}
+                                onCancel={() => onCancel(appointment)}
+                                onReschedule={() => onReschedule(appointment)}
+                            />
+                        ))}
+                    </div>
+                </section>
+            ))}
+        </div>
+    );
+}
+
+function AppointmentCard({
+    appointment,
+    branchName,
+    canCharge,
+    onConfirm,
+    onComplete,
+    onCancel,
+    onReschedule,
+}: {
+    appointment: AppointmentWithRelations;
+    branchName: string;
+    canCharge: boolean;
+    onConfirm: () => void;
+    onComplete: () => void;
+    onCancel: () => void;
+    onReschedule: () => void;
+}) {
+    const isActionable = appointment.status === "pending" || appointment.status === "confirmed";
+    const duration = appointment.service?.duration_minutes ? `${appointment.service.duration_minutes} min` : `${appointment.start_time.slice(0, 5)}-${appointment.end_time.slice(0, 5)}`;
+
+    return (
+        <article className="admin-appointment-card rounded-2xl border p-4" data-status={appointment.status}>
+            <div className="grid gap-4 xl:grid-cols-[86px_minmax(0,1fr)_auto] xl:items-center">
+                <div className="admin-appointment-time rounded-xl border px-3 py-2 text-center">
+                    <p className="font-mono text-xl font-black text-foreground">{appointment.start_time.slice(0, 5)}</p>
+                    <p className="text-xs text-muted-foreground">{appointment.end_time.slice(0, 5)}</p>
+                </div>
+
+                <div className="min-w-0 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="admin-status-badge" data-status={appointment.status}>
+                            {APPOINTMENT_STATUS_LABELS[appointment.status]}
+                        </Badge>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
+                            <Timer className="h-3.5 w-3.5" />
+                            {duration}
+                        </span>
+                        {appointment.service && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                                <DollarSign className="h-3.5 w-3.5" />
+                                {formatPrice(appointment.service.price)}
+                            </span>
+                        )}
+                    </div>
+
+                    <div>
+                        <h3 className="truncate text-lg font-bold text-foreground">{appointment.service?.name || "Servicio sin detalle"}</h3>
+                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                            <span className="inline-flex items-center gap-1">
+                                <User className="h-3.5 w-3.5" />
+                                {getClientName(appointment)}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                                <Scissors className="h-3.5 w-3.5" />
+                                {appointment.barber?.name || "Sin asignar"}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                                <MapPin className="h-3.5 w-3.5" />
+                                {branchName}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {isActionable ? (
+                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                        {appointment.status === "pending" && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-10 border-primary/30 text-primary hover:bg-primary/10 md:h-8"
+                                onClick={onConfirm}
+                            >
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Confirmar
+                            </Button>
+                        )}
+                        {appointment.status === "confirmed" && (
+                            <Button
+                                size="sm"
+                                className="admin-accent-button h-10 font-semibold md:h-8"
+                                onClick={onComplete}
+                            >
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                {canCharge ? "Cobrar" : "Completar"}
+                            </Button>
+                        )}
+                        <Button size="sm" variant="outline" onClick={onReschedule} className="h-10 md:h-8">
+                            <Clock className="h-4 w-4 mr-1" />
+                            Reprogramar
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-10 border-destructive/30 text-destructive hover:bg-destructive/10 md:h-8"
+                            onClick={onCancel}
+                        >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Cancelar
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="text-sm text-muted-foreground xl:text-right">
+                        Sin acciones pendientes
+                    </div>
+                )}
+            </div>
+        </article>
+    );
+}
+
+function getClientName(appointment: AppointmentWithRelations) {
+    return appointment.client?.full_name || appointment.notes?.split(" - ")[0]?.replace("Cliente: ", "") || "Cliente";
+}
+
+function getBranchName(appointment: AppointmentWithRelations, branches: Branch[]) {
+    if (!appointment.barber?.branch_id) return "Sin sucursal";
+    return branches.find((branch) => branch.id === appointment.barber?.branch_id)?.name || "Sin sucursal";
 }

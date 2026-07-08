@@ -312,7 +312,7 @@ export default function AdminLiquidacionesPage() {
                             setRentaBarberId(selectedBarberId !== "all" ? selectedBarberId : "");
                             setIsRentaDialogOpen(true);
                         }}
-                        className="bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+                        className="admin-accent-button font-semibold"
                     >
                         <Plus className="h-4 w-4 mr-2" />
                         Registrar Renta Cobrada
@@ -427,7 +427,7 @@ export default function AdminLiquidacionesPage() {
                             <div className="space-y-4">
                                 {/* Alerta de compensación no configurada */}
                                 {!previewData.has_compensation && (
-                                    <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-lg text-xs leading-relaxed">
+                                    <div className="admin-warning-surface flex items-start gap-3 rounded-lg border p-3 text-xs leading-relaxed">
                                         <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                                         <div>
                                             <span className="font-semibold block mb-0.5">Sin compensación configurada</span>
@@ -484,7 +484,7 @@ export default function AdminLiquidacionesPage() {
 
                                     <div className="bg-muted/40 border border-border rounded-lg p-3">
                                         <span className="text-[10px] text-muted-foreground uppercase font-semibold">Propinas</span>
-                                        <div className="text-lg font-bold text-amber-400 mt-0.5">
+                                        <div className="admin-warning-text text-lg font-bold mt-0.5">
                                             {formatPrice(previewData.tips_total)}
                                         </div>
                                         <span className="text-[10px] text-muted-foreground mt-0.5 block">
@@ -492,8 +492,8 @@ export default function AdminLiquidacionesPage() {
                                         </span>
                                     </div>
 
-                                    <div className="bg-muted/40 border border-border rounded-lg p-3 bg-amber-500/5 border-amber-500/10">
-                                        <span className="text-[10px] text-amber-400 uppercase font-semibold">Total Barbero</span>
+                                    <div className="admin-warning-card rounded-lg border p-3">
+                                        <span className="admin-warning-text text-[10px] uppercase font-semibold">Total Barbero</span>
                                         <div className="text-xl font-bold text-primary text-glow mt-0.5">
                                             {formatPrice(previewData.barber_total)}
                                         </div>
@@ -640,7 +640,7 @@ export default function AdminLiquidacionesPage() {
                                         {COMPENSATION_MODEL_LABELS[s.model]}
                                     </TableCell>
                                     <TableCell className="text-right font-mono text-xs">{formatPrice(s.services_total)}</TableCell>
-                                    <TableCell className="text-right font-mono text-xs text-amber-400">{formatPrice(s.tips_total)}</TableCell>
+                                    <TableCell className="admin-warning-text text-right font-mono text-xs">{formatPrice(s.tips_total)}</TableCell>
                                     <TableCell className="text-right font-bold text-primary font-mono text-xs">{formatPrice(s.barber_total)}</TableCell>
                                     <TableCell className="text-right font-mono text-xs">{formatPrice(s.house_total)}</TableCell>
                                     <TableCell className="text-center">

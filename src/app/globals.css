@@ -625,7 +625,9 @@ html {
     --admin-fg: #1f170b;
     --admin-border: rgba(130, 98, 37, 0.22);
     --admin-primary: #b8871c;
+    --admin-primary-fg: #1f170b;
     --admin-accent: #d4af37;
+    --admin-warning: #c47b13;
     --admin-sidebar: rgba(39, 26, 9, 0.94);
     --admin-sidebar-fg: #fff4d7;
     --admin-glow: rgba(212, 175, 55, 0.24);
@@ -637,7 +639,9 @@ html {
     --admin-fg: #f8f1df;
     --admin-border: rgba(212, 175, 55, 0.18);
     --admin-primary: #d4af37;
+    --admin-primary-fg: #0a0805;
     --admin-accent: #f2cf62;
+    --admin-warning: #f3a43b;
     --admin-sidebar: rgba(9, 7, 4, 0.92);
     --admin-sidebar-fg: #f8f1df;
     --admin-glow: rgba(212, 175, 55, 0.28);
@@ -649,7 +653,9 @@ html {
     --admin-fg: #141722;
     --admin-border: rgba(76, 82, 122, 0.22);
     --admin-primary: #6668f4;
+    --admin-primary-fg: #ffffff;
     --admin-accent: #9b8cff;
+    --admin-warning: #c47a22;
     --admin-sidebar: rgba(13, 15, 26, 0.92);
     --admin-sidebar-fg: #f4f2ff;
     --admin-glow: rgba(102, 104, 244, 0.24);
@@ -661,7 +667,9 @@ html {
     --admin-fg: #f7f5ff;
     --admin-border: rgba(136, 137, 255, 0.16);
     --admin-primary: #8f8cff;
+    --admin-primary-fg: #070711;
     --admin-accent: #c7c1ff;
+    --admin-warning: #f0a748;
     --admin-sidebar: rgba(5, 6, 10, 0.86);
     --admin-sidebar-fg: #f7f5ff;
     --admin-glow: rgba(143, 140, 255, 0.24);
@@ -673,7 +681,9 @@ html {
     --admin-fg: #0c1a2b;
     --admin-border: rgba(56, 189, 248, 0.24);
     --admin-primary: #0ea5e9;
+    --admin-primary-fg: #03111f;
     --admin-accent: #a855f7;
+    --admin-warning: #f59e0b;
     --admin-sidebar: rgba(3, 10, 28, 0.92);
     --admin-sidebar-fg: #eaf8ff;
     --admin-glow: rgba(56, 189, 248, 0.26);
@@ -685,7 +695,9 @@ html {
     --admin-fg: #e9f8ff;
     --admin-border: rgba(56, 189, 248, 0.20);
     --admin-primary: #38bdf8;
+    --admin-primary-fg: #03111f;
     --admin-accent: #a855f7;
+    --admin-warning: #fbbf24;
     --admin-sidebar: rgba(2, 7, 22, 0.82);
     --admin-sidebar-fg: #e9f8ff;
     --admin-glow: rgba(56, 189, 248, 0.28);
@@ -697,7 +709,9 @@ html {
     --admin-fg: #211207;
     --admin-border: rgba(255, 106, 0, 0.22);
     --admin-primary: #f97316;
+    --admin-primary-fg: #1f0c02;
     --admin-accent: #ffb000;
+    --admin-warning: #d97706;
     --admin-sidebar: rgba(20, 10, 2, 0.94);
     --admin-sidebar-fg: #fff7ed;
     --admin-glow: rgba(249, 115, 22, 0.24);
@@ -709,11 +723,76 @@ html {
     --admin-fg: #fff3e5;
     --admin-border: rgba(255, 106, 0, 0.22);
     --admin-primary: #ff6a00;
+    --admin-primary-fg: #1b0b02;
     --admin-accent: #ffb000;
+    --admin-warning: #ffb000;
     --admin-sidebar: rgba(8, 5, 2, 0.88);
     --admin-sidebar-fg: #fff3e5;
     --admin-glow: rgba(255, 106, 0, 0.28);
     --admin-shadow: rgba(0, 0, 0, 0.36);
+  }
+
+  .admin-accent-button {
+    border: 1px solid color-mix(in srgb, var(--admin-accent, var(--primary)) 34%, transparent);
+    background:
+      linear-gradient(135deg, var(--admin-primary, var(--primary)), color-mix(in srgb, var(--admin-primary, var(--primary)) 72%, var(--admin-accent, var(--primary)) 28%));
+    color: var(--admin-primary-fg, var(--primary-foreground));
+    box-shadow: 0 16px 34px color-mix(in srgb, var(--admin-primary, var(--primary)) 24%, transparent);
+  }
+
+  .admin-accent-button:hover {
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--admin-primary, var(--primary)) 88%, white 12%), color-mix(in srgb, var(--admin-accent, var(--primary)) 86%, var(--admin-primary, var(--primary)) 14%));
+  }
+
+  .admin-warning-surface {
+    border-color: color-mix(in srgb, var(--admin-warning, var(--admin-primary, var(--primary))) 24%, transparent);
+    background: color-mix(in srgb, var(--admin-warning, var(--admin-primary, var(--primary))) 10%, transparent);
+    color: color-mix(in srgb, var(--admin-warning, var(--admin-primary, var(--primary))) 86%, var(--foreground) 14%);
+  }
+
+  .admin-warning-card {
+    border-color: color-mix(in srgb, var(--admin-warning, var(--admin-primary, var(--primary))) 20%, transparent);
+    background:
+      linear-gradient(145deg, color-mix(in srgb, var(--admin-warning, var(--admin-primary, var(--primary))) 8%, transparent), color-mix(in srgb, var(--admin-card, var(--card)) 86%, transparent));
+  }
+
+  .admin-warning-text,
+  .admin-warning-icon {
+    color: var(--admin-warning, var(--admin-primary, var(--primary)));
+  }
+
+  .admin-field-focus:focus,
+  .admin-field-focus:focus-visible,
+  .admin-field-focus[data-state="open"] {
+    border-color: color-mix(in srgb, var(--admin-primary, var(--primary)) 48%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-primary, var(--primary)) 14%, transparent);
+  }
+
+  .admin-auth-shell {
+    color: var(--admin-fg, var(--foreground));
+    background:
+      radial-gradient(circle at 28% 18%, color-mix(in srgb, var(--admin-glow, var(--primary)) 34%, transparent), transparent 34rem),
+      radial-gradient(circle at 76% 76%, color-mix(in srgb, var(--admin-primary, var(--primary)) 18%, transparent), transparent 30rem),
+      var(--background);
+  }
+
+  .admin-auth-card {
+    border-color: color-mix(in srgb, var(--admin-border, var(--border)) 88%, var(--admin-primary, var(--primary)) 12%);
+    background:
+      linear-gradient(145deg, color-mix(in srgb, var(--admin-card, var(--card)) 78%, transparent), color-mix(in srgb, var(--background) 72%, transparent));
+    box-shadow: 0 28px 70px color-mix(in srgb, var(--admin-shadow, rgba(0, 0, 0, 0.28)) 86%, transparent);
+  }
+
+  .admin-auth-logo-glow {
+    filter: drop-shadow(0 0 20px color-mix(in srgb, var(--admin-glow, var(--primary)) 84%, transparent));
+  }
+
+  .admin-auth-demo {
+    border-color: color-mix(in srgb, var(--admin-primary, var(--primary)) 38%, transparent);
+    background:
+      linear-gradient(145deg, color-mix(in srgb, var(--admin-primary, var(--primary)) 12%, transparent), color-mix(in srgb, var(--admin-card, var(--card)) 72%, transparent));
+    box-shadow: 0 18px 40px color-mix(in srgb, var(--admin-shadow, rgba(0, 0, 0, 0.28)) 70%, transparent);
   }
 
   .admin-shell {
@@ -1206,8 +1285,206 @@ html {
     background: color-mix(in srgb, var(--admin-card) 52%, transparent);
   }
 
+  .admin-agenda-hero,
+  .admin-agenda-filterbar,
+  .admin-agenda-board {
+    border-color: color-mix(in srgb, var(--admin-border) 84%, transparent);
+    background:
+      linear-gradient(145deg, color-mix(in srgb, var(--admin-card) 82%, transparent), color-mix(in srgb, var(--admin-muted) 28%, transparent)),
+      radial-gradient(circle at top right, color-mix(in srgb, var(--admin-glow) 36%, transparent), transparent 34rem);
+    box-shadow: 0 18px 50px color-mix(in srgb, var(--admin-shadow) 52%, transparent);
+  }
+
+  .admin-agenda-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.75rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border) 78%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--admin-card) 58%, transparent);
+    padding: 0.35rem 0.75rem;
+  }
+
+  .admin-agenda-stat {
+    --agenda-tone: var(--admin-primary);
+    border-color: color-mix(in srgb, var(--agenda-tone) 20%, var(--admin-border));
+    background:
+      linear-gradient(145deg, color-mix(in srgb, var(--admin-card) 72%, transparent), color-mix(in srgb, var(--agenda-tone) 9%, transparent));
+    transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+  }
+
+  .admin-agenda-stat:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--agenda-tone) 34%, transparent);
+  }
+
+  .admin-agenda-stat[data-tone="pending"] {
+    --agenda-tone: var(--admin-warning);
+  }
+
+  .admin-agenda-stat[data-tone="confirmed"] {
+    --agenda-tone: var(--admin-info);
+  }
+
+  .admin-agenda-stat[data-tone="completed"] {
+    --agenda-tone: var(--admin-positive);
+  }
+
+  .admin-agenda-stat[data-tone="cancelled"] {
+    --agenda-tone: var(--admin-danger);
+  }
+
+  .admin-agenda-stat-icon {
+    color: var(--agenda-tone);
+    border: 1px solid color-mix(in srgb, var(--agenda-tone) 24%, transparent);
+    background: color-mix(in srgb, var(--agenda-tone) 13%, transparent);
+    box-shadow: 0 0 22px color-mix(in srgb, var(--agenda-tone) 18%, transparent);
+  }
+
+  .admin-agenda-filterbar {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .admin-date-pill {
+    display: inline-flex;
+    min-width: 4.5rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border) 82%, transparent);
+    border-radius: 0.9rem;
+    background: color-mix(in srgb, var(--admin-card) 64%, transparent);
+    color: var(--admin-muted-fg);
+    padding: 0.55rem 0.8rem;
+    transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease;
+  }
+
+  .admin-date-pill:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--admin-primary) 34%, transparent);
+    color: var(--admin-fg);
+  }
+
+  .admin-date-pill-active {
+    border-color: color-mix(in srgb, var(--admin-primary) 48%, transparent);
+    background: color-mix(in srgb, var(--admin-primary) 15%, var(--admin-card));
+    color: var(--admin-primary);
+    box-shadow: 0 14px 28px color-mix(in srgb, var(--admin-primary) 14%, transparent);
+  }
+
+  .admin-timeline-group {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .admin-time-marker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border) 72%, transparent);
+    border-radius: 0.9rem;
+    background: color-mix(in srgb, var(--admin-muted) 42%, transparent);
+    padding: 0.65rem 0.8rem;
+  }
+
+  .admin-appointment-card {
+    --appointment-tone: var(--admin-primary);
+    position: relative;
+    overflow: hidden;
+    border-color: color-mix(in srgb, var(--appointment-tone) 20%, var(--admin-border));
+    background:
+      linear-gradient(145deg, color-mix(in srgb, var(--admin-card) 82%, transparent), color-mix(in srgb, var(--appointment-tone) 7%, transparent));
+    transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+  }
+
+  .admin-appointment-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: var(--appointment-tone);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--appointment-tone) 44%, transparent);
+  }
+
+  .admin-appointment-card:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--appointment-tone) 34%, transparent);
+  }
+
+  .admin-appointment-card[data-status="pending"],
+  .admin-status-badge[data-status="pending"] {
+    --appointment-tone: var(--admin-warning);
+  }
+
+  .admin-appointment-card[data-status="confirmed"],
+  .admin-status-badge[data-status="confirmed"] {
+    --appointment-tone: var(--admin-info);
+  }
+
+  .admin-appointment-card[data-status="completed"],
+  .admin-status-badge[data-status="completed"] {
+    --appointment-tone: var(--admin-positive);
+  }
+
+  .admin-appointment-card[data-status="cancelled"],
+  .admin-status-badge[data-status="cancelled"] {
+    --appointment-tone: var(--admin-danger);
+  }
+
+  .admin-appointment-card[data-status="no_show"],
+  .admin-status-badge[data-status="no_show"] {
+    --appointment-tone: var(--admin-muted-fg);
+  }
+
+  .admin-appointment-time,
+  .admin-dialog-brief {
+    border-color: color-mix(in srgb, var(--admin-border) 76%, transparent);
+    background: color-mix(in srgb, var(--admin-bg) 34%, transparent);
+  }
+
+  .admin-status-badge {
+    color: var(--appointment-tone);
+    border-color: color-mix(in srgb, var(--appointment-tone) 34%, transparent);
+    background: color-mix(in srgb, var(--appointment-tone) 12%, transparent);
+  }
+
+  @media (min-width: 1280px) {
+    .admin-agenda-filterbar {
+      grid-template-columns: auto 1fr;
+      align-items: center;
+    }
+
+    .admin-timeline-group {
+      grid-template-columns: 7rem minmax(0, 1fr);
+    }
+
+    .admin-time-marker {
+      align-self: start;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 6.5rem;
+    }
+
+    .admin-time-marker::after {
+      content: "";
+      position: absolute;
+      top: calc(100% + 0.5rem);
+      left: 50%;
+      height: 2.75rem;
+      width: 1px;
+      background: color-mix(in srgb, var(--admin-border) 80%, transparent);
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .admin-list-row,
+    .admin-agenda-stat,
+    .admin-date-pill,
+    .admin-appointment-card,
     .admin-shell * {
       transition-duration: 0.01ms !important;
       animation-duration: 0.01ms !important;

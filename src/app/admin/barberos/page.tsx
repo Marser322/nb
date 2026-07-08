@@ -621,7 +621,7 @@ export default function AdminBarberosPage() {
                                             value={formData.branch_id || "none"}
                                             onValueChange={(v) => setFormData({ ...formData, branch_id: v === "none" ? "" : v })}
                                         >
-                                            <SelectTrigger className="bg-background/50 border-input/50 focus:border-amber-500/50">
+                                            <SelectTrigger className="admin-field-focus bg-background/50 border-input/50">
                                                 <SelectValue placeholder="Seleccionar sucursal" />
                                             </SelectTrigger>
                                             <SelectContent>

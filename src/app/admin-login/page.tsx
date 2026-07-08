@@ -76,14 +76,14 @@ export default function AdminLoginPage() {
     };
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-background relative overflow-hidden">
+        <div className="admin-auth-shell min-h-screen w-full flex items-center justify-center relative overflow-hidden">
             {/* Background Effects */}
             <div className="absolute inset-0 bg-[url('/images/hero/herramientas-barberia.jpg')] bg-cover bg-center opacity-10" />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/95 to-background/50" />
 
-            <Card className="w-full max-w-md mx-4 relative z-10 border-amber-500/20 bg-card/50 backdrop-blur-xl shadow-2xl">
+            <Card className="admin-auth-card w-full max-w-md mx-4 relative z-10 backdrop-blur-xl">
                 <CardHeader className="space-y-1 text-center">
-                    <div className="w-20 h-20 mx-auto mb-4 relative drop-shadow-[0_0_20px_rgba(245,158,11,0.25)]">
+                    <div className="admin-auth-logo-glow w-20 h-20 mx-auto mb-4 relative">
                         <Image
                             src="/logo-transparent-512.png"
                             alt="NB Barber"
@@ -98,9 +98,9 @@ export default function AdminLoginPage() {
                     </CardDescription>
                 </CardHeader>
                 {isDemoMode && (
-                    <div className="mx-6 mb-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 shadow-lg shadow-amber-500/10 space-y-3">
+                    <div className="admin-auth-demo mx-6 mb-6 rounded-2xl border p-4 space-y-3">
                         <div className="flex items-start gap-3">
-                            <div className="mt-0.5 rounded-full bg-amber-500/20 p-2 text-amber-500">
+                            <div className="admin-warning-surface mt-0.5 rounded-full border p-2">
                                 <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
                             </div>
                             <div>
@@ -112,7 +112,7 @@ export default function AdminLoginPage() {
                         </div>
                         <Button
                             type="button"
-                            className="h-12 w-full rounded-full bg-amber-500 font-semibold text-black shadow-lg shadow-amber-500/20 hover:bg-amber-400"
+                            className="admin-accent-button h-12 w-full rounded-full font-semibold"
                             disabled={isDemoLoading}
                             onClick={loginAsDemoAdmin}
                         >
@@ -147,7 +147,7 @@ export default function AdminLoginPage() {
                                     id="email"
                                     type="email"
                                     placeholder="admin@nbbarber.com"
-                                    className="pl-9 bg-background/50 border-input/50 focus:border-amber-500/50 transition-colors"
+                                    className="admin-field-focus pl-9 bg-background/50 border-input/50 transition-colors"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                 />
@@ -161,7 +161,7 @@ export default function AdminLoginPage() {
                                     id="password"
                                     type={showPassword ? "text" : "password"}
                                     placeholder="••••••••"
-                                    className="pl-9 pr-9 bg-background/50 border-input/50 focus:border-amber-500/50 transition-colors"
+                                    className="admin-field-focus pl-9 pr-9 bg-background/50 border-input/50 transition-colors"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     autoFocus
@@ -186,7 +186,7 @@ export default function AdminLoginPage() {
                     <CardFooter>
                         <Button
                             type="submit"
-                            className="w-full bg-amber-500 hover:bg-amber-600 text-black font-semibold h-11"
+                            className="admin-accent-button w-full font-semibold h-11"
                             disabled={isLoading || isDemoLoading || !password || !email}
                         >
                             {isLoading ? (

@@ -308,7 +308,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                 placeholder="Escribí notas sobre este cliente... (ej. le gusta mate amargo, prefiere corte a tijera con navaja en patillas, etc.)"
                                 value={notes}
                                 onChange={(e) => setNotes(e.target.value)}
-                                className="min-h-[100px] bg-background/50 border-input/50 focus:border-amber-500/50 resize-y"
+                                className="admin-field-focus min-h-[100px] bg-background/50 border-input/50 resize-y"
                             />
                         </CardContent>
                     </Card>
