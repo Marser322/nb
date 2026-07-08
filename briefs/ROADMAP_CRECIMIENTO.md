@@ -116,7 +116,8 @@ Curadas por valor y diferenciación. Etiquetas: **[R]** ingreso recurrente · **
 12. **"Cualquier barbero" / primer disponible en el wizard** **[LL][Q]** — opción que busca el
     primer hueco entre todos los barberos de la sucursal. Detectada en el ciclo /polish FASE 21;
     excluida de ese brief (requiere consultar `get_availability` multi-barbero con criterio de reparto).
-13. **Reserva end-to-end desde el chat** **[D]** — el asistente llama `book_appointment` y confirma
+13. **Deep link de sucursal contacto→wizard** **[Q]** — "Reservar en esta sede" con `?branchId=`; requiere que el wizard lea ese param y que contacto use sucursales de DB (hoy usa `BRANCHES` estático con ids numéricos vs uuid). Detectado en el ciclo /polish FASE 29; excluido de ese brief.
+14. **Reserva end-to-end desde el chat** **[D]** — el asistente llama `book_appointment` y confirma
     el turno dentro de la conversación (function calling). Detectada en el ciclo /polish FASE 20;
     excluida de ese brief a propósito (el chat guía al wizard, no lo reemplaza — por ahora).
 
