@@ -31,6 +31,7 @@ import { isDemoMode } from "@/lib/demo";
 import { logoutAdmin } from "./actions";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { VisualSkinSelector } from "@/components/admin/VisualSkinSelector";
+import { VisualSkinProvider } from "@/components/admin/VisualSkinProvider";
 
 const sidebarLinks: {
     href: string;
@@ -219,43 +220,45 @@ export default function AdminLayout({
     children: React.ReactNode;
 }) {
     return (
-        <div className="admin-shell min-h-screen bg-background text-foreground">
-            {/* Topbar / Header */}
-            <header className="admin-topbar fixed left-0 right-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/70 px-4 backdrop-blur-xl md:left-72 md:px-6">
-                <div className="flex min-w-0 items-center gap-3">
-                    <Sheet>
-                        <SheetTrigger asChild className="md:hidden">
-                            <Button variant="ghost" size="icon" aria-label="Abrir menú admin">
-                                <Menu className="h-5 w-5" />
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent side="left" className="admin-mobile-sheet w-72 p-0">
-                            <SidebarContent isMobile={true} />
-                        </SheetContent>
-                    </Sheet>
-                    <div className="min-w-0">
-                        <span className="block truncate font-semibold text-foreground">NB Barber Admin</span>
-                        <span className="hidden text-xs text-muted-foreground sm:block">
-                            Agenda, caja y fidelización en tiempo real
-                        </span>
+        <VisualSkinProvider>
+            <div className="admin-shell min-h-screen bg-background text-foreground">
+                {/* Topbar / Header */}
+                <header className="admin-topbar fixed left-0 right-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border/70 px-4 backdrop-blur-xl md:left-72 md:px-6">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <Sheet>
+                            <SheetTrigger asChild className="md:hidden">
+                                <Button variant="ghost" size="icon" aria-label="Abrir menú admin">
+                                    <Menu className="h-5 w-5" />
+                                </Button>
+                            </SheetTrigger>
+                            <SheetContent side="left" className="admin-mobile-sheet w-72 p-0">
+                                <SidebarContent isMobile={true} />
+                            </SheetContent>
+                        </Sheet>
+                        <div className="min-w-0">
+                            <span className="block truncate font-semibold text-foreground">NB Barber Admin</span>
+                            <span className="hidden text-xs text-muted-foreground sm:block">
+                                Agenda, caja y fidelización en tiempo real
+                            </span>
+                        </div>
                     </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <VisualSkinSelector />
-                    <ThemeToggle />
-                </div>
-            </header>
+                    <div className="flex items-center gap-2">
+                        <VisualSkinSelector />
+                        <ThemeToggle />
+                    </div>
+                </header>
 
-            {/* Desktop Sidebar */}
-            <aside className="admin-sidebar fixed bottom-0 left-0 top-0 z-50 hidden w-72 flex-col border-r border-border/70 md:flex">
-                <SidebarContent />
-            </aside>
+                {/* Desktop Sidebar */}
+                <aside className="admin-sidebar fixed bottom-0 left-0 top-0 z-50 hidden w-72 flex-col border-r border-border/70 md:flex">
+                    <SidebarContent />
+                </aside>
 
-            {/* Main Content */}
-            <main className="admin-main min-h-screen pt-16 md:ml-72">
-                <div className="admin-main-inner p-4 md:p-6 2xl:p-7">{children}</div>
-            </main>
-            <WelcomeModal role="admin" />
-        </div>
+                {/* Main Content */}
+                <main className="admin-main min-h-screen pt-16 md:ml-72">
+                    <div className="admin-main-inner p-4 md:p-6 2xl:p-7">{children}</div>
+                </main>
+                <WelcomeModal role="admin" />
+            </div>
+        </VisualSkinProvider>
     );
 }

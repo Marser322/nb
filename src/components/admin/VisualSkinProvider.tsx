@@ -19,8 +19,16 @@ function applyVisualSkin(skin: VisualSkin) {
   document.documentElement.dataset.visualSkin = skin;
 }
 
+function readInitialSkin(): VisualSkin {
+  if (typeof document === "undefined") return DEFAULT_VISUAL_SKIN;
+  // El script anti-FOUC del <head> (VisualSkinInitScript) ya dejó el
+  // atributo seteado antes del primer paint; lo reusamos como estado
+  // inicial en vez de arrancar siempre en el default y re-aplicar.
+  return getVisualSkin(document.documentElement.dataset.visualSkin);
+}
+
 export function VisualSkinProvider({ children }: { children: React.ReactNode }) {
-  const [skin, setSkinState] = React.useState<VisualSkin>(DEFAULT_VISUAL_SKIN);
+  const [skin, setSkinState] = React.useState<VisualSkin>(readInitialSkin);
 
   React.useLayoutEffect(() => {
     let storedSkin: VisualSkin = DEFAULT_VISUAL_SKIN;
@@ -33,6 +41,17 @@ export function VisualSkinProvider({ children }: { children: React.ReactNode }) 
 
     setSkinState(storedSkin);
     applyVisualSkin(storedSkin);
+  }, []);
+
+  // Este provider solo vive dentro del layout admin (ver
+  // src/app/admin/layout.tsx): al navegar client-side hacia una ruta
+  // pública el layout admin se desmonta y con él este provider, así que
+  // limpiamos el atributo para que el sitio público nunca herede un skin
+  // elegido en el admin.
+  React.useEffect(() => {
+    return () => {
+      delete document.documentElement.dataset.visualSkin;
+    };
   }, []);
 
   React.useEffect(() => {
