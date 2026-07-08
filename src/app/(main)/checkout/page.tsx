@@ -18,6 +18,7 @@ import { useFeatures } from "@/lib/features";
 import { createClient } from "@/lib/supabase/client";
 import { BANK_TRANSFER_INFO } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
+import { normalizeUyPhone } from "@/lib/whatsapp";
 import { useCartStore } from "@/stores/cartStore";
 import type { Branch, FulfillmentType } from "@/types/database.types";
 
@@ -135,6 +136,10 @@ export default function CheckoutPage() {
         }
         if (fulfillment === "delivery" && !contactPhone.trim()) {
             toast.error("Ingresá un teléfono de contacto");
+            return;
+        }
+        if (contactPhone.trim() && !normalizeUyPhone(contactPhone)) {
+            toast.error("Ingresá un teléfono uruguayo válido (ej: 099 123 456)");
             return;
         }
 
