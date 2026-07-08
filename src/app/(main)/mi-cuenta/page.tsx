@@ -4,18 +4,39 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, differenceInWeeks } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar, Clock, History, Loader2, MapPin, Package, Repeat, Scissors, ShoppingBag, User } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Calendar, Clock, History, Loader2, MapPin, Package, Pencil, Repeat, Scissors, ShoppingBag, User } from "lucide-react";
 import { Header, Footer } from "@/components/layout";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    Form,
+    FormControl,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import {
     APPOINTMENT_STATUS_COLORS,
     APPOINTMENT_STATUS_LABELS,
+    BUSINESS_CONFIG,
     FULFILLMENT_LABELS,
     ORDER_STATUS_COLORS,
     ORDER_STATUS_LABELS,
@@ -43,6 +64,32 @@ type OrderWithRelations = Order & {
     items?: (OrderItem & { product?: Product | null })[];
 };
 
+type CancelTarget = {
+    type: "appointment" | "subscription";
+    id: string;
+    title: string;
+    detail: string;
+};
+
+const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+// FASE 22 C2: ventana de cancelación derivada de la config, no hardcodeada.
+const cancellationWindowLabel = BUSINESS_CONFIG.cancellationWindow % 60 === 0
+    ? `${BUSINESS_CONFIG.cancellationWindow / 60} hora${BUSINESS_CONFIG.cancellationWindow / 60 === 1 ? "" : "s"}`
+    : `${BUSINESS_CONFIG.cancellationWindow} minutos`;
+
+const profileFormSchema = z.object({
+    full_name: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres"),
+    phone: z
+        .string()
+        .trim()
+        .regex(/^[0-9\s]{8,12}$/, "Ingresá un teléfono válido (8 a 12 dígitos)")
+        .optional()
+        .or(z.literal("")),
+});
+
+type ProfileFormValues = z.infer<typeof profileFormSchema>;
+
 export default function MiCuentaPage() {
     const { features } = useFeatures();
     const router = useRouter();
@@ -54,6 +101,15 @@ export default function MiCuentaPage() {
     const [history, setHistory] = useState<HaircutHistoryWithRelations[]>([]);
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
     const [orders, setOrders] = useState<OrderWithRelations[]>([]);
+    const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
+    const [isCancelling, setIsCancelling] = useState(false);
+    const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+    const profileForm = useForm<ProfileFormValues>({
+        resolver: zodResolver(profileFormSchema),
+        defaultValues: { full_name: "", phone: "" },
+    });
 
     useEffect(() => {
         async function loadAccount() {
@@ -129,6 +185,16 @@ export default function MiCuentaPage() {
         loadAccount();
     }, [router, supabase]);
 
+    // FASE 22 D: precargar el form de edición de perfil cuando se abre el dialog.
+    useEffect(() => {
+        if (isEditProfileOpen && profile) {
+            profileForm.reset({
+                full_name: profile.full_name || "",
+                phone: profile.phone || "",
+            });
+        }
+    }, [isEditProfileOpen, profile, profileForm]);
+
     const lastExperience = useMemo(() => {
         if (history[0]) return history[0];
         const lastAppointment = recentAppointments[0];
@@ -148,41 +214,70 @@ export default function MiCuentaPage() {
         } satisfies HaircutHistoryWithRelations;
     }, [history, recentAppointments]);
 
-    const handleCancelSubscription = async (subId: string) => {
-        if (!window.confirm("¿Estás seguro de que deseas cancelar este turno fijo semanal?")) {
-            return;
-        }
+    // FASE 22 A1: fecha y cadencia de la última experiencia.
+    const lastExperienceMeta = useMemo(() => {
+        if (!lastExperience?.created_at) return null;
+        const date = parseISO(lastExperience.created_at);
+        const weeks = differenceInWeeks(new Date(), date);
+        return {
+            dateLabel: format(date, "d 'de' MMMM", { locale: es }),
+            cadenceLabel: weeks < 1 ? "Esta semana" : `Hace ${weeks} semana${weeks === 1 ? "" : "s"}`,
+            suggestRepeat: weeks >= 4,
+        };
+    }, [lastExperience]);
 
-        try {
-            const { error } = await supabase
-                .from("subscriptions")
-                .update({ status: "cancelled", updated_at: new Date().toISOString() })
-                .eq("id", subId);
-
-            if (error) throw error;
-
-            setSubscriptions(prev => prev.filter(sub => sub.id !== subId));
-            toast.success("Turno fijo cancelado correctamente");
-        } catch (err) {
-            console.error("Error cancelling subscription:", err);
-            toast.error("No se pudo cancelar el turno fijo. Inténtalo de nuevo.");
-        }
+    const requestCancelAppointment = (appointment: AppointmentWithRelations) => {
+        setCancelTarget({
+            type: "appointment",
+            id: appointment.id,
+            title: appointment.service?.name || "Turno",
+            detail: `${format(parseISO(appointment.appointment_date), "EEEE d 'de' MMMM", { locale: es })} · ${appointment.start_time.slice(0, 5)} hs con ${appointment.barber?.name || "tu barbero"}`,
+        });
     };
 
-    const handleCancelAppointment = async (appointmentId: string) => {
-        if (!window.confirm("¿Estás seguro de que deseas cancelar este turno?")) {
+    const requestCancelSubscription = (sub: Subscription) => {
+        setCancelTarget({
+            type: "subscription",
+            id: sub.id,
+            title: sub.service?.name || "Turno fijo semanal",
+            detail: `Todos los ${WEEKDAYS[sub.day_of_week]} a las ${sub.start_time.slice(0, 5)} hs con ${sub.barber?.name || "tu barbero"}`,
+        });
+    };
+
+    const handleConfirmCancel = async () => {
+        if (!cancelTarget) return;
+        setIsCancelling(true);
+
+        if (cancelTarget.type === "subscription") {
+            try {
+                const { error } = await supabase
+                    .from("subscriptions")
+                    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+                    .eq("id", cancelTarget.id);
+
+                if (error) throw error;
+
+                setSubscriptions(prev => prev.filter(sub => sub.id !== cancelTarget.id));
+                toast.success("Turno fijo cancelado correctamente");
+                setCancelTarget(null);
+            } catch (err) {
+                console.error("Error cancelling subscription:", err);
+                toast.error("No se pudo cancelar el turno fijo. Inténtalo de nuevo.");
+            } finally {
+                setIsCancelling(false);
+            }
             return;
         }
 
         try {
             const { error } = await supabase.rpc("cancel_appointment", {
-                p_appointment_id: appointmentId,
+                p_appointment_id: cancelTarget.id,
             });
 
             if (error) {
                 console.error("RPC cancel_appointment error:", error);
                 if (error.message && error.message.includes("FUERA_DE_VENTANA")) {
-                    toast.error("Solo podés cancelar hasta 2 horas antes del turno");
+                    toast.error(`Solo podés cancelar hasta ${cancellationWindowLabel} antes del turno`);
                 } else if (error.message && error.message.includes("NO_CANCELABLE")) {
                     toast.error("Este turno no se puede cancelar");
                 } else {
@@ -191,11 +286,40 @@ export default function MiCuentaPage() {
                 return;
             }
 
-            setUpcomingAppointments(prev => prev.filter(a => a.id !== appointmentId));
+            setUpcomingAppointments(prev => prev.filter(a => a.id !== cancelTarget.id));
             toast.success("Reserva cancelada correctamente");
+            setCancelTarget(null);
         } catch (err) {
             console.error("Error cancelling appointment:", err);
             toast.error("Ocurrió un error al intentar cancelar la reserva.");
+        } finally {
+            setIsCancelling(false);
+        }
+    };
+
+    const onSubmitProfile = async (values: ProfileFormValues) => {
+        if (!profile) return;
+        setIsSavingProfile(true);
+
+        try {
+            const nextFullName = values.full_name.trim();
+            const nextPhone = values.phone?.trim() || null;
+
+            const { error } = await supabase
+                .from("profiles")
+                .update({ full_name: nextFullName, phone: nextPhone })
+                .eq("id", profile.id);
+
+            if (error) throw error;
+
+            setProfile(prev => (prev ? { ...prev, full_name: nextFullName, phone: nextPhone } : prev));
+            toast.success("Perfil actualizado correctamente");
+            setIsEditProfileOpen(false);
+        } catch (err) {
+            console.error("Error updating profile:", err);
+            toast.error("No se pudo actualizar el perfil. Intentá de nuevo.");
+        } finally {
+            setIsSavingProfile(false);
         }
     };
 
@@ -247,11 +371,20 @@ export default function MiCuentaPage() {
                             </div>
 
                             <Card id="profile-card" className="border-border bg-card/70">
-                                <CardHeader>
+                                <CardHeader className="flex flex-row items-center justify-between gap-2">
                                     <CardTitle className="flex items-center gap-2">
                                         <User className="h-5 w-5 text-primary" />
                                         Perfil
                                     </CardTitle>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setIsEditProfileOpen(true)}
+                                        className="h-8 gap-1.5 rounded-full px-3 text-xs text-muted-foreground hover:text-foreground"
+                                    >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                        Editar
+                                    </Button>
                                 </CardHeader>
                                 <CardContent className="space-y-5">
                                     <div>
@@ -260,7 +393,13 @@ export default function MiCuentaPage() {
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground">Teléfono</p>
-                                        <p className="text-foreground">{profile?.phone || "Sin teléfono cargado"}</p>
+                                        {profile?.phone ? (
+                                            <p className="text-foreground">{profile.phone}</p>
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground italic">
+                                                Agregalo para que podamos avisarte de tu turno
+                                            </p>
+                                        )}
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground">Próximas reservas</p>
@@ -298,11 +437,21 @@ export default function MiCuentaPage() {
                                                     <p className="text-sm text-muted-foreground">
                                                         {lastExperience.barber?.name || "Barbero NB"}
                                                     </p>
+                                                    {lastExperienceMeta && (
+                                                        <p className="text-xs text-primary/80 mt-1">
+                                                            {lastExperienceMeta.dateLabel} · {lastExperienceMeta.cadenceLabel}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
                                             {lastExperience.notes && (
                                                 <p className="rounded-lg border border-border bg-muted p-4 text-sm text-muted-foreground">
                                                     {lastExperience.notes}
+                                                </p>
+                                            )}
+                                            {lastExperienceMeta?.suggestRepeat && (
+                                                <p className="text-sm text-muted-foreground">
+                                                    ¿Volvemos a dejarlo impecable?
                                                 </p>
                                             )}
                                             <Button asChild className="w-full rounded-full">
@@ -366,14 +515,14 @@ export default function MiCuentaPage() {
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="sm"
-                                                                    onClick={() => handleCancelAppointment(appointment.id)}
+                                                                    onClick={() => requestCancelAppointment(appointment)}
                                                                     className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs px-3 rounded-full h-8"
                                                                 >
                                                                     Cancelar
                                                                 </Button>
                                                             ) : (
                                                                 <span className="text-xs text-zinc-500 font-light">
-                                                                    No se puede cancelar (menos de 2 h)
+                                                                    No se puede cancelar (menos de {cancellationWindowLabel})
                                                                 </span>
                                                             )}
                                                         </div>
@@ -385,6 +534,57 @@ export default function MiCuentaPage() {
                                 </CardContent>
                             </Card>
                         </section>
+
+                        <Card id="visit-history-card" className="border-border bg-card/70">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <History className="h-5 w-5 text-primary" />
+                                    Historial de visitas
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {recentAppointments.length === 0 ? (
+                                    <div className="py-10 text-center">
+                                        <History className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
+                                        <p className="font-semibold text-foreground">Todavía no tenés visitas registradas</p>
+                                        <p className="text-sm text-muted-foreground mt-2">
+                                            Cuando completes una visita, la vas a ver acá.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {recentAppointments.map((appointment) => {
+                                            const visitRepeatHref = `${ROUTES.RESERVAR}?serviceId=${appointment.service_id}&barberId=${appointment.barber_id}`;
+
+                                            return (
+                                                <div key={appointment.id} className="rounded-lg border border-border bg-muted/20 p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                                    <div>
+                                                        <p className="font-bold text-foreground">{appointment.service?.name || "Servicio NB"}</p>
+                                                        <p className="text-sm text-muted-foreground">
+                                                            {format(parseISO(appointment.appointment_date), "d 'de' MMMM, yyyy", { locale: es })} · {appointment.barber?.name || "Barbero NB"}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-3">
+                                                        {appointment.service && (
+                                                            <span className="text-sm font-medium text-primary">{formatPrice(appointment.service.price)}</span>
+                                                        )}
+                                                        <Badge variant="outline" className={APPOINTMENT_STATUS_COLORS[appointment.status]}>
+                                                            {APPOINTMENT_STATUS_LABELS[appointment.status]}
+                                                        </Badge>
+                                                        <Button asChild size="sm" variant="outline" className="h-8 rounded-full px-3 text-xs">
+                                                            <Link href={visitRepeatHref}>
+                                                                <Repeat className="mr-1.5 h-3.5 w-3.5" />
+                                                                Repetir
+                                                            </Link>
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
 
                         {features.tienda && (
                             <Card id="orders-card" className="border-border bg-card/70">
@@ -501,8 +701,7 @@ export default function MiCuentaPage() {
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {subscriptions.map((sub) => {
-                                            const weekdays = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-                                            const dayName = weekdays[sub.day_of_week];
+                                            const dayName = WEEKDAYS[sub.day_of_week];
 
                                             return (
                                                 <div key={sub.id} className="rounded-lg border border-primary/20 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 p-5 flex flex-col justify-between gap-4">
@@ -526,10 +725,10 @@ export default function MiCuentaPage() {
                                                         <span className="text-xs text-muted-foreground">
                                                             {sub.service && formatPrice(sub.service.price)} / sesión
                                                         </span>
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="sm" 
-                                                            onClick={() => handleCancelSubscription(sub.id)}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => requestCancelSubscription(sub)}
                                                             className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs px-3 rounded-full h-8"
                                                         >
                                                             Cancelar turno fijo
@@ -548,6 +747,97 @@ export default function MiCuentaPage() {
             </main>
 
             <Footer />
+
+            {/* FASE 22 C: dialog de confirmación de cancelación (turno o suscripción) */}
+            <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open && !isCancelling) setCancelTarget(null); }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Cancelar {cancelTarget?.type === "subscription" ? "turno fijo" : "turno"}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Esta acción no se puede deshacer.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {cancelTarget && (
+                        <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
+                            <p className="font-semibold text-foreground">{cancelTarget.title}</p>
+                            <p className="text-muted-foreground mt-1">{cancelTarget.detail}</p>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setCancelTarget(null)}
+                            disabled={isCancelling}
+                        >
+                            Volver
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleConfirmCancel}
+                            disabled={isCancelling}
+                        >
+                            {isCancelling ? "Cancelando…" : "Sí, cancelar"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* FASE 22 D: dialog de edición de perfil */}
+            <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Editar perfil</DialogTitle>
+                        <DialogDescription>
+                            Mantené tus datos al día para que podamos avisarte de tus turnos.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Form {...profileForm}>
+                        <form onSubmit={profileForm.handleSubmit(onSubmitProfile)} className="space-y-4">
+                            <FormField
+                                control={profileForm.control}
+                                name="full_name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Nombre completo</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Tu nombre" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={profileForm.control}
+                                name="phone"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Teléfono</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="099 123 456" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setIsEditProfileOpen(false)}
+                                    disabled={isSavingProfile}
+                                >
+                                    Volver
+                                </Button>
+                                <Button type="submit" disabled={isSavingProfile}>
+                                    {isSavingProfile ? "Guardando…" : "Guardar cambios"}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

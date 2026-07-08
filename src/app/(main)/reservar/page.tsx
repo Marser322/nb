@@ -149,12 +149,15 @@ function ReservarPageContent() {
         if (resolvedBarber) setSelectedBarber(resolvedBarber);
       }
 
-      // Sucursal única: se auto-selecciona (el paso Sucursal queda resuelto)
+      // Sucursal única: se auto-selecciona (el paso Sucursal queda resuelto).
+      // FASE 22 A2: en rebook desde "Mi cuenta" la sucursal se deriva del barbero.
       let resolvedBranch: Branch | null = null;
       if (finalBranches.length === 1) {
         resolvedBranch = finalBranches[0];
-        setSelectedBranch(resolvedBranch);
+      } else if (resolvedBarber?.branch_id) {
+        resolvedBranch = finalBranches.find((branch) => String(branch.id) === String(resolvedBarber?.branch_id)) ?? null;
       }
+      if (resolvedBranch) setSelectedBranch(resolvedBranch);
 
       // Arranque inteligente: aterrizar en el primer paso sin resolver.
       // El draft-check (efecto siguiente) tiene prioridad y puede pisar esto con el paso 5.
