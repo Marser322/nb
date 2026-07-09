@@ -23,8 +23,10 @@ import {
     Banknote,
     ArrowDownCircle,
     ArrowUpCircle,
+    ArrowLeftRight,
     Loader2,
     Receipt,
+    Ban,
 } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import {
@@ -41,6 +43,8 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
+    DialogFooter,
 } from "@/components/ui/dialog";
 import {
     Select,
@@ -49,12 +53,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
     PAYMENT_METHOD_LABELS,
     CASH_MOVEMENT_TYPE_LABELS,
     CASH_CATEGORY_LABELS,
+    normalizePaymentMethod,
 } from "@/lib/constants";
+
+const EXPENSE_CATEGORIES = ['supply', 'salary', 'rent', 'adjustment', 'other'] as const;
 
 interface CashSummary {
     totalIncome: number;
@@ -65,6 +73,7 @@ interface CashSummary {
     cashPayments: number;
     transferPayments: number;
     cardPayments: number;
+    otherPayments: number;
     expenses: number;
 }
 
@@ -76,6 +85,14 @@ interface Transaction {
     date: string;
     status: string;
     method: string;
+    category: string;
+    appointmentId: string | null;
+    referenceId: string | null;
+    createdBy: string | null;
+    // Esta fila ES un contra-asiento (anulación) de otro movimiento.
+    isVoidEntry: boolean;
+    // Esta fila (movimiento original) YA fue anulada (existe un contra-asiento que la referencia).
+    isVoided: boolean;
 }
 
 export default function AdminCajaPage() {
@@ -103,6 +120,7 @@ export default function AdminCajaPage() {
         cashPayments: 0,
         transferPayments: 0,
         cardPayments: 0,
+        otherPayments: 0,
         expenses: 0,
     });
 
@@ -111,6 +129,7 @@ export default function AdminCajaPage() {
     const [barbers, setBarbers] = useState<{ id: string; name: string }[]>([]);
 
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [creatorNames, setCreatorNames] = useState<Record<string, string>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false);
     const [movementType, setMovementType] = useState<'income' | 'expense'>('income');
@@ -122,6 +141,11 @@ export default function AdminCajaPage() {
         barber_id: "",
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Anulación de movimientos manuales (contra-asiento)
+    const [voidTarget, setVoidTarget] = useState<Transaction | null>(null);
+    const [voidReason, setVoidReason] = useState("");
+    const [isVoiding, setIsVoiding] = useState(false);
 
     const supabase = createClient();
 
@@ -148,13 +172,20 @@ export default function AdminCajaPage() {
         const startDate = date?.from ? format(date.from, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
         const endDate = date?.to ? format(date.to, 'yyyy-MM-dd') : startDate;
 
+        // Uruguay no tiene horario de verano desde 2015: el offset -03:00 es fijo
+        // todo el año. Este rango debe coincidir con el predicado
+        // (created_at AT TIME ZONE 'America/Montevideo') que usa get_barber_settlement,
+        // si no, un cobro nocturno cae en un día distinto en caja vs. liquidación.
+        const startBound = `${startDate}T00:00:00-03:00`;
+        const endBound = `${endDate}T23:59:59.999-03:00`;
+
         // Caja usa cash_movements como fuente única. Las ventas de productos
         // llegan desde las RPCs de pedidos/POS para evitar doble conteo con orders.
         const { data: movements } = await supabase
             .from('cash_movements')
             .select('*, barber:barbers(name)')
-            .gte('created_at', `${startDate}T00:00:00`)
-            .lte('created_at', `${endDate}T23:59:59`)
+            .gte('created_at', startBound)
+            .lte('created_at', endBound)
             .order('created_at', { ascending: false });
 
         const productOrderIds = Array.from(new Set((movements || [])
@@ -170,6 +201,28 @@ export default function AdminCajaPage() {
 
         const productOrdersById = new Map((productOrders || []).map((order) => [order.id, order]));
 
+        // La FK de created_by apunta a auth.users, no a profiles: PostgREST no
+        // puede embeberlo, así que resolvemos los nombres con una segunda query.
+        const creatorIds = Array.from(new Set((movements || [])
+            .map((mov) => mov.created_by as string | null)
+            .filter((id): id is string => !!id)));
+
+        const { data: creators } = creatorIds.length > 0
+            ? await supabase.from('profiles').select('id, full_name').in('id', creatorIds)
+            : { data: [] };
+
+        const creatorNameById: Record<string, string> = {};
+        (creators || []).forEach((c) => {
+            if (c.full_name) creatorNameById[c.id] = c.full_name;
+        });
+        setCreatorNames(creatorNameById);
+
+        // Movimientos ya anulados: cualquier cash_movements.reference_id de un
+        // contra-asiento (category='adjustment') apunta al movimiento original anulado.
+        const voidedIds = new Set((movements || [])
+            .filter((mov) => mov.category === 'adjustment' && mov.reference_id)
+            .map((mov) => mov.reference_id as string));
+
         // Procesar Datos
         let sIncome = 0;
         let pIncome = 0;
@@ -177,6 +230,7 @@ export default function AdminCajaPage() {
         let cashPay = 0;
         let transferPay = 0;
         let cardPay = 0;
+        let otherPay = 0;
         let totalExpenses = 0;
         let totalTips = 0;
         let totalServicesCount = 0;
@@ -207,6 +261,9 @@ export default function AdminCajaPage() {
                     }
                 }
 
+                const isVoidEntry = mov.category === 'adjustment' && !!mov.reference_id;
+                const isVoided = voidedIds.has(mov.id);
+
                 if (mov.type === 'expense') {
                     totalExpenses += amount;
                     trans.push({
@@ -216,7 +273,13 @@ export default function AdminCajaPage() {
                         amount: -amount,
                         date: mov.created_at,
                         status: 'Registrado',
-                        method: PAYMENT_METHOD_LABELS[mov.payment_method] || mov.payment_method
+                        method: PAYMENT_METHOD_LABELS[mov.payment_method] || mov.payment_method,
+                        category: mov.category,
+                        appointmentId: mov.appointment_id,
+                        referenceId: mov.reference_id,
+                        createdBy: mov.created_by,
+                        isVoidEntry,
+                        isVoided,
                     });
                 } else {
                     // Ingreso (income)
@@ -231,10 +294,13 @@ export default function AdminCajaPage() {
                         pSold += itemsCount;
                     }
 
-                    // Clasificar por método de pago ('other' no entra en ningún desglose)
-                    if (mov.payment_method === 'cash' || mov.payment_method === 'efectivo') cashPay += amount;
-                    else if (mov.payment_method === 'transfer' || mov.payment_method === 'transferencia') transferPay += amount;
-                    else if (mov.payment_method === 'card' || mov.payment_method === 'tarjeta') cardPay += amount;
+                    // Clasificar por método de pago: los 4 buckets (incluye 'other')
+                    // particionan TODOS los ingresos, así su suma siempre cierra.
+                    const canonicalMethod = normalizePaymentMethod(mov.payment_method) || 'other';
+                    if (canonicalMethod === 'cash') cashPay += amount;
+                    else if (canonicalMethod === 'transfer') transferPay += amount;
+                    else if (canonicalMethod === 'card') cardPay += amount;
+                    else otherPay += amount;
 
                     const catLabel = CASH_CATEGORY_LABELS[mov.category] || mov.category;
                     const barberNameSuffix = mov.barber?.name ? ` con ${mov.barber.name}` : '';
@@ -250,7 +316,13 @@ export default function AdminCajaPage() {
                         amount: amount,
                         date: mov.created_at,
                         status: 'Registrado',
-                        method: PAYMENT_METHOD_LABELS[mov.payment_method] || mov.payment_method
+                        method: PAYMENT_METHOD_LABELS[mov.payment_method] || mov.payment_method,
+                        category: mov.category,
+                        appointmentId: mov.appointment_id,
+                        referenceId: mov.reference_id,
+                        createdBy: mov.created_by,
+                        isVoidEntry,
+                        isVoided,
                     });
                 }
             });
@@ -275,6 +347,7 @@ export default function AdminCajaPage() {
             cashPayments: cashPay,
             transferPayments: transferPay,
             cardPayments: cardPay,
+            otherPayments: otherPay,
             expenses: totalExpenses,
         });
 
@@ -293,16 +366,25 @@ export default function AdminCajaPage() {
             return;
         }
 
+        const amountVal = parseFloat(movementForm.amount);
+        if (isNaN(amountVal) || amountVal <= 0) {
+            toast.error("Monto inválido");
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
+            const { data: { user } } = await supabase.auth.getUser();
+
             const { error } = await supabase.from('cash_movements').insert({
                 type: movementType,
-                category: movementType === 'expense' ? 'other' : movementForm.category,
-                amount: parseFloat(movementForm.amount),
+                category: movementForm.category,
+                amount: amountVal,
                 description: movementForm.description || (movementForm.category === 'chair_rental' ? "Cobro de renta de sillón" : ""),
                 payment_method: movementForm.payment_method,
                 barber_id: (movementType === 'income' && movementForm.category === 'chair_rental') ? movementForm.barber_id : null,
+                created_by: user?.id || null,
             });
 
             if (error) {
@@ -315,6 +397,45 @@ export default function AdminCajaPage() {
             }
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    // Anular movimiento manual (contra-asiento, nunca DELETE)
+    const canVoidMovement = (t: Transaction) =>
+        !t.appointmentId && t.category !== 'settlement' && !t.isVoidEntry && !t.isVoided;
+
+    const handleVoidMovement = async () => {
+        if (!voidTarget) return;
+        setIsVoiding(true);
+
+        try {
+            const { error } = await supabase.rpc('void_cash_movement', {
+                p_movement_id: voidTarget.id,
+                p_reason: voidReason || null,
+            });
+
+            if (error) {
+                if (error.message.includes("YA_ANULADO")) {
+                    toast.error("Este movimiento ya fue anulado.");
+                } else if (error.message.includes("MOVIMIENTO_DE_CITA")) {
+                    toast.error("No se puede anular un cobro de cita desde acá.");
+                } else if (error.message.includes("MOVIMIENTO_DE_LIQUIDACION")) {
+                    toast.error("No se puede anular un movimiento de liquidación.");
+                } else if (error.message.includes("MOVIMIENTO_NO_EXISTE")) {
+                    toast.error("El movimiento no existe.");
+                } else if (error.message.includes("NO_AUTORIZADO")) {
+                    toast.error("No tenés autorización para anular movimientos.");
+                } else {
+                    toast.error("Error al anular movimiento: " + error.message);
+                }
+            } else {
+                toast.success("Movimiento anulado: se registró el contra-asiento");
+                setVoidTarget(null);
+                setVoidReason("");
+                loadCajaData();
+            }
+        } finally {
+            setIsVoiding(false);
         }
     };
 
@@ -442,6 +563,41 @@ export default function AdminCajaPage() {
                 </Card>
             </div>
 
+            {/* Desglose por método de pago (los 4 buckets particionan todos los
+                ingresos del período, así que su suma siempre cierra) */}
+            <div className="rounded-md border bg-card p-4">
+                <h3 className="font-semibold flex items-center gap-2 mb-3">
+                    <CreditCard className="h-4 w-4 text-primary" />
+                    Desglose por Método de Pago
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                            <Banknote className="h-4 w-4" /> {PAYMENT_METHOD_LABELS.cash}
+                        </span>
+                        <span className="font-semibold text-foreground">{formatPrice(summary.cashPayments)}</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                            <ArrowLeftRight className="h-4 w-4" /> {PAYMENT_METHOD_LABELS.transfer}
+                        </span>
+                        <span className="font-semibold text-foreground">{formatPrice(summary.transferPayments)}</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                            <CreditCard className="h-4 w-4" /> {PAYMENT_METHOD_LABELS.card}
+                        </span>
+                        <span className="font-semibold text-foreground">{formatPrice(summary.cardPayments)}</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                            <Receipt className="h-4 w-4" /> {PAYMENT_METHOD_LABELS.other}
+                        </span>
+                        <span className="font-semibold text-foreground">{formatPrice(summary.otherPayments)}</span>
+                    </div>
+                </div>
+            </div>
+
             {/* Desglose por Barbero */}
             <div className="rounded-md border bg-card">
                 <div className="p-4 border-b">
@@ -508,12 +664,14 @@ export default function AdminCajaPage() {
                             <TableHead>Tipo</TableHead>
                             <TableHead>Método</TableHead>
                             <TableHead className="text-right">Monto</TableHead>
+                            <TableHead>Por</TableHead>
+                            <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">
+                                <TableCell colSpan={7} className="h-24 text-center">
                                     <div className="flex justify-center items-center gap-2">
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                         Cargando movimientos...
@@ -522,7 +680,7 @@ export default function AdminCajaPage() {
                             </TableRow>
                         ) : transactions.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                                     No hay movimientos registrados en este periodo.
                                 </TableCell>
                             </TableRow>
@@ -532,7 +690,19 @@ export default function AdminCajaPage() {
                                     <TableCell className="font-mono text-sm">
                                         {format(new Date(t.date), "dd/MM HH:mm", { locale: es })}
                                     </TableCell>
-                                    <TableCell>{t.description}</TableCell>
+                                    <TableCell>
+                                        {t.description}
+                                        {t.isVoidEntry && (
+                                            <Badge variant="outline" className="ml-2 text-[10px] text-muted-foreground">
+                                                Anulación
+                                            </Badge>
+                                        )}
+                                        {t.isVoided && (
+                                            <Badge variant="outline" className="ml-2 text-[10px] border-red-400/30 text-red-400">
+                                                Anulado
+                                            </Badge>
+                                        )}
+                                    </TableCell>
                                     <TableCell>
                                         <Badge variant={
                                             t.type === 'servicio' ? 'default' :
@@ -547,6 +717,22 @@ export default function AdminCajaPage() {
                                     </TableCell>
                                     <TableCell className={`text-right font-medium ${t.amount < 0 ? 'text-red-400' : ''}`}>
                                         {t.amount < 0 ? '-' : ''}{formatPrice(Math.abs(t.amount))}
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground text-sm">
+                                        {(t.createdBy && creatorNames[t.createdBy]) || "—"}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {canVoidMovement(t) && (
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-8 text-muted-foreground hover:text-red-400"
+                                                onClick={() => { setVoidTarget(t); setVoidReason(""); }}
+                                            >
+                                                <Ban className="h-3.5 w-3.5 mr-1" />
+                                                Anular
+                                            </Button>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -569,6 +755,8 @@ export default function AdminCajaPage() {
                             <label className="text-sm font-medium mb-2 block">Monto</label>
                             <Input
                                 type="number"
+                                min="0.01"
+                                step="any"
                                 placeholder="1500"
                                 value={movementForm.amount}
                                 onChange={(e) => setMovementForm({ ...movementForm, amount: e.target.value })}
@@ -591,6 +779,27 @@ export default function AdminCajaPage() {
                                         <SelectItem value="chair_rental">Renta de sillón</SelectItem>
                                         <SelectItem value="product">Venta de producto (manual)</SelectItem>
                                         <SelectItem value="adjustment">Ajuste de caja</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
+                        {movementType === 'expense' && (
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">Categoría</label>
+                                <Select
+                                    value={movementForm.category}
+                                    onValueChange={(v) => setMovementForm({ ...movementForm, category: v })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {EXPENSE_CATEGORIES.map((cat) => (
+                                            <SelectItem key={cat} value={cat}>
+                                                {CASH_CATEGORY_LABELS[cat]}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -658,6 +867,47 @@ export default function AdminCajaPage() {
                             </Button>
                         </div>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Dialog de anulación (contra-asiento) */}
+            <Dialog open={!!voidTarget} onOpenChange={(open) => !open && setVoidTarget(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Anular movimiento</DialogTitle>
+                        <DialogDescription>
+                            Se va a registrar un contra-asiento por{" "}
+                            {voidTarget ? formatPrice(Math.abs(voidTarget.amount)) : ""}. El movimiento
+                            original queda intacto para el rastro de auditoría — nunca se borra.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div>
+                        <label className="text-sm font-medium mb-2 block">Motivo (opcional)</label>
+                        <Textarea
+                            placeholder="Error de tipeo, monto duplicado, etc."
+                            value={voidReason}
+                            onChange={(e) => setVoidReason(e.target.value)}
+                        />
+                    </div>
+                    <DialogFooter className="pt-4">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setVoidTarget(null)}
+                            disabled={isVoiding}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={handleVoidMovement}
+                            disabled={isVoiding}
+                        >
+                            {isVoiding && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            Anular movimiento
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

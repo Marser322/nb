@@ -257,6 +257,8 @@ export default function AdminLiquidacionesPage() {
                 .eq("id", rentaBarberId)
                 .single();
 
+            const { data: { user } } = await supabase.auth.getUser();
+
             const { error } = await supabase.from("cash_movements").insert({
                 type: "income",
                 category: "chair_rental",
@@ -265,6 +267,7 @@ export default function AdminLiquidacionesPage() {
                 description: rentaForm.description,
                 barber_id: rentaBarberId,
                 branch_id: barber?.branch_id || null,
+                created_by: user?.id || null,
             });
 
             if (error) {

@@ -1245,6 +1245,7 @@ DECLARE
   v_barber_total NUMERIC := 0;
   v_house_total NUMERIC := 0;
   v_rental_due NUMERIC := 0;
+  v_rental_paid NUMERIC := 0;
 BEGIN
   IF NOT (is_admin() OR p_barber_id = current_barber_id()) THEN
     RAISE EXCEPTION 'NO_AUTORIZADO';
@@ -1257,8 +1258,9 @@ BEGIN
 
   SELECT COALESCE(SUM(amount) FILTER (WHERE category = 'service'), 0),
          COALESCE(SUM(amount) FILTER (WHERE category = 'tip'), 0),
-         COUNT(*) FILTER (WHERE category = 'service')
-  INTO v_services, v_tips, v_count
+         COUNT(*) FILTER (WHERE category = 'service'),
+         COALESCE(SUM(amount) FILTER (WHERE category = 'chair_rental'), 0)
+  INTO v_services, v_tips, v_count, v_rental_paid
   FROM cash_movements
   WHERE barber_id = p_barber_id AND type = 'income'
     AND (created_at AT TIME ZONE 'America/Montevideo')::date BETWEEN p_from AND p_to;
@@ -1288,6 +1290,7 @@ BEGIN
     'salary_amount', v_comp.salary_amount,
     'services_total', v_services, 'tips_total', v_tips,
     'appointments_count', v_count, 'rental_due', v_rental_due,
+    'rental_paid', v_rental_paid,
     'barber_total', v_barber_total, 'house_total', v_house_total,
     'has_compensation', v_comp.id IS NOT NULL
   );
@@ -1498,6 +1501,12 @@ CREATE TRIGGER trg_appointments_completed_history
 REVOKE EXECUTE ON FUNCTION appointments_completed_history_trigger() FROM PUBLIC, anon;
 
 -- Reemplaza la versión de 014: el trigger registra el historial con idempotencia.
+-- 025: además del cobro normal ('pending'/'confirmed'), acepta cobro retroactivo
+-- de citas ya 'completed' (ver get_uncharged_completed_appointments). El doble
+-- cobro sigue siendo imposible por idx_cash_movements_appointment_service; el
+-- UPDATE a 'completed' es un no-op idempotente y el trigger de haircut_history
+-- (idempotente, ON CONFLICT DO NOTHING + solo dispara ante cambio real de status)
+-- no duplica el historial.
 CREATE OR REPLACE FUNCTION complete_appointment_with_payment(
   p_appointment_id UUID,
   p_final_amount NUMERIC,
@@ -1529,7 +1538,7 @@ BEGIN
   IF NOT (is_admin() OR v_apt.barber_id = current_barber_id()) THEN
     RAISE EXCEPTION 'NO_AUTORIZADO';
   END IF;
-  IF v_apt.status NOT IN ('pending', 'confirmed') THEN
+  IF v_apt.status NOT IN ('pending', 'confirmed', 'completed') THEN
     RAISE EXCEPTION 'ESTADO_INVALIDO';
   END IF;
 
@@ -2642,3 +2651,179 @@ END $$;
 -- "Admins update profiles" (FOR UPDATE USING (is_admin())) ya permite que
 -- el admin actualice birth_date de cualquier perfil directamente vía
 -- supabase.from('profiles').update(...), igual que hace hoy con notes.
+
+-- =============================================================
+-- 025 — Caja: cierre de día con arqueo, anulación por contra-asiento
+-- y citas completadas sin cobrar (polish FASE 34). complete_appointment_with_payment
+-- y get_barber_settlement ya quedaron editados en su definición original más
+-- arriba; acá solo lo nuevo: tabla, índice y RPCs.
+-- =============================================================
+
+CREATE TABLE IF NOT EXISTS cash_closures (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  closure_date DATE NOT NULL UNIQUE,
+  expected_cash NUMERIC(10,2) NOT NULL,
+  counted_cash NUMERIC(10,2) NOT NULL,
+  difference NUMERIC(10,2) NOT NULL,
+  total_income NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total_expense NUMERIC(10,2) NOT NULL DEFAULT 0,
+  movements_count INT NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE cash_closures ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins manage cash closures" ON cash_closures;
+CREATE POLICY "Admins manage cash closures" ON cash_closures
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+CREATE OR REPLACE FUNCTION close_cash_day(
+  p_date DATE,
+  p_counted_cash NUMERIC,
+  p_notes TEXT DEFAULT NULL
+) RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_income NUMERIC := 0;
+  v_expense NUMERIC := 0;
+  v_count INT := 0;
+  v_expected NUMERIC := 0;
+  v_row cash_closures;
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+  IF p_counted_cash IS NULL OR p_counted_cash < 0 THEN
+    RAISE EXCEPTION 'MONTO_INVALIDO';
+  END IF;
+  IF p_date IS NULL OR p_date > (now() AT TIME ZONE 'America/Montevideo')::date THEN
+    RAISE EXCEPTION 'FECHA_FUTURA';
+  END IF;
+
+  SELECT
+    COALESCE(SUM(amount) FILTER (WHERE type = 'income'), 0),
+    COALESCE(SUM(amount) FILTER (WHERE type = 'expense'), 0),
+    COUNT(*)
+  INTO v_income, v_expense, v_count
+  FROM cash_movements
+  WHERE payment_method = 'cash'
+    AND (created_at AT TIME ZONE 'America/Montevideo')::date = p_date;
+
+  v_expected := v_income - v_expense;
+
+  BEGIN
+    INSERT INTO cash_closures (closure_date, expected_cash, counted_cash, difference,
+      total_income, total_expense, movements_count, notes, created_by)
+    VALUES (p_date, v_expected, p_counted_cash, p_counted_cash - v_expected,
+      v_income, v_expense, v_count, p_notes, auth.uid())
+    RETURNING * INTO v_row;
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'DIA_YA_CERRADO';
+  END;
+
+  RETURN to_jsonb(v_row);
+END; $$;
+
+REVOKE EXECUTE ON FUNCTION close_cash_day(DATE, NUMERIC, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION close_cash_day(DATE, NUMERIC, TEXT) TO authenticated;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_movements_void_once
+  ON cash_movements(reference_id) WHERE category = 'adjustment' AND reference_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION void_cash_movement(
+  p_movement_id UUID,
+  p_reason TEXT DEFAULT NULL
+) RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_mov RECORD;
+  v_new_id UUID;
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+
+  SELECT * INTO v_mov FROM cash_movements WHERE id = p_movement_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'MOVIMIENTO_NO_EXISTE';
+  END IF;
+
+  IF v_mov.appointment_id IS NOT NULL THEN
+    RAISE EXCEPTION 'MOVIMIENTO_DE_CITA';
+  END IF;
+
+  IF v_mov.category = 'settlement' OR EXISTS (
+    SELECT 1 FROM barber_settlements WHERE payout_movement_id = p_movement_id
+  ) THEN
+    RAISE EXCEPTION 'MOVIMIENTO_DE_LIQUIDACION';
+  END IF;
+
+  IF v_mov.category = 'adjustment' AND v_mov.reference_id IS NOT NULL THEN
+    RAISE EXCEPTION 'YA_ANULADO';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM cash_movements WHERE reference_id = p_movement_id AND category = 'adjustment'
+  ) THEN
+    RAISE EXCEPTION 'YA_ANULADO';
+  END IF;
+
+  BEGIN
+    INSERT INTO cash_movements (type, category, amount, payment_method, description,
+      barber_id, branch_id, reference_id, created_by)
+    VALUES (
+      CASE v_mov.type WHEN 'income' THEN 'expense' ELSE 'income' END,
+      'adjustment', v_mov.amount, v_mov.payment_method,
+      'Anulación: ' || COALESCE(NULLIF(BTRIM(p_reason), ''), v_mov.description, 'sin descripción'),
+      v_mov.barber_id, v_mov.branch_id, p_movement_id, auth.uid()
+    )
+    RETURNING id INTO v_new_id;
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'YA_ANULADO';
+  END;
+
+  RETURN v_new_id;
+END; $$;
+
+REVOKE EXECUTE ON FUNCTION void_cash_movement(UUID, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION void_cash_movement(UUID, TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION get_uncharged_completed_appointments(
+  p_barber_id UUID, p_from DATE, p_to DATE
+) RETURNS TABLE (
+  id UUID,
+  appointment_date DATE,
+  start_time TIME,
+  client_name TEXT,
+  service_name TEXT,
+  service_price NUMERIC
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT (is_admin() OR p_barber_id = current_barber_id()) THEN
+    RAISE EXCEPTION 'NO_AUTORIZADO';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    a.id,
+    a.appointment_date,
+    a.start_time,
+    COALESCE(p.full_name, 'Cliente sin nombre') AS client_name,
+    COALESCE(s.name, 'Servicio') AS service_name,
+    COALESCE(s.price, 0) AS service_price
+  FROM appointments a
+  LEFT JOIN profiles p ON p.id = a.client_id
+  LEFT JOIN services s ON s.id = a.service_id
+  WHERE a.status = 'completed'
+    AND a.barber_id = p_barber_id
+    AND a.appointment_date BETWEEN p_from AND p_to
+    AND NOT EXISTS (
+      SELECT 1 FROM cash_movements cm
+      WHERE cm.appointment_id = a.id AND cm.category = 'service'
+    )
+  ORDER BY a.appointment_date, a.start_time;
+END; $$;
+
+REVOKE EXECUTE ON FUNCTION get_uncharged_completed_appointments(UUID, DATE, DATE) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_uncharged_completed_appointments(UUID, DATE, DATE) TO authenticated;

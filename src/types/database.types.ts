@@ -233,9 +233,33 @@ export interface SettlementPreview {
   tips_total: number
   appointments_count: number
   rental_due: number
+  rental_paid: number
   barber_total: number
   house_total: number
   has_compensation: boolean
+}
+
+export interface CashClosure {
+  id: string
+  closure_date: string
+  expected_cash: number
+  counted_cash: number
+  difference: number
+  total_income: number
+  total_expense: number
+  movements_count: number
+  notes: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface UnchargedAppointment {
+  id: string
+  appointment_date: string
+  start_time: string
+  client_name: string
+  service_name: string
+  service_price: number
 }
 
 
