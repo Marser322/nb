@@ -80,7 +80,7 @@ Cerrar la brecha entre "grilla de productos" y una tienda que convierte:
 - **Promos y combos**: cupones, kits de cuidado (bundle con precio de paquete).
 - **Suscripción de producto (recurrente)**: reenvío automático mensual del shampoo/cera → ingreso recurrente.
 - **UX de stock**: badges de "últimas unidades", estados de agotado prolijos.
-- **Datos bancarios editables desde `/admin/configuracion`** (hoy `BANK_TRANSFER_INFO` es constante en código, introducida en FASE 28; moverla a `app_settings` cuando la tienda escale).
+- ~~**Datos bancarios editables desde `/admin/configuracion`**~~ → cubierto por el brief FASE 37 (polish config negocio, `business.bank_transfer` en `app_settings`).
 
 **Valor**: sube ticket promedio y suma un canal de ingreso además del sillón.
 
@@ -134,6 +134,9 @@ Curadas por valor y diferenciación. Etiquetas: **[R]** ingreso recurrente · **
     pasada desde /admin/citas, iterando las plantillas por evento de la FASE 30 (sigue siendo `wa.me`
     manual, cita por cita, o da el salto a WhatsApp API). Detectada en el ciclo /polish FASE 30;
     excluida de ese brief (anti-monstruo: sin envíos masivos ni automatización).
+18b. **Auditoría de configuración** **[Q]** — historial de cambios de `app_settings` (quién cambió
+    qué política y cuándo); útil cuando haya gerentes editando. Detectada en el ciclo /polish
+    FASE 37; excluida de ese brief.
 19. **Perfil rico del barbero** **[Q]** — columnas nuevas en `barbers` (especialidades, Instagram,
     rating de clientes) mostradas en el wizard y en un perfil público linkeable. Detectada en el
     ciclo /polish FASE 36; excluida de ese brief (requiere migración y moderación de contenido).
