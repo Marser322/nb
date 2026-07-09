@@ -38,7 +38,7 @@
 | 11 | **Chat que aprende (auto-aprendizaje)** | `chat_logs` (pregunta/respuesta/proveedor/modo) + `chat_knowledge` auto-alimentada por el LLM e inyectada al prompt; panel en admin para ver preguntas frecuentes/sin respuesta y editar/borrar lo aprendido; flag `chat_aprendizaje` para apagarlo. Guardrail: lo aprendido nunca pisa datos live de Supabase. | ejecutado |
 | 12 | **Citas: escenarios límite** | No-show con reactivación, walk-in rápido, cliente llega tarde, doble gestión del mismo horario, cancelación en cadena por bloqueo de agenda. | ejecutado |
 | 13 | **Clientes/CRM: segmentación y acciones** | Segmentos (top clientes, frecuencia, en riesgo), cumpleaños si hay dato, envío WhatsApp por segmento reutilizando `SendWhatsappDialog`. | ejecutado |
-| 14 | **Caja + liquidaciones: escenarios** | Ajustes/retiros, cierre de día, diferencias de caja, liquidación con citas sin cobrar. | pendiente |
+| 14 | **Caja + liquidaciones: escenarios** | Ajustes/retiros, cierre de día, diferencias de caja, liquidación con citas sin cobrar. | brief listo (FASE_34) |
 | 15 | **Pedidos + POS: flujos de borde** | Cancelación con restock, stock insuficiente en mostrador, pedido pagado sin stock. | pendiente |
 | 16 | **Barberos: ausencias y perfil** | Vacaciones/licencias multi-día sobre `schedule_blocks`, franjas por día, perfil público más rico. | pendiente |
 | 17 | **Configuración: negocio editable** | Mover copy/valores de `BUSINESS_CONFIG` (horarios, tolerancia, ventana de cancelación) de `constants.ts` a `app_settings` editable desde `/admin/configuracion`, consumido también por el chat. | pendiente |
@@ -70,5 +70,6 @@ Recolectado el 2026-07-08 sobre `src/app/api/chat/route.ts` y `src/components/ch
 | 2026-07-09 | #11 Chat que aprende (auto-aprendizaje) | `FASE_31_polish_chat_aprendizaje.md` | merge `32d41ff` (`feat/polish-chat-aprendizaje`, Sonnet) |
 | 2026-07-09 | #12 Citas: escenarios límite | `FASE_32_polish_citas_escenarios.md` | merge `032cfe6` (`feat/polish-citas-escenarios`, Sonnet) |
 | 2026-07-09 | #13 Clientes/CRM: segmentación | `FASE_33_polish_crm_segmentacion.md` | merge `d9a138d` (`feat/polish-crm-segmentacion`, Sonnet) |
+| 2026-07-09 | #14 Caja + liquidaciones: escenarios | `FASE_34_polish_caja_liquidaciones.md` | pendiente |
 
 > **Cola completada (9/9, 2026-07-08).** Próximos ciclos de /polish: proponer áreas nuevas o re-pulir con lo aprendido; las features grandes viven en `ROADMAP_CRECIMIENTO.md`.
