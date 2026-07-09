@@ -258,6 +258,17 @@ export interface RemindersConfig {
   updated_at: string
 }
 
+export interface MessageTemplate {
+  id: string
+  event_type: 'cancelled' | 'confirmed' | 'rescheduled' | 'reminder' | 'thanks'
+  name: string
+  body: string
+  is_active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
 export interface ClientOverview {
   id: string
   full_name: string | null

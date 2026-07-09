@@ -22,7 +22,8 @@ import { Label } from "@/components/ui/label";
 import { MessageSquare, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { normalizeUyPhone, fillTemplate, buildWaLink } from "@/lib/whatsapp";
-import type { RemindersConfig } from "@/types/database.types";
+import { MESSAGE_EVENT_LABELS } from "@/lib/constants";
+import type { RemindersConfig, MessageTemplate } from "@/types/database.types";
 
 interface SendWhatsappDialogProps {
     clientId?: string;
@@ -31,6 +32,12 @@ interface SendWhatsappDialogProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
     onLogAdded?: () => void;
+    /** Si se provee, el diálogo carga plantillas de message_templates para ese evento en vez de reminders_config. */
+    eventType?: string;
+    /** Diccionario completo de variables ({nombre} {fecha} {hora} {barbero} {servicio} {sucursal}) para precargar el mensaje del evento. */
+    templateVars?: Record<string, string>;
+    /** Cita de origen del aviso, se guarda en communication_logs.metadata para trazabilidad. */
+    appointmentId?: string;
 }
 
 export function SendWhatsappDialog({
@@ -40,8 +47,12 @@ export function SendWhatsappDialog({
     isOpen,
     onOpenChange,
     onLogAdded,
+    eventType,
+    templateVars,
+    appointmentId,
 }: SendWhatsappDialogProps) {
     const [templates, setTemplates] = useState<RemindersConfig[]>([]);
+    const [eventTemplates, setEventTemplates] = useState<MessageTemplate[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>("custom");
     const [message, setMessage] = useState("");
     const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
@@ -51,36 +62,72 @@ export function SendWhatsappDialog({
     const normalizedPhone = normalizeUyPhone(clientPhone);
     const isPhoneValid = !!normalizedPhone;
 
-    // Cargar plantillas
+    // Cargar plantillas: de message_templates si hay eventType, si no las de reminders_config (comportamiento clásico)
     useEffect(() => {
         if (!isOpen) return;
 
         async function loadTemplates() {
             setIsLoadingTemplates(true);
-            const { data, error } = await supabase
-                .from("reminders_config")
-                .select("*")
-                .order("days_since_last_visit");
 
-            if (error) {
-                console.error("Error loading templates:", error);
-                toast.error("Error al cargar las plantillas de mensaje");
+            if (eventType) {
+                const { data, error } = await supabase
+                    .from("message_templates")
+                    .select("*")
+                    .eq("event_type", eventType)
+                    .eq("is_active", true)
+                    .order("sort_order");
+
+                if (error) {
+                    console.error("Error loading message templates:", error);
+                    toast.error("Error al cargar las plantillas de mensaje");
+                    setEventTemplates([]);
+                } else {
+                    const rows = data || [];
+                    setEventTemplates(rows);
+                    if (rows.length > 0) {
+                        setSelectedTemplateId(rows[0].id);
+                        setMessage(fillTemplate(rows[0].body, { nombre: clientName, ...templateVars }));
+                    } else {
+                        setSelectedTemplateId("custom");
+                        setMessage("");
+                    }
+                }
             } else {
-                setTemplates(data || []);
+                const { data, error } = await supabase
+                    .from("reminders_config")
+                    .select("*")
+                    .order("days_since_last_visit");
+
+                if (error) {
+                    console.error("Error loading templates:", error);
+                    toast.error("Error al cargar las plantillas de mensaje");
+                } else {
+                    setTemplates(data || []);
+                }
+                setSelectedTemplateId("custom");
+                setMessage("");
             }
+
             setIsLoadingTemplates(false);
         }
 
         loadTemplates();
-        setSelectedTemplateId("custom");
-        setMessage("");
-    }, [isOpen, supabase]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, supabase, eventType]);
 
     // Al cambiar la plantilla seleccionada
     const handleTemplateChange = (templateId: string) => {
         setSelectedTemplateId(templateId);
         if (templateId === "custom") {
             setMessage("");
+            return;
+        }
+
+        if (eventType) {
+            const template = eventTemplates.find((t) => t.id === templateId);
+            if (template) {
+                setMessage(fillTemplate(template.body, { nombre: clientName, ...templateVars }));
+            }
             return;
         }
 
@@ -116,10 +163,17 @@ export function SendWhatsappDialog({
                 client_phone: normalizedPhone,
                 message_sent: message,
                 status: "sent" as const, // Admitido en CHECK
-                metadata: {
-                    source: "manual",
-                    template_id: selectedTemplateId !== "custom" ? selectedTemplateId : null,
-                },
+                metadata: eventType
+                    ? {
+                        source: "appointment_event",
+                        event_type: eventType,
+                        appointment_id: appointmentId || null,
+                        template_id: selectedTemplateId !== "custom" ? selectedTemplateId : null,
+                    }
+                    : {
+                        source: "manual",
+                        template_id: selectedTemplateId !== "custom" ? selectedTemplateId : null,
+                    },
             };
 
             const { error } = await supabase
@@ -151,7 +205,9 @@ export function SendWhatsappDialog({
                         Enviar Mensaje de WhatsApp
                     </DialogTitle>
                     <DialogDescription>
-                        Elegí una plantilla o redactá un mensaje personalizado para enviar a {clientName}.
+                        {eventType
+                            ? `Revisá el mensaje de ${MESSAGE_EVENT_LABELS[eventType]?.toLowerCase() || "aviso"} antes de enviarlo a ${clientName}.`
+                            : `Elegí una plantilla o redactá un mensaje personalizado para enviar a ${clientName}.`}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -182,11 +238,17 @@ export function SendWhatsappDialog({
                             </SelectTrigger>
                             <SelectContent className="bg-card border-border text-foreground">
                                 <SelectItem value="custom">Mensaje Personalizado (Vacío)</SelectItem>
-                                {templates.map((t) => (
-                                    <SelectItem key={t.id} value={t.id}>
-                                        Inactividad {t.days_since_last_visit} días {t.is_active ? "" : "(Inactiva)"}
-                                    </SelectItem>
-                                ))}
+                                {eventType
+                                    ? eventTemplates.map((t) => (
+                                        <SelectItem key={t.id} value={t.id}>
+                                            {t.name}
+                                        </SelectItem>
+                                    ))
+                                    : templates.map((t) => (
+                                        <SelectItem key={t.id} value={t.id}>
+                                            Inactividad {t.days_since_last_visit} días {t.is_active ? "" : "(Inactiva)"}
+                                        </SelectItem>
+                                    ))}
                             </SelectContent>
                         </Select>
                     </div>
