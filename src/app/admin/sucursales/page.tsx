@@ -24,11 +24,14 @@ import {
 } from "@/components/ui/dialog";
 import { Building2, Plus, Loader2, MapPin, Phone, Edit2, CalendarRange, Trash2, Calendar, Clock } from "lucide-react";
 import { toast } from "sonner";
-import type { Branch, WorkingHours, ScheduleBlock } from "@/types/database.types";
+import type { Branch, WorkingHours, ScheduleBlock, Barber } from "@/types/database.types";
 import { WorkingHoursEditor } from "@/components/admin/WorkingHoursEditor";
+import { findScheduleBlockConflicts, type ScheduleBlockConflict } from "@/lib/booking";
+import { ScheduleBlockConflictDialog } from "@/components/admin/schedule-block-conflict-dialog";
 
 export default function AdminSucursalesPage() {
     const [branches, setBranches] = useState<Branch[]>([]);
+    const [barbers, setBarbers] = useState<Barber[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
@@ -52,6 +55,8 @@ export default function AdminSucursalesPage() {
         reason: "",
     });
     const [isCreatingBlock, setIsCreatingBlock] = useState(false);
+    const [blockConflicts, setBlockConflicts] = useState<ScheduleBlockConflict[] | null>(null);
+    const [isCheckingBlockConflicts, setIsCheckingBlockConflicts] = useState(false);
 
     const supabase = useMemo(() => createClient(), []);
 
@@ -64,6 +69,15 @@ export default function AdminSucursalesPage() {
 
         if (data) setBranches(data);
         setIsLoading(false);
+    }, [supabase]);
+
+    // Barberos activos, para saber a quiénes afecta un bloqueo de sucursal
+    const loadBarbers = useCallback(async () => {
+        const { data } = await supabase
+            .from("barbers")
+            .select("*")
+            .eq("is_active", true);
+        if (data) setBarbers(data);
     }, [supabase]);
 
     const loadBlocks = useCallback(async (branchId: string) => {
@@ -82,7 +96,8 @@ export default function AdminSucursalesPage() {
     useEffect(() => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
         loadBranches(false);
-    }, [loadBranches]);
+        loadBarbers();
+    }, [loadBranches, loadBarbers]);
 
     useEffect(() => {
         if (activeBranchForBlocks) {
@@ -148,6 +163,40 @@ export default function AdminSucursalesPage() {
         }
     };
 
+    // Inserta el bloqueo ya validado (sin choques, o el admin decidió crearlo igual)
+    const insertBlock = async () => {
+        if (!activeBranchForBlocks) return;
+
+        setIsCreatingBlock(true);
+        const { error } = await supabase
+            .from("schedule_blocks")
+            .insert({
+                branch_id: activeBranchForBlocks.id,
+                start_date: blockForm.startDate,
+                end_date: blockForm.endDate,
+                start_time: blockForm.isFullDay ? null : blockForm.startTime,
+                end_time: blockForm.isFullDay ? null : blockForm.endTime,
+                reason: blockForm.reason || null,
+            });
+
+        setIsCreatingBlock(false);
+        setBlockConflicts(null);
+        if (error) {
+            toast.error("Error al registrar bloqueo");
+        } else {
+            toast.success("Bloqueo registrado con éxito");
+            setBlockForm({
+                startDate: "",
+                endDate: "",
+                isFullDay: true,
+                startTime: "09:00",
+                endTime: "18:00",
+                reason: "",
+            });
+            loadBlocks(activeBranchForBlocks.id);
+        }
+    };
+
     const handleCreateBlock = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!activeBranchForBlocks) return;
@@ -167,33 +216,26 @@ export default function AdminSucursalesPage() {
             return;
         }
 
-        setIsCreatingBlock(true);
-        const { error } = await supabase
-            .from("schedule_blocks")
-            .insert({
-                branch_id: activeBranchForBlocks.id,
-                start_date: blockForm.startDate,
-                end_date: blockForm.endDate,
-                start_time: blockForm.isFullDay ? null : blockForm.startTime,
-                end_time: blockForm.isFullDay ? null : blockForm.endTime,
-                reason: blockForm.reason || null,
-            });
+        const branchBarberIds = barbers
+            .filter((b) => b.branch_id === activeBranchForBlocks.id)
+            .map((b) => b.id);
 
-        setIsCreatingBlock(false);
-        if (error) {
-            toast.error("Error al registrar bloqueo");
-        } else {
-            toast.success("Bloqueo registrado con éxito");
-            setBlockForm({
-                startDate: "",
-                endDate: "",
-                isFullDay: true,
-                startTime: "09:00",
-                endTime: "18:00",
-                reason: "",
-            });
-            loadBlocks(activeBranchForBlocks.id);
+        setIsCheckingBlockConflicts(true);
+        const conflicts = await findScheduleBlockConflicts(supabase, {
+            barberIds: branchBarberIds,
+            startDate: blockForm.startDate,
+            endDate: blockForm.endDate,
+            startTime: blockForm.isFullDay ? null : blockForm.startTime,
+            endTime: blockForm.isFullDay ? null : blockForm.endTime,
+        });
+        setIsCheckingBlockConflicts(false);
+
+        if (conflicts.length > 0) {
+            setBlockConflicts(conflicts);
+            return;
         }
+
+        await insertBlock();
     };
 
     const handleDeleteBlock = async (blockId: string) => {
@@ -544,11 +586,11 @@ export default function AdminSucursalesPage() {
                                 >
                                     Cerrar
                                 </Button>
-                                <Button type="submit" disabled={isCreatingBlock}>
-                                    {isCreatingBlock ? (
+                                <Button type="submit" disabled={isCreatingBlock || isCheckingBlockConflicts}>
+                                    {isCreatingBlock || isCheckingBlockConflicts ? (
                                         <>
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Creando...
+                                            {isCheckingBlockConflicts ? "Revisando agenda..." : "Creando..."}
                                         </>
                                     ) : (
                                         "Crear Bloqueo"
@@ -559,6 +601,13 @@ export default function AdminSucursalesPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <ScheduleBlockConflictDialog
+                conflicts={blockConflicts}
+                isSubmitting={isCreatingBlock}
+                onConfirm={insertBlock}
+                onCancel={() => setBlockConflicts(null)}
+            />
         </div>
     );
 }
