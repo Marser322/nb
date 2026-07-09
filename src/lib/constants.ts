@@ -115,7 +115,7 @@ export const COMMUNICATION_STATUS_COLORS: Record<string, string> = {
 }
 
 // Plantillas de mensajes por evento de cita (message_templates)
-export const MESSAGE_EVENT_TYPES = ['cancelled', 'confirmed', 'rescheduled', 'reminder', 'thanks'] as const
+export const MESSAGE_EVENT_TYPES = ['cancelled', 'confirmed', 'rescheduled', 'reminder', 'thanks', 'birthday'] as const
 
 export const MESSAGE_EVENT_LABELS: Record<string, string> = {
     cancelled: 'Cancelación',
@@ -123,6 +123,22 @@ export const MESSAGE_EVENT_LABELS: Record<string, string> = {
     rescheduled: 'Reprogramación',
     reminder: 'Recordatorio de cita',
     thanks: 'Agradecimiento',
+    birthday: 'Cumpleaños',
+}
+
+// Lista de clientes /admin/clientes (FASE 33): chips de segmento y select de orden.
+export const CLIENT_SEGMENT_LABELS: Record<string, string> = {
+    todos: 'Todos',
+    nuevos: 'Nuevos (30 días)',
+    inactivos: 'Inactivos',
+    cumple_mes: 'Cumplen este mes',
+}
+
+export const CLIENT_SORT_LABELS: Record<string, string> = {
+    recent: 'Más recientes',
+    spent: 'Mayor gasto',
+    visits: 'Más visitas',
+    name: 'Nombre',
 }
 
 // Chat que aprende (/admin/asistente): proveedor que generó la respuesta y modo de la conversación
