@@ -453,9 +453,13 @@ export default function AdminCajaPage() {
         }
     };
 
-    // Anular movimiento manual (contra-asiento, nunca DELETE)
+    // Anular movimiento manual (contra-asiento, nunca DELETE). Los ingresos de
+    // pedidos (category='product', FASE 35) se revierten solo cancelando la
+    // orden desde /admin/pedidos — void_cash_movement los rechaza server-side
+    // (MOVIMIENTO_DE_PEDIDO); acá se oculta el botón para no ofrecer una
+    // acción que va a fallar.
     const canVoidMovement = (t: Transaction) =>
-        !t.appointmentId && t.category !== 'settlement' && !t.isVoidEntry && !t.isVoided;
+        !t.appointmentId && t.category !== 'settlement' && t.category !== 'product' && !t.isVoidEntry && !t.isVoided;
 
     const handleVoidMovement = async () => {
         if (!voidTarget) return;
@@ -472,6 +476,8 @@ export default function AdminCajaPage() {
                     toast.error("Este movimiento ya fue anulado.");
                 } else if (error.message.includes("MOVIMIENTO_DE_CITA")) {
                     toast.error("No se puede anular un cobro de cita desde acá.");
+                } else if (error.message.includes("MOVIMIENTO_DE_PEDIDO")) {
+                    toast.error("Es un cobro de pedido: cancelalo desde Pedidos");
                 } else if (error.message.includes("MOVIMIENTO_DE_LIQUIDACION")) {
                     toast.error("No se puede anular un movimiento de liquidación.");
                 } else if (error.message.includes("MOVIMIENTO_NO_EXISTE")) {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Banknote, Loader2, Minus, Package, Plus, Search, ShoppingCart, Trash2 } from "lucide-react";
+import { Banknote, Loader2, Minus, Package, Plus, RefreshCw, Search, ShoppingCart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,10 @@ export default function AdminPosPage() {
     const [cart, setCart] = useState<CartLine[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isRefreshingStock, setIsRefreshingStock] = useState(false);
+    // Líneas del carrito cuyo stock fresco (revalidado justo antes de cobrar)
+    // no alcanza: productId -> unidades realmente disponibles.
+    const [stockIssues, setStockIssues] = useState<Record<string, number>>({});
 
     const loadPosData = useCallback(async () => {
         setIsLoading(true);
@@ -68,6 +72,27 @@ export default function AdminPosPage() {
         setSelectedBranchId((current) => current || branchesRes.data?.[0]?.id || "");
         setIsLoading(false);
     }, [supabase]);
+
+    // Trae el stock más reciente de product_stock (sin recargar sucursales,
+    // barberos ni productos). El snapshot cargado al abrir el POS queda stale
+    // apenas otra pestaña (Productos, otra venta) mueve stock; esto es lo que
+    // usan tanto el botón manual como la revalidación previa a cobrar.
+    const fetchStockRows = useCallback(async (): Promise<ProductStock[] | null> => {
+        const { data, error } = await supabase.from("product_stock").select("*");
+        if (error) return null;
+        return (data || []) as ProductStock[];
+    }, [supabase]);
+
+    const refreshStock = useCallback(async () => {
+        setIsRefreshingStock(true);
+        const rows = await fetchStockRows();
+        if (rows === null) {
+            toast.error("No pudimos actualizar el stock");
+        } else {
+            setStockRows(rows);
+        }
+        setIsRefreshingStock(false);
+    }, [fetchStockRows]);
 
     useEffect(() => {
         if (isLoaded && (!features.tienda || !features.contabilidad)) {
@@ -93,6 +118,16 @@ export default function AdminPosPage() {
 
     const total = cart.reduce((sum, line) => sum + line.product.price * line.quantity, 0);
 
+    // Cualquier cambio manual al carrito invalida las marcas de stock
+    // insuficiente de un intento de cobro anterior: se revalida de nuevo al
+    // confirmar.
+    const clearStockIssue = (productId: string) => {
+        setStockIssues((issues) => {
+            if (!(productId in issues)) return issues;
+            return Object.fromEntries(Object.entries(issues).filter(([id]) => id !== productId));
+        });
+    };
+
     const addProduct = (product: Product) => {
         const available = getBranchStock(product.id);
         const currentQuantity = getCartQuantity(product.id);
@@ -107,6 +142,7 @@ export default function AdminPosPage() {
             return;
         }
 
+        clearStockIssue(product.id);
         setCart((lines) => {
             const exists = lines.some((line) => line.product.id === product.id);
             if (exists) {
@@ -119,6 +155,7 @@ export default function AdminPosPage() {
     };
 
     const decrementProduct = (productId: string) => {
+        clearStockIssue(productId);
         setCart((lines) => lines.flatMap((line) => {
             if (line.product.id !== productId) return [line];
             if (line.quantity <= 1) return [];
@@ -127,6 +164,7 @@ export default function AdminPosPage() {
     };
 
     const removeProduct = (productId: string) => {
+        clearStockIssue(productId);
         setCart((lines) => lines.filter((line) => line.product.id !== productId));
     };
 
@@ -154,6 +192,41 @@ export default function AdminPosPage() {
         }
 
         setIsSubmitting(true);
+
+        // Revalidar stock fresco antes de cobrar: el snapshot cargado al abrir
+        // el POS (o al elegir la sucursal) puede haber quedado stale si otra
+        // pestaña vendió o ajustó stock mientras se armaba este carrito. El
+        // RPC sigue siendo la fuente de verdad (mapSaleError abajo), pero acá
+        // se evita ni siquiera intentarlo cuando ya sabemos que va a fallar.
+        const freshRows = await fetchStockRows();
+        if (freshRows === null) {
+            toast.error("No pudimos verificar el stock. Probá de nuevo.");
+            setIsSubmitting(false);
+            return;
+        }
+        setStockRows(freshRows);
+
+        const issues: Record<string, number> = {};
+        cart.forEach((line) => {
+            const fresh = freshRows.find((row) => row.product_id === line.product.id && row.branch_id === selectedBranchId);
+            const available = fresh?.quantity ?? 0;
+            if (line.quantity > available) {
+                issues[line.product.id] = available;
+            }
+        });
+
+        if (Object.keys(issues).length > 0) {
+            setStockIssues(issues);
+            cart.forEach((line) => {
+                const available = issues[line.product.id];
+                if (available === undefined) return;
+                toast.error(`${line.product.name}: quedan ${available} unidad${available === 1 ? "" : "es"}`);
+            });
+            setIsSubmitting(false);
+            return;
+        }
+
+        setStockIssues({});
 
         const { data: orderId, error } = await supabase.rpc("create_counter_sale", {
             p_branch_id: selectedBranchId,
@@ -201,6 +274,8 @@ export default function AdminPosPage() {
                         <Select value={selectedBranchId} onValueChange={(value) => {
                             setSelectedBranchId(value);
                             setCart([]);
+                            setStockIssues({});
+                            void refreshStock();
                         }}>
                             <SelectTrigger className="text-base md:text-sm">
                                 <SelectValue placeholder="Sucursal" />
@@ -215,13 +290,24 @@ export default function AdminPosPage() {
                         </Select>
 
                         <div className="flex items-center gap-3">
-                            <Search className="h-4 w-4 text-muted-foreground" />
+                            <Search className="h-4 w-4 text-muted-foreground shrink-0" />
                             <Input
                                 placeholder="Buscar producto..."
                                 value={searchQuery}
                                 onChange={(event) => setSearchQuery(event.target.value)}
                                 className="border-none bg-transparent focus-visible:ring-0 px-0 text-base md:text-sm"
                             />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="shrink-0"
+                                onClick={refreshStock}
+                                disabled={isRefreshingStock}
+                                title="Actualizar stock"
+                            >
+                                <RefreshCw className={`h-4 w-4 ${isRefreshingStock ? "animate-spin" : ""}`} />
+                            </Button>
                         </div>
                     </div>
 
@@ -349,36 +435,45 @@ export default function AdminPosPage() {
                                     Agregá productos para iniciar la venta.
                                 </div>
                             ) : (
-                                cart.map((line) => (
-                                    <div key={line.product.id} className="rounded-lg border border-border bg-muted/20 p-3">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <p className="font-medium text-foreground">{line.product.name}</p>
-                                                <p className="text-sm text-muted-foreground">{formatPrice(line.product.price)}</p>
-                                            </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-destructive hover:text-destructive"
-                                                onClick={() => removeProduct(line.product.id)}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                        <div className="mt-3 flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => decrementProduct(line.product.id)}>
-                                                    <Minus className="h-3 w-3" />
-                                                </Button>
-                                                <span className="w-8 text-center font-mono">{line.quantity}</span>
-                                                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => addProduct(line.product)}>
-                                                    <Plus className="h-3 w-3" />
+                                cart.map((line) => {
+                                    const stockIssue = stockIssues[line.product.id];
+
+                                    return (
+                                        <div key={line.product.id} className="rounded-lg border border-border bg-muted/20 p-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="font-medium text-foreground">{line.product.name}</p>
+                                                    <p className="text-sm text-muted-foreground">{formatPrice(line.product.price)}</p>
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-destructive hover:text-destructive"
+                                                    onClick={() => removeProduct(line.product.id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </div>
-                                            <p className="font-semibold">{formatPrice(line.product.price * line.quantity)}</p>
+                                            <div className="mt-3 flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => decrementProduct(line.product.id)}>
+                                                        <Minus className="h-3 w-3" />
+                                                    </Button>
+                                                    <span className="w-8 text-center font-mono">{line.quantity}</span>
+                                                    <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => addProduct(line.product)}>
+                                                        <Plus className="h-3 w-3" />
+                                                    </Button>
+                                                </div>
+                                                <p className="font-semibold">{formatPrice(line.product.price * line.quantity)}</p>
+                                            </div>
+                                            {stockIssue !== undefined && (
+                                                <p className="mt-2 text-xs text-destructive">
+                                                    Quedan {stockIssue} unidad{stockIssue === 1 ? "" : "es"} disponibles en esta sucursal
+                                                </p>
+                                            )}
                                         </div>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
 
