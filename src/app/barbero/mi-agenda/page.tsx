@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
     Calendar,
+    CalendarRange,
     Clock,
     User,
     CheckCircle,
@@ -12,10 +13,22 @@ import {
     MessageSquare,
     MessageCircle,
     ArrowRight,
+    Trash2,
+    Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from "@/components/ui/dialog";
 import { formatPrice, cn } from "@/lib/utils";
 import {
     APPOINTMENT_STATUS,
@@ -26,7 +39,9 @@ import { createClient } from "@/lib/supabase/client";
 import { getBookingErrorMessage } from "@/lib/booking-errors";
 import { resolveBarberSession } from "@/lib/barber-session";
 import { buildWaLink } from "@/lib/whatsapp";
-import type { Appointment, Service, Profile } from "@/types/database.types";
+import { findScheduleBlockConflicts, type ScheduleBlockConflict } from "@/lib/booking";
+import { ScheduleBlockConflictDialog } from "@/components/admin/schedule-block-conflict-dialog";
+import type { Appointment, Service, Profile, ScheduleBlock } from "@/types/database.types";
 import { format, startOfToday, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -53,11 +68,30 @@ export default function BarberoAgendaPage() {
 
     const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [barberId, setBarberId] = useState<string | null>(null);
     const [barberName, setBarberName] = useState<string | null>(null);
     const [accessError, setAccessError] = useState<string | null>(null);
     const [chargeApt, setChargeApt] = useState<AppointmentWithRelations | null>(null);
     const [ingresosReales, setIngresosReales] = useState(0);
     const [selectedDate, setSelectedDate] = useState(TODAY_STR);
+
+    // Ausencias propias ("Mis ausencias"): mismo patrón de bloqueos que
+    // /admin/barberos, pero acotado al barbero autenticado y sin branch_id
+    // (la RLS "Barbers manage own blocks" exige branch_id NULL en el INSERT).
+    const [myBlocks, setMyBlocks] = useState<ScheduleBlock[]>([]);
+    const [isBlocksLoading, setIsBlocksLoading] = useState(false);
+    const [isBlocksDialogOpen, setIsBlocksDialogOpen] = useState(false);
+    const [blockForm, setBlockForm] = useState({
+        startDate: "",
+        endDate: "",
+        isFullDay: true,
+        startTime: "09:00",
+        endTime: "18:00",
+        reason: "",
+    });
+    const [isCreatingBlock, setIsCreatingBlock] = useState(false);
+    const [blockConflicts, setBlockConflicts] = useState<ScheduleBlockConflict[] | null>(null);
+    const [isCheckingBlockConflicts, setIsCheckingBlockConflicts] = useState(false);
 
     const supabase = useMemo(() => createClient(), []);
     const isToday = selectedDate === TODAY_STR;
@@ -100,6 +134,7 @@ export default function BarberoAgendaPage() {
         }
 
         setBarberName(session.barberName);
+        setBarberId(session.barberId);
 
         // Cargar citas del día seleccionado
         const { data: appointmentsData } = await supabase
@@ -153,6 +188,125 @@ export default function BarberoAgendaPage() {
         toast.success(`Cita ${APPOINTMENT_STATUS_LABELS[newStatus].toLowerCase()}`);
         loadAgenda(); // Recargar todo para actualizar estadísticas e ingresos si corresponde
     };
+
+    const loadMyBlocks = useCallback(async (bId: string) => {
+        setIsBlocksLoading(true);
+        const { data } = await supabase
+            .from("schedule_blocks")
+            .select("*")
+            .eq("barber_id", bId)
+            .gte("end_date", TODAY_STR)
+            .order("start_date", { ascending: true });
+
+        setMyBlocks(data || []);
+        setIsBlocksLoading(false);
+    }, [supabase]);
+
+    useEffect(() => {
+        if (barberId) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            loadMyBlocks(barberId);
+        }
+    }, [barberId, loadMyBlocks]);
+
+    // Inserta la ausencia ya validada (sin choques, o el barbero decidió crearla igual)
+    const insertMyBlock = async () => {
+        if (!barberId) return;
+
+        setIsCreatingBlock(true);
+        // No enviar branch_id: la policy "Barbers manage own blocks" exige
+        // branch_id IS NULL en el WITH CHECK del INSERT.
+        const { error } = await supabase
+            .from("schedule_blocks")
+            .insert({
+                barber_id: barberId,
+                start_date: blockForm.startDate,
+                end_date: blockForm.endDate,
+                start_time: blockForm.isFullDay ? null : blockForm.startTime,
+                end_time: blockForm.isFullDay ? null : blockForm.endTime,
+                reason: blockForm.reason || null,
+            });
+
+        setIsCreatingBlock(false);
+        setBlockConflicts(null);
+        if (error) {
+            toast.error("Error al registrar la ausencia");
+        } else {
+            toast.success("Ausencia registrada con éxito");
+            setBlockForm({
+                startDate: "",
+                endDate: "",
+                isFullDay: true,
+                startTime: "09:00",
+                endTime: "18:00",
+                reason: "",
+            });
+            loadMyBlocks(barberId);
+        }
+    };
+
+    const handleCreateMyBlock = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!barberId) return;
+
+        if (!blockForm.startDate || !blockForm.endDate) {
+            toast.error("Ingresá fechas de inicio y fin válidas");
+            return;
+        }
+
+        if (blockForm.endDate < blockForm.startDate) {
+            toast.error("La fecha de fin debe ser posterior o igual a la de inicio");
+            return;
+        }
+
+        if (!blockForm.isFullDay && blockForm.endTime <= blockForm.startTime) {
+            toast.error("La hora de fin debe ser posterior al inicio");
+            return;
+        }
+
+        if (!blockForm.reason.trim()) {
+            toast.error("Contá el motivo de tu ausencia");
+            return;
+        }
+
+        setIsCheckingBlockConflicts(true);
+        const conflicts = await findScheduleBlockConflicts(supabase, {
+            barberIds: [barberId],
+            startDate: blockForm.startDate,
+            endDate: blockForm.endDate,
+            startTime: blockForm.isFullDay ? null : blockForm.startTime,
+            endTime: blockForm.isFullDay ? null : blockForm.endTime,
+        });
+        setIsCheckingBlockConflicts(false);
+
+        if (conflicts.length > 0) {
+            setBlockConflicts(conflicts);
+            return;
+        }
+
+        await insertMyBlock();
+    };
+
+    const handleDeleteMyBlock = async (blockId: string) => {
+        const { error } = await supabase
+            .from("schedule_blocks")
+            .delete()
+            .eq("id", blockId);
+
+        if (error) {
+            toast.error("Error al eliminar la ausencia");
+        } else {
+            toast.success("Ausencia eliminada");
+            if (barberId) {
+                loadMyBlocks(barberId);
+            }
+        }
+    };
+
+    // Bloqueo propio vigente en una fecha dada (para marcar la nav de 7 días
+    // y para calcular el título/motivo mostrado en el tooltip).
+    const findBlockForDate = (dateStr: string) =>
+        myBlocks.find((block) => dateStr >= block.start_date && dateStr <= block.end_date) || null;
 
     // Estadísticas del día
     const stats = {
@@ -229,11 +383,22 @@ export default function BarberoAgendaPage() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl md:text-3xl font-bold">
-                    Mi Agenda{barberName ? ` · ${barberName}` : ""}
-                </h1>
-                <p className="text-muted-foreground capitalize">{selectedDateLabel}</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-bold">
+                        Mi Agenda{barberName ? ` · ${barberName}` : ""}
+                    </h1>
+                    <p className="text-muted-foreground capitalize">{selectedDateLabel}</p>
+                </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsBlocksDialogOpen(true)}
+                    className="gap-2 self-start md:self-auto"
+                >
+                    <CalendarRange className="h-4 w-4" />
+                    Mis ausencias{myBlocks.length > 0 ? ` (${myBlocks.length})` : ""}
+                </Button>
             </div>
 
             {/* Navegación de días */}
@@ -241,22 +406,28 @@ export default function BarberoAgendaPage() {
                 {quickDates.map((date) => {
                     const dateStr = format(date, "yyyy-MM-dd");
                     const isSelected = selectedDate === dateStr;
+                    const blockForDay = findBlockForDate(dateStr);
                     return (
                         <button
                             key={dateStr}
                             onClick={() => setSelectedDate(dateStr)}
                             aria-pressed={isSelected}
+                            title={blockForDay ? `Ausencia: ${blockForDay.reason || "sin motivo especificado"}` : undefined}
                             className={cn(
-                                "flex flex-shrink-0 min-w-16 flex-col items-center justify-center gap-0.5 rounded-xl border px-3 py-2 transition-colors",
+                                "relative flex flex-shrink-0 min-w-16 flex-col items-center justify-center gap-0.5 rounded-xl border px-3 py-2 transition-colors",
                                 isSelected
                                     ? "border-primary/50 bg-primary/15 text-primary"
-                                    : "border-border/50 bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                                    : "border-border/50 bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                                blockForDay && !isSelected && "border-dashed"
                             )}
                         >
                             <span className="text-[10px] uppercase tracking-wide">
                                 {format(date, "EEE", { locale: es })}
                             </span>
                             <span className="text-lg font-bold">{format(date, "d")}</span>
+                            {blockForDay && (
+                                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-muted-foreground/70 ring-2 ring-background" />
+                            )}
                         </button>
                     );
                 })}
@@ -516,6 +687,190 @@ export default function BarberoAgendaPage() {
                     onSuccess={loadAgenda}
                 />
             )}
+
+            {/* Diálogo "Mis ausencias" */}
+            <Dialog open={isBlocksDialogOpen} onOpenChange={setIsBlocksDialogOpen}>
+                <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <CalendarRange className="h-5 w-5 text-primary" />
+                            Mis ausencias
+                        </DialogTitle>
+                        <DialogDescription>
+                            Registrá tus vacaciones, licencias o días libres. No vas a aparecer disponible para reservas esos días.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-6 mt-4">
+                        {/* Lista de ausencias vigentes/futuras */}
+                        <div>
+                            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">
+                                Vigentes o futuras
+                            </h3>
+                            {isBlocksLoading ? (
+                                <div className="flex justify-center p-4">
+                                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                </div>
+                            ) : myBlocks.length === 0 ? (
+                                <p className="text-sm text-muted-foreground italic">
+                                    No tenés ausencias registradas.
+                                </p>
+                            ) : (
+                                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                                    {myBlocks.map((block) => (
+                                        <div
+                                            key={block.id}
+                                            className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/40 text-xs"
+                                        >
+                                            <div className="space-y-1">
+                                                <div className="font-semibold text-foreground">
+                                                    {block.reason || "Sin motivo especificado"}
+                                                </div>
+                                                <div className="text-muted-foreground flex items-center gap-3">
+                                                    <span className="flex items-center gap-1">
+                                                        <Calendar className="h-3 w-3" />
+                                                        {block.start_date === block.end_date
+                                                            ? format(new Date(`${block.start_date}T12:00:00`), "EEE d/MM", { locale: es })
+                                                            : `${format(new Date(`${block.start_date}T12:00:00`), "EEE d/MM", { locale: es })} al ${format(new Date(`${block.end_date}T12:00:00`), "EEE d/MM", { locale: es })}`}
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock className="h-3 w-3" />
+                                                        {block.start_time && block.end_time
+                                                            ? `${block.start_time.slice(0, 5)} - ${block.end_time.slice(0, 5)}`
+                                                            : "Día completo"}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleDeleteMyBlock(block.id)}
+                                                className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 md:h-8 md:w-8"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Formulario de alta */}
+                        <form onSubmit={handleCreateMyBlock} className="space-y-4 border-t border-border pt-4">
+                            <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">
+                                Nueva ausencia
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                        Fecha de inicio
+                                    </label>
+                                    <Input
+                                        type="date"
+                                        value={blockForm.startDate}
+                                        onChange={(e) => setBlockForm({ ...blockForm, startDate: e.target.value })}
+                                        required
+                                        className="bg-background/50 border-input/50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                        Fecha de fin
+                                    </label>
+                                    <Input
+                                        type="date"
+                                        value={blockForm.endDate}
+                                        onChange={(e) => setBlockForm({ ...blockForm, endDate: e.target.value })}
+                                        required
+                                        className="bg-background/50 border-input/50"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    id="my-block-is-fullday"
+                                    checked={blockForm.isFullDay}
+                                    onCheckedChange={(checked) => setBlockForm({ ...blockForm, isFullDay: checked })}
+                                    className="data-[state=checked]:bg-primary"
+                                />
+                                <label htmlFor="my-block-is-fullday" className="text-xs font-medium text-foreground cursor-pointer select-none">
+                                    Día completo
+                                </label>
+                            </div>
+
+                            {!blockForm.isFullDay && (
+                                <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-200">
+                                    <div>
+                                        <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                            Hora de inicio
+                                        </label>
+                                        <Input
+                                            type="time"
+                                            value={blockForm.startTime}
+                                            onChange={(e) => setBlockForm({ ...blockForm, startTime: e.target.value })}
+                                            required
+                                            className="bg-background/50 border-input/50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                            Hora de fin
+                                        </label>
+                                        <Input
+                                            type="time"
+                                            value={blockForm.endTime}
+                                            onChange={(e) => setBlockForm({ ...blockForm, endTime: e.target.value })}
+                                            required
+                                            className="bg-background/50 border-input/50"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground block mb-1">
+                                    Motivo
+                                </label>
+                                <Input
+                                    placeholder="Vacaciones, licencia médica, día libre..."
+                                    value={blockForm.reason}
+                                    onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
+                                    required
+                                    className="bg-background/50 border-input/50"
+                                />
+                            </div>
+
+                            <DialogFooter className="pt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setIsBlocksDialogOpen(false)}
+                                >
+                                    Cerrar
+                                </Button>
+                                <Button type="submit" disabled={isCreatingBlock || isCheckingBlockConflicts}>
+                                    {isCreatingBlock || isCheckingBlockConflicts ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            {isCheckingBlockConflicts ? "Revisando tu agenda..." : "Guardando..."}
+                                        </>
+                                    ) : (
+                                        "Registrar ausencia"
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <ScheduleBlockConflictDialog
+                conflicts={blockConflicts}
+                isSubmitting={isCreatingBlock}
+                onConfirm={insertMyBlock}
+                onCancel={() => setBlockConflicts(null)}
+            />
         </div>
     );
 }

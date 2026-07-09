@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect, useRef, Suspense, useMemo, type KeyboardEvent } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { format, addDays, isBefore, startOfToday, isToday } from "date-fns";
+import { format, addDays, isBefore, startOfToday, isToday, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { Calendar, Clock, User, Scissors, ArrowRight, ArrowLeft, Check, MapPin, Sparkles, Repeat, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -72,6 +72,13 @@ function ReservarPageContent() {
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
+
+  // Chip "primer día libre" por barbero (paso Barbero): cacheado por
+  // `barberId:serviceId` para no re-consultar al volver atrás en el wizard.
+  // undefined = todavía no llegó la respuesta (skeleton); null = sin huecos
+  // en la ventana de 7 días; string = fecha ISO del primer día con hueco.
+  const [barberFreeDay, setBarberFreeDay] = useState<Record<string, string | null>>({});
+  const requestedBarberChips = useRef<Set<string>>(new Set());
 
   const supabase = useMemo(() => createClient(), []);
   const stepContentRef = useRef<HTMLDivElement>(null);
@@ -243,6 +250,51 @@ function ReservarPageContent() {
       (b) => !selectedBranch || !b.branch_id || String(b.branch_id) === String(selectedBranch.id)
     );
   }, [barbers, selectedBranch]);
+
+  // Paso Barbero: para cada card visible, consulta en paralelo el primer día
+  // con hueco libre (7 días) para el servicio ya elegido. Es informativo (no
+  // filtra ni bloquea la selección) y nunca bloquea el render de las cards.
+  useEffect(() => {
+    if (currentStep !== 3 || !selectedService || filteredBarbers.length === 0) return;
+
+    const serviceId = selectedService.id;
+    const duration = selectedService.duration_minutes;
+    const todayStr = format(startOfToday(), "yyyy-MM-dd");
+    const toStr = format(addDays(startOfToday(), 6), "yyyy-MM-dd");
+
+    filteredBarbers.forEach((barber) => {
+      const cacheKey = `${barber.id}:${serviceId}`;
+      if (requestedBarberChips.current.has(cacheKey)) return;
+      requestedBarberChips.current.add(cacheKey);
+
+      (async () => {
+        try {
+          const data = await fetchAvailability(supabase, barber.id, todayStr, toStr);
+          const firstFreeDay =
+            data.find((day) => day.is_open && dayHasFreeSlot(day, duration))?.day ?? null;
+          setBarberFreeDay((prev) => ({ ...prev, [cacheKey]: firstFreeDay }));
+        } catch (err) {
+          console.error("Error consultando disponibilidad para el chip de barbero:", err);
+          setBarberFreeDay((prev) => ({ ...prev, [cacheKey]: null }));
+        }
+      })();
+    });
+  }, [currentStep, selectedService, filteredBarbers, supabase]);
+
+  // Traduce el primer día libre cacheado a la etiqueta del chip de la card.
+  const getBarberChip = (
+    barberId: string
+  ): { label: string; tone: "free" | "empty" | "loading" } => {
+    if (!selectedService) return { label: "", tone: "loading" };
+    const freeDay = barberFreeDay[`${barberId}:${selectedService.id}`];
+    if (freeDay === undefined) return { label: "", tone: "loading" };
+    if (freeDay === null) return { label: "Sin turnos esta semana", tone: "empty" };
+
+    const date = new Date(`${freeDay}T12:00:00`);
+    if (isToday(date)) return { label: "Hoy", tone: "free" };
+    if (isSameDay(date, addDays(startOfToday(), 1))) return { label: "Mañana", tone: "free" };
+    return { label: format(date, "EEE d", { locale: es }), tone: "free" };
+  };
 
   // Agrupar servicios por categoría (paso 1). Con una sola categoría (o `category`
   // ausente en la DB, columna de la migración 021 aún no corrida) queda lista plana,
@@ -1137,6 +1189,25 @@ function ReservarPageContent() {
                                 {barber.bio}
                               </p>
                             )}
+                            {(() => {
+                              const chip = getBarberChip(barber.id);
+                              if (chip.tone === "loading") {
+                                return <div className="mt-3 h-5 w-24 animate-pulse rounded-full bg-muted/50" />;
+                              }
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "mt-3 text-[10px] font-medium",
+                                    chip.tone === "free"
+                                      ? "border-primary/40 bg-primary/10 text-primary"
+                                      : "border-border/60 text-muted-foreground"
+                                  )}
+                                >
+                                  {chip.tone === "free" ? `Turno libre: ${chip.label}` : chip.label}
+                                </Badge>
+                              );
+                            })()}
                           </div>
                         </CardContent>
                       </Card>
