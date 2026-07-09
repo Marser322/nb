@@ -34,8 +34,8 @@
 
 | # | Área | Máximo valor a extraer | Estado |
 |---|------|------------------------|--------|
-| 10 | **Plantillas de mensajes contextuales** | Plantillas por evento (cancelación, confirmación, reprogramación, recordatorio de cita, agradecimiento post-visita) con variables `{fecha}/{hora}/{barbero}/{servicio}/{sucursal}`; al cancelar/reprogramar/confirmar desde `/admin/citas`, ofrecer avisar al cliente por WhatsApp con la plantilla precargada y loguear en `communication_logs`. Reusar `fillTemplate`/`SendWhatsappDialog`; envío sigue siendo `wa.me` manual. | brief listo (FASE_30) |
-| 11 | **Chat que aprende (auto-aprendizaje)** | `chat_logs` (pregunta/respuesta/proveedor/modo) + `chat_knowledge` auto-alimentada por el LLM e inyectada al prompt; panel en admin para ver preguntas frecuentes/sin respuesta y editar/borrar lo aprendido; flag `chat_aprendizaje` para apagarlo. Guardrail: lo aprendido nunca pisa datos live de Supabase. | brief listo (FASE_31) |
+| 10 | **Plantillas de mensajes contextuales** | Plantillas por evento (cancelación, confirmación, reprogramación, recordatorio de cita, agradecimiento post-visita) con variables `{fecha}/{hora}/{barbero}/{servicio}/{sucursal}`; al cancelar/reprogramar/confirmar desde `/admin/citas`, ofrecer avisar al cliente por WhatsApp con la plantilla precargada y loguear en `communication_logs`. Reusar `fillTemplate`/`SendWhatsappDialog`; envío sigue siendo `wa.me` manual. | ejecutado |
+| 11 | **Chat que aprende (auto-aprendizaje)** | `chat_logs` (pregunta/respuesta/proveedor/modo) + `chat_knowledge` auto-alimentada por el LLM e inyectada al prompt; panel en admin para ver preguntas frecuentes/sin respuesta y editar/borrar lo aprendido; flag `chat_aprendizaje` para apagarlo. Guardrail: lo aprendido nunca pisa datos live de Supabase. | ejecutado |
 | 12 | **Citas: escenarios límite** | No-show con reactivación, walk-in rápido, cliente llega tarde, doble gestión del mismo horario, cancelación en cadena por bloqueo de agenda. | pendiente |
 | 13 | **Clientes/CRM: segmentación y acciones** | Segmentos (top clientes, frecuencia, en riesgo), cumpleaños si hay dato, envío WhatsApp por segmento reutilizando `SendWhatsappDialog`. | pendiente |
 | 14 | **Caja + liquidaciones: escenarios** | Ajustes/retiros, cierre de día, diferencias de caja, liquidación con citas sin cobrar. | pendiente |
@@ -66,7 +66,7 @@ Recolectado el 2026-07-08 sobre `src/app/api/chat/route.ts` y `src/components/ch
 | 2026-07-08 | #7 Portal barbero | `FASE_27_polish_portal_barbero.md` | merge `d13c95b` (`feat/polish-portal-barbero`) |
 | 2026-07-08 | #8 Tienda + checkout | `FASE_28_polish_tienda_checkout.md` | merge `acbc304` (`feat/polish-tienda-checkout`) |
 | 2026-07-08 | #9 Contacto / auth | `FASE_29_polish_contacto_auth.md` | merge `fe912e9` (`feat/polish-contacto-auth`) |
-| 2026-07-09 | #10 Plantillas de mensajes contextuales | `FASE_30_polish_plantillas_mensajes.md` | pendiente |
-| 2026-07-09 | #11 Chat que aprende (auto-aprendizaje) | `FASE_31_polish_chat_aprendizaje.md` | pendiente |
+| 2026-07-09 | #10 Plantillas de mensajes contextuales | `FASE_30_polish_plantillas_mensajes.md` | merge `30f9282` (`feat/polish-plantillas-mensajes`, Sonnet) |
+| 2026-07-09 | #11 Chat que aprende (auto-aprendizaje) | `FASE_31_polish_chat_aprendizaje.md` | merge `32d41ff` (`feat/polish-chat-aprendizaje`, Sonnet) |
 
 > **Cola completada (9/9, 2026-07-08).** Próximos ciclos de /polish: proponer áreas nuevas o re-pulir con lo aprendido; las features grandes viven en `ROADMAP_CRECIMIENTO.md`.
