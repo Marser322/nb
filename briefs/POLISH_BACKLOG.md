@@ -40,7 +40,7 @@
 | 13 | **Clientes/CRM: segmentación y acciones** | Segmentos (top clientes, frecuencia, en riesgo), cumpleaños si hay dato, envío WhatsApp por segmento reutilizando `SendWhatsappDialog`. | ejecutado |
 | 14 | **Caja + liquidaciones: escenarios** | Ajustes/retiros, cierre de día, diferencias de caja, liquidación con citas sin cobrar. | ejecutado |
 | 15 | **Pedidos + POS: flujos de borde** | Cancelación con restock, stock insuficiente en mostrador, pedido pagado sin stock. | ejecutado |
-| 16 | **Barberos: ausencias y perfil** | Autogestión de ausencias desde el portal (RLS ya lo permite), visibilidad de licencias en admin, primer turno libre por barbero en el wizard. Nota: franjas por día ya existían (`break_start/break_end`). | brief listo (FASE_36) |
+| 16 | **Barberos: ausencias y perfil** | Autogestión de ausencias desde el portal (RLS ya lo permite), visibilidad de licencias en admin, primer turno libre por barbero en el wizard. Nota: franjas por día ya existían (`break_start/break_end`). | ejecutado |
 | 17 | **Configuración: negocio editable** | Mover copy/valores de `BUSINESS_CONFIG` (horarios, tolerancia, ventana de cancelación) de `constants.ts` a `app_settings` editable desde `/admin/configuracion`, consumido también por el chat. | pendiente |
 
 ## Pre-análisis del ítem #1 (chat) — insumo listo, no re-explorar desde cero
@@ -72,6 +72,6 @@ Recolectado el 2026-07-08 sobre `src/app/api/chat/route.ts` y `src/components/ch
 | 2026-07-09 | #13 Clientes/CRM: segmentación | `FASE_33_polish_crm_segmentacion.md` | merge `d9a138d` (`feat/polish-crm-segmentacion`, Sonnet) |
 | 2026-07-09 | #14 Caja + liquidaciones: escenarios | `FASE_34_polish_caja_liquidaciones.md` | merge `6a20c09` (`feat/polish-caja-liquidaciones`, Sonnet) |
 | 2026-07-09 | #15 Pedidos + POS: flujos de borde | `FASE_35_polish_pedidos_pos.md` | merge `601e630` (`feat/polish-pedidos-pos`) |
-| 2026-07-09 | #16 Barberos: ausencias y perfil | `FASE_36_polish_barberos_ausencias.md` | pendiente |
+| 2026-07-09 | #16 Barberos: ausencias y perfil | `FASE_36_polish_barberos_ausencias.md` | merge `2f815cd` (`feat/polish-barberos-ausencias`, Sonnet) |
 
 > **Cola completada (9/9, 2026-07-08).** Próximos ciclos de /polish: proponer áreas nuevas o re-pulir con lo aprendido; las features grandes viven en `ROADMAP_CRECIMIENTO.md`.
