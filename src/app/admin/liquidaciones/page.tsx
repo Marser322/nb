@@ -54,7 +54,38 @@ import {
     User,
     CheckCircle,
 } from "lucide-react";
-import type { Barber, BarberSettlement, SettlementPreview } from "@/types/database.types";
+import type { Barber, BarberSettlement, SettlementPreview, UnchargedAppointment, Appointment, Service, Profile } from "@/types/database.types";
+import ChargeDialog from "@/components/shared/ChargeDialog";
+
+// ChargeDialog reusado tal cual: espera un Appointment con relaciones expandidas.
+// Reconstruimos un objeto compatible a partir de la fila de la RPC de sin-cobrar
+// (no hace falta client_id/barber_id/service_id reales, ChargeDialog solo lee
+// appointment.id, appointment.service?.{name,price} y appointment.client?.full_name).
+type UnchargedAsAppointment = Appointment & { service?: Service; client?: Profile };
+
+function toChargeAppointment(u: UnchargedAppointment, barberId: string): UnchargedAsAppointment {
+    return {
+        id: u.id,
+        client_id: "",
+        barber_id: barberId,
+        service_id: "",
+        appointment_date: u.appointment_date,
+        start_time: u.start_time,
+        end_time: u.start_time,
+        status: "completed",
+        notes: null,
+        style_reference: null,
+        created_at: "",
+        client: {
+            id: "", full_name: u.client_name, phone: null, avatar_url: null,
+            role: "cliente", notes: null, birth_date: null, created_at: "",
+        },
+        service: {
+            id: "", name: u.service_name, description: null, price: u.service_price,
+            duration_minutes: 0, image_url: null, is_active: true, sort_order: 0, created_at: "",
+        },
+    };
+}
 
 export default function AdminLiquidacionesPage() {
     const { features, isLoaded } = useFeatures();
@@ -91,6 +122,10 @@ export default function AdminLiquidacionesPage() {
 
     const [registerPayout, setRegisterPayout] = useState(true);
     const [isClosing, setIsClosing] = useState(false);
+
+    // Citas completadas sin cobrar del período (invisibles para la liquidación)
+    const [unchargedAppointments, setUnchargedAppointments] = useState<UnchargedAppointment[]>([]);
+    const [chargeApt, setChargeApt] = useState<UnchargedAsAppointment | null>(null);
 
     // Diálogo Renta Cobrada
     const [isRentaDialogOpen, setIsRentaDialogOpen] = useState(false);
@@ -138,6 +173,7 @@ export default function AdminLiquidacionesPage() {
     const loadPreview = useCallback(async () => {
         if (selectedBarberId === "all" || !dateRange?.from || !dateRange?.to) {
             setPreviewData(null);
+            setUnchargedAppointments([]);
             return;
         }
 
@@ -146,11 +182,18 @@ export default function AdminLiquidacionesPage() {
         const toStr = format(dateRange.to, "yyyy-MM-dd");
 
         try {
-            const { data, error } = await supabase.rpc("get_barber_settlement", {
-                p_barber_id: selectedBarberId,
-                p_from: fromStr,
-                p_to: toStr,
-            });
+            const [{ data, error }, { data: unchargedData, error: unchargedError }] = await Promise.all([
+                supabase.rpc("get_barber_settlement", {
+                    p_barber_id: selectedBarberId,
+                    p_from: fromStr,
+                    p_to: toStr,
+                }),
+                supabase.rpc("get_uncharged_completed_appointments", {
+                    p_barber_id: selectedBarberId,
+                    p_from: fromStr,
+                    p_to: toStr,
+                }),
+            ]);
 
             if (error) {
                 toast.error("Error al previsualizar liquidación: " + error.message);
@@ -158,9 +201,17 @@ export default function AdminLiquidacionesPage() {
             } else {
                 setPreviewData(data as unknown as SettlementPreview);
             }
+
+            if (unchargedError) {
+                console.error(unchargedError);
+                setUnchargedAppointments([]);
+            } else {
+                setUnchargedAppointments((unchargedData as UnchargedAppointment[]) || []);
+            }
         } catch (err: unknown) {
             console.error(err);
             setPreviewData(null);
+            setUnchargedAppointments([]);
         } finally {
             setIsPreviewLoading(false);
         }
@@ -201,6 +252,13 @@ export default function AdminLiquidacionesPage() {
     // Cerrar Liquidación
     const handleCloseSettlement = async () => {
         if (!previewData || selectedBarberId === "all" || !dateRange?.from || !dateRange?.to) return;
+
+        if (unchargedAppointments.length > 0) {
+            const confirmed = window.confirm(
+                "¿Cerrar igual? Esas citas quedarán para el próximo período."
+            );
+            if (!confirmed) return;
+        }
 
         setIsClosing(true);
         const fromStr = format(dateRange.from, "yyyy-MM-dd");
@@ -505,6 +563,11 @@ export default function AdminLiquidacionesPage() {
                                                 Debe renta: {formatPrice(previewData.rental_due)}
                                             </span>
                                         )}
+                                        {previewData.rental_paid > 0 && (
+                                            <span className="text-[9px] text-emerald-400 mt-0.5 block font-medium">
+                                                Renta cobrada en el período: {formatPrice(previewData.rental_paid)}
+                                            </span>
+                                        )}
                                     </div>
 
                                     <div className="bg-muted/40 border border-border rounded-lg p-3">
@@ -557,6 +620,59 @@ export default function AdminLiquidacionesPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Citas completadas sin cobrar del período (invisibles para esta liquidación) */}
+            {unchargedAppointments.length > 0 && (
+                <section className="admin-warning-surface rounded-2xl border p-4">
+                    <div className="flex items-center gap-3">
+                        <AlertTriangle className="admin-warning-icon h-5 w-5 shrink-0" />
+                        <p className="admin-warning-text text-sm font-semibold">
+                            Hay {unchargedAppointments.length} cita{unchargedAppointments.length === 1 ? "" : "s"} completada{unchargedAppointments.length === 1 ? "" : "s"} sin cobrar en este período — NO {unchargedAppointments.length === 1 ? "está incluida" : "están incluidas"} en esta liquidación
+                        </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2 ml-8">
+                        El cobro se registra en la caja de hoy (por fecha de creación del movimiento, una liquidación
+                        no se recalcula: es diseño, no bug).
+                    </p>
+                    <div className="mt-4 space-y-2">
+                        {unchargedAppointments.map((u) => (
+                            <div
+                                key={u.id}
+                                className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/40 p-3 text-xs md:flex-row md:items-center md:justify-between"
+                            >
+                                <div className="space-y-1">
+                                    <p className="font-semibold text-foreground">
+                                        {format(new Date(`${u.appointment_date}T12:00:00`), "d 'de' MMMM", { locale: es })} · {u.start_time.slice(0, 5)}
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                        {u.client_name} · {u.service_name} · {formatPrice(u.service_price)}
+                                    </p>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-9 border-primary/30 text-primary hover:bg-primary/10"
+                                    onClick={() => setChargeApt(toChargeAppointment(u, selectedBarberId))}
+                                >
+                                    Cobrar ahora
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {chargeApt && (
+                <ChargeDialog
+                    appointment={chargeApt}
+                    isOpen={chargeApt !== null}
+                    onOpenChange={(open) => !open && setChargeApt(null)}
+                    onSuccess={() => {
+                        setChargeApt(null);
+                        loadPreview();
+                    }}
+                />
+            )}
 
             {/* Historial Histórico */}
             <div className="rounded-md border border-border bg-card">
