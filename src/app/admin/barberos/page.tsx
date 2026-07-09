@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
+import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
     Table,
     TableBody,
@@ -16,6 +18,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import {
     Dialog,
     DialogContent,
@@ -36,7 +39,7 @@ import {
 } from "@/components/ui/select";
 import { WorkingHoursEditor } from "@/components/admin/WorkingHoursEditor";
 import { COMPENSATION_MODEL_LABELS } from "@/lib/constants";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, cn } from "@/lib/utils";
 import { ImageUpload } from "@/components/admin/image-upload";
 import {
     ALL_PERMISSIONS,
@@ -137,6 +140,41 @@ export default function AdminBarberosPage() {
     const [blockConflicts, setBlockConflicts] = useState<ScheduleBlockConflict[] | null>(null);
     const [isCheckingBlockConflicts, setIsCheckingBlockConflicts] = useState(false);
 
+    // Ausencias de todo el equipo (vigentes o dentro de 14 días), para el badge
+    // de la tabla — un solo query extra, sin abrir el diálogo barbero por barbero.
+    const [allBlocks, setAllBlocks] = useState<ScheduleBlock[]>([]);
+
+    // Por barbero: bloqueo activo hoy (prioridad) o el próximo dentro de 14 días.
+    const barberAbsence = useMemo(() => {
+        const todayStr = format(new Date(), "yyyy-MM-dd");
+        const horizonStr = format(addDays(new Date(), 14), "yyyy-MM-dd");
+        const byBarber = new Map<string, ScheduleBlock[]>();
+        for (const block of allBlocks) {
+            if (!block.barber_id) continue;
+            const list = byBarber.get(block.barber_id) || [];
+            list.push(block);
+            byBarber.set(block.barber_id, list);
+        }
+
+        const result = new Map<string, { status: "active" | "upcoming"; block: ScheduleBlock }>();
+        byBarber.forEach((blocksForBarber, barberId) => {
+            const active = blocksForBarber.find(
+                (b) => b.start_date <= todayStr && b.end_date >= todayStr
+            );
+            if (active) {
+                result.set(barberId, { status: "active", block: active });
+                return;
+            }
+            const upcoming = blocksForBarber
+                .filter((b) => b.start_date > todayStr && b.start_date <= horizonStr)
+                .sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
+            if (upcoming) {
+                result.set(barberId, { status: "upcoming", block: upcoming });
+            }
+        });
+        return result;
+    }, [allBlocks]);
+
     const supabase = useMemo(() => createClient(), []);
 
     const canRenderAvatar = (url: string | null) =>
@@ -173,6 +211,16 @@ export default function AdminBarberosPage() {
         
         if (data) setBlocks(data);
         setIsBlocksLoading(false);
+    }, [supabase]);
+
+    const loadAllBlocks = useCallback(async () => {
+        const { data } = await supabase
+            .from("schedule_blocks")
+            .select("*")
+            .gte("end_date", new Date().toISOString().split("T")[0])
+            .order("start_date", { ascending: true });
+
+        if (data) setAllBlocks(data);
     }, [supabase]);
 
     const loadCompensations = useCallback(async (barberId: string) => {
@@ -255,11 +303,13 @@ export default function AdminBarberosPage() {
     };
 
     useEffect(() => {
-         
+
         loadBarbers(true);
-         
+
         loadBranches();
-    }, [loadBarbers, loadBranches]);
+
+        loadAllBlocks();
+    }, [loadBarbers, loadBranches, loadAllBlocks]);
 
     useEffect(() => {
         if (permissionsLoaded && !can("staff.manage")) {
@@ -413,6 +463,7 @@ export default function AdminBarberosPage() {
                 reason: "",
             });
             loadBlocks(activeBarberForBlocks.id);
+            loadAllBlocks();
         }
     };
 
@@ -466,6 +517,7 @@ export default function AdminBarberosPage() {
             if (activeBarberForBlocks) {
                 loadBlocks(activeBarberForBlocks.id);
             }
+            loadAllBlocks();
         }
     };
 
@@ -615,11 +667,16 @@ export default function AdminBarberosPage() {
 
                             <div>
                                 <label className="text-sm font-medium mb-2 block">Biografía</label>
-                                <Input
+                                <Textarea
                                     placeholder="Especialista en cortes modernos..."
                                     value={formData.bio}
                                     onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                                    rows={3}
+                                    className="bg-background/50 border-input/50"
                                 />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Se muestra al cliente en el paso &quot;Barbero&quot; del wizard de reserva.
+                                </p>
                             </div>
                             <div>
                                 <label className="text-sm font-medium mb-2 block">Avatar del Barbero</label>
@@ -816,10 +873,34 @@ export default function AdminBarberosPage() {
                                         {branches.find(b => b.id === barber.branch_id)?.name || "Sin asignar"}
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        <Switch
-                                            checked={barber.is_active}
-                                            onCheckedChange={() => toggleActive(barber)}
-                                        />
+                                        <div className="flex flex-col items-center gap-1.5">
+                                            <Switch
+                                                checked={barber.is_active}
+                                                onCheckedChange={() => toggleActive(barber)}
+                                            />
+                                            {(() => {
+                                                const absence = barberAbsence.get(barber.id);
+                                                if (!absence) return null;
+                                                const label =
+                                                    absence.status === "active"
+                                                        ? `Ausente hasta el ${format(new Date(`${absence.block.end_date}T12:00:00`), "EEE d/MM", { locale: es })}`
+                                                        : `Licencia del ${format(new Date(`${absence.block.start_date}T12:00:00`), "EEE d/MM", { locale: es })}`;
+                                                return (
+                                                    <Badge
+                                                        variant="outline"
+                                                        title={absence.block.reason || "Sin motivo especificado"}
+                                                        className={cn(
+                                                            "whitespace-nowrap text-[10px] font-normal",
+                                                            absence.status === "active"
+                                                                ? "border-destructive/40 bg-destructive/5 text-destructive"
+                                                                : "border-muted-foreground/30 text-muted-foreground"
+                                                        )}
+                                                    >
+                                                        {label}
+                                                    </Badge>
+                                                );
+                                            })()}
+                                        </div>
                                     </TableCell>
                                     <TableCell className="text-center">
                                         <div className="flex items-center justify-center gap-1">
@@ -899,8 +980,8 @@ export default function AdminBarberosPage() {
                                                     <span className="flex items-center gap-1">
                                                         <Calendar className="h-3 w-3" />
                                                         {block.start_date === block.end_date
-                                                            ? block.start_date
-                                                            : `${block.start_date} al ${block.end_date}`}
+                                                            ? format(new Date(`${block.start_date}T12:00:00`), "EEE d/MM/yyyy", { locale: es })
+                                                            : `${format(new Date(`${block.start_date}T12:00:00`), "EEE d/MM", { locale: es })} al ${format(new Date(`${block.end_date}T12:00:00`), "EEE d/MM/yyyy", { locale: es })}`}
                                                     </span>
                                                     <span className="flex items-center gap-1">
                                                         <Clock className="h-3 w-3" />
