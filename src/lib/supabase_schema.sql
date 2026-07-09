@@ -1,10 +1,13 @@
 -- =====================================================
 -- NB BARBER - SCRIPT MAESTRO DE INSTALACIÓN
 -- Copia todo este contenido y pégalo en Supabase > SQL Editor
--- Actualizado 2026-07-07. Equivale a correr 001 → 020 sobre una DB fresca,
+-- Actualizado 2026-07-09. Equivale a correr 001 → 026 sobre una DB fresca,
 -- excepto 017_fix_service_images.sql (solo corrige DBs existentes con seeds viejos).
 -- Incluye branches/cash_movements/reminders_config/communication_logs,
--- backend de tienda (019) y RBAC/permisos granulares con rol `gerente` (020).
+-- backend de tienda (019), RBAC/permisos granulares con rol `gerente` (020),
+-- categorías de servicios (021), plantillas de mensajes (022), chat que
+-- aprende (023), segmentación CRM (024), cierre de caja con arqueo (025)
+-- y bordes de pedidos/POS (026).
 -- pg_cron (PARTE final) requiere habilitar la extensión primero en
 -- Dashboard > Database > Extensions.
 --
@@ -2501,7 +2504,7 @@ END $$;
 
 
 -- =====================================================
--- PARTE FINAL: MIGRACION 020 — RBAC Y PERMISOS GRANULARES
+-- MIGRACION 020 — RBAC Y PERMISOS GRANULARES
 -- (rol `gerente`). Espejo de supabase/migrations/020_rbac_permisos.sql.
 -- Ver el comentario al inicio de este archivo sobre correrlo en DOS
 -- PASADAS en una DB existente (ALTER TYPE ADD VALUE + resto).
@@ -2681,10 +2684,9 @@ GRANT EXECUTE ON FUNCTION update_client_notes(UUID, TEXT) TO authenticated;
 
 
 -- =====================================================
--- PARTE FINAL: MIGRACION 022 — PLANTILLAS DE MENSAJES POR EVENTO DE CITA
+-- MIGRACION 022 — PLANTILLAS DE MENSAJES POR EVENTO DE CITA
 -- =====================================================
--- Espejo de supabase/migrations/022_message_templates.sql. NO toca reminders_config
--- (reactivación por inactividad, sigue exactamente igual).
+-- NO toca reminders_config (reactivación por inactividad, sigue exactamente igual).
 
 CREATE TABLE IF NOT EXISTS message_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2734,8 +2736,7 @@ SELECT 'thanks', 'Agradecimiento estándar',
 WHERE NOT EXISTS (SELECT 1 FROM message_templates WHERE event_type = 'thanks');
 
 -- =============================================================
--- 023 — Chat que aprende: logs de conversaciones + base de
--- conocimiento auto-aprendida con guardrails (FASE 31 polish).
+-- PARTE FINAL: MIGRACION 023 — Chat que aprende (logs + conocimiento)
 -- =============================================================
 
 CREATE TABLE IF NOT EXISTS chat_logs (
@@ -2885,11 +2886,16 @@ BEGIN
   END IF;
 END $$;
 
+-- Nota: no hace falta una RPC admin_update_client_birth_date — la policy
+-- "Admins update profiles" (FOR UPDATE USING (is_admin())) ya permite que
+-- el admin actualice birth_date de cualquier perfil directamente vía
+-- supabase.from('profiles').update(...), igual que hace hoy con notes.
+
 -- =============================================================
 -- 025 — Caja: cierre de día con arqueo, anulación por contra-asiento
 -- y citas completadas sin cobrar (polish FASE 34). complete_appointment_with_payment
 -- y get_barber_settlement ya quedaron editados en su definición original más
--- arriba (líneas ~1510 y ~1244); acá solo lo nuevo: tabla, índice y RPCs.
+-- arriba; acá solo lo nuevo: tabla, índice y RPCs.
 -- =============================================================
 
 CREATE TABLE IF NOT EXISTS cash_closures (
@@ -3067,8 +3073,3 @@ END; $$;
 
 REVOKE EXECUTE ON FUNCTION get_uncharged_completed_appointments(UUID, DATE, DATE) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION get_uncharged_completed_appointments(UUID, DATE, DATE) TO authenticated;
-
--- Nota: no hace falta una RPC admin_update_client_birth_date — la policy
--- "Admins update profiles" (FOR UPDATE USING (is_admin())) ya permite que
--- el admin actualice birth_date de cualquier perfil directamente vía
--- supabase.from('profiles').update(...), igual que hace hoy con notes.
