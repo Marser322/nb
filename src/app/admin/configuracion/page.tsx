@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { invalidateFeatures } from "@/lib/features";
-import { AlertCircle, Loader2, Settings, ShoppingBag, Repeat, Wallet, MessageSquare, Sparkles, Camera, Calendar, Users } from "lucide-react";
+import { AlertCircle, Loader2, Settings, ShoppingBag, Repeat, Wallet, MessageSquare, Sparkles, Camera, Calendar, Users, Bot } from "lucide-react";
 
 interface AppSetting {
     key: string;
@@ -25,6 +25,7 @@ const FEATURE_ICONS: Record<string, typeof ShoppingBag> = {
     "feature.lookbook": Camera,
     "feature.reservas_online": Calendar,
     "feature.portal_barbero": Users,
+    "feature.chat_aprendizaje": Bot,
 };
 
 const FEATURE_TITLES: Record<string, string> = {
@@ -36,6 +37,7 @@ const FEATURE_TITLES: Record<string, string> = {
     "feature.lookbook": "Galería de Estilos (Lookbook)",
     "feature.reservas_online": "Reservas Online (Wizard)",
     "feature.portal_barbero": "Portal de Barberos (Agenda)",
+    "feature.chat_aprendizaje": "Auto-aprendizaje del Asistente IA",
 };
 
 const FEATURE_IMAGES: Record<string, string> = {
@@ -47,6 +49,8 @@ const FEATURE_IMAGES: Record<string, string> = {
     "feature.lookbook": "/images/modulos/lookbook.webp",
     "feature.reservas_online": "/images/modulos/reservas.webp",
     "feature.portal_barbero": "/images/modulos/portal-barbero.webp",
+    // No hay asset propio para este módulo y el componente no tiene fallback de imagen; reusamos mensajes.webp.
+    "feature.chat_aprendizaje": "/images/modulos/mensajes.webp",
 };
 
 function FeatureModuleArtwork({

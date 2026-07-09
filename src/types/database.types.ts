@@ -248,6 +248,28 @@ export interface CommunicationLog {
   metadata: unknown
 }
 
+export interface ChatLog {
+  id: string
+  mode: 'client' | 'admin'
+  question: string
+  normalized_question: string
+  answer: string | null
+  provider: 'gemini' | 'openai' | 'rules'
+  was_fallback: boolean
+  created_at: string
+}
+
+export interface ChatKnowledge {
+  id: string
+  question: string
+  normalized_question: string
+  answer: string
+  source: 'auto' | 'manual'
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface RemindersConfig {
   id: string
   days_since_last_visit: number

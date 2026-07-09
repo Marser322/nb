@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 
-export type FeatureKey = 'tienda' | 'suscripciones' | 'contabilidad' | 'propinas' | 'mensajes_crm' | 'lookbook' | 'reservas_online' | 'portal_barbero';
+export type FeatureKey = 'tienda' | 'suscripciones' | 'contabilidad' | 'propinas' | 'mensajes_crm' | 'lookbook' | 'reservas_online' | 'portal_barbero' | 'chat_aprendizaje';
 export type Features = Record<FeatureKey, boolean>;
 
 const DEFAULTS: Features = {
@@ -12,6 +12,7 @@ const DEFAULTS: Features = {
   lookbook: true,
   reservas_online: true,
   portal_barbero: true,
+  chat_aprendizaje: true,
 };
 
 let cachedFeatures: Features | null = null;
