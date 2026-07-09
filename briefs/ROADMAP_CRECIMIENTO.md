@@ -124,7 +124,13 @@ Curadas por valor y diferenciación. Etiquetas: **[R]** ingreso recurrente · **
     (FASE 31) supere las decenas de entradas, reemplazar el match por keywords por embeddings
     (pgvector en Supabase) para que el fallback local encuentre la respuesta correcta aunque la
     pregunta esté formulada distinto. Detectada en el ciclo /polish FASE 31; excluida de ese brief.
-16. **Recordatorios masivos por día de agenda** **[LL][Q]** — "avisar a todos los de mañana" en una
+16. **Log de auditoría de cambios de estado de citas** **[D]** — quién cambió qué cita, cuándo y de
+    qué estado a cuál (tabla `appointment_events` alimentada por la RPC). Útil con equipo grande y
+    para disputas ("me cancelaron el turno"). Detectada en el ciclo /polish FASE 32; excluida de ese
+    brief (requiere migración y tocar la RPC).
+17. **Export CSV de clientes por segmento** **[Q]** — bajar la lista filtrada (VIP, inactivos,
+    cumpleaños) para campañas fuera de la app. Detectada en el ciclo /polish FASE 33; excluida.
+18. **Recordatorios masivos por día de agenda** **[LL][Q]** — "avisar a todos los de mañana" en una
     pasada desde /admin/citas, iterando las plantillas por evento de la FASE 30 (sigue siendo `wa.me`
     manual, cita por cita, o da el salto a WhatsApp API). Detectada en el ciclo /polish FASE 30;
     excluida de ese brief (anti-monstruo: sin envíos masivos ni automatización).
