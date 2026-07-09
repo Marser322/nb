@@ -1,6 +1,11 @@
 // Constantes de la aplicación NB Barber
 
-// Configuración del negocio
+// Configuración del negocio — defaults de fallback; los valores vivos
+// (phone, email, instagram, workingHours, workingDays, cancellationWindow,
+// bankTransfer) se editan en /admin/configuracion y se leen vía
+// src/lib/business-config.ts (claves business.% en app_settings). Si
+// app_settings no tiene esas claves o es inaccesible, se usan estos valores
+// (fail-open). `name`, `location` y `timeSlotMinutes` NO son editables.
 export const BUSINESS_CONFIG = {
     name: "New Brothers",
     location: "Uruguay",
@@ -20,12 +25,18 @@ export const BUSINESS_CONFIG = {
     // Política de cancelaciones (en minutos)
     cancellationWindow: 120, // 2 horas antes
 
-    // Duración del intervalo de tiempo (en minutos)
+    // Tolerancia de llegada tarde (en minutos)
+    lateToleranceMinutes: 10,
+
+    // Duración del intervalo de tiempo (en minutos) — estructural, NO editable
+    // (get_availability lo hardcodea).
     timeSlotMinutes: 30,
 }
 
-// Datos bancarios para transferencias — completar con los datos reales del negocio.
-// Mientras estén vacíos, la UI usa el fallback honesto (coordinar por WhatsApp).
+// Datos bancarios para transferencias — defaults de fallback; el valor vivo
+// se edita en /admin/configuracion (business.bank_transfer) vía
+// src/lib/business-config.ts. Mientras estén vacíos, la UI usa el fallback
+// honesto (coordinar por WhatsApp).
 export const BANK_TRANSFER_INFO = {
     bank: '',
     account: '',
