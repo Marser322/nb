@@ -86,6 +86,18 @@ const profileFormSchema = z.object({
         .regex(/^[0-9\s]{8,12}$/, "Ingresá un teléfono válido (8 a 12 dígitos)")
         .optional()
         .or(z.literal("")),
+    // FASE 33 C: opcional siempre, nunca bloquea el guardado si queda vacío.
+    birth_date: z
+        .string()
+        .trim()
+        .optional()
+        .or(z.literal(""))
+        .refine((value) => {
+            if (!value) return true;
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return false;
+            return date <= new Date();
+        }, "Ingresá una fecha de nacimiento válida"),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -108,7 +120,7 @@ export default function MiCuentaPage() {
 
     const profileForm = useForm<ProfileFormValues>({
         resolver: zodResolver(profileFormSchema),
-        defaultValues: { full_name: "", phone: "" },
+        defaultValues: { full_name: "", phone: "", birth_date: "" },
     });
 
     useEffect(() => {
@@ -191,6 +203,7 @@ export default function MiCuentaPage() {
             profileForm.reset({
                 full_name: profile.full_name || "",
                 phone: profile.phone || "",
+                birth_date: profile.birth_date || "",
             });
         }
     }, [isEditProfileOpen, profile, profileForm]);
@@ -304,15 +317,16 @@ export default function MiCuentaPage() {
         try {
             const nextFullName = values.full_name.trim();
             const nextPhone = values.phone?.trim() || null;
+            const nextBirthDate = values.birth_date?.trim() || null;
 
             const { error } = await supabase
                 .from("profiles")
-                .update({ full_name: nextFullName, phone: nextPhone })
+                .update({ full_name: nextFullName, phone: nextPhone, birth_date: nextBirthDate })
                 .eq("id", profile.id);
 
             if (error) throw error;
 
-            setProfile(prev => (prev ? { ...prev, full_name: nextFullName, phone: nextPhone } : prev));
+            setProfile(prev => (prev ? { ...prev, full_name: nextFullName, phone: nextPhone, birth_date: nextBirthDate } : prev));
             toast.success("Perfil actualizado correctamente");
             setIsEditProfileOpen(false);
         } catch (err) {
@@ -817,6 +831,20 @@ export default function MiCuentaPage() {
                                         <FormControl>
                                             <Input placeholder="099 123 456" {...field} />
                                         </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={profileForm.control}
+                                name="birth_date"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Fecha de nacimiento (opcional)</FormLabel>
+                                        <FormControl>
+                                            <Input type="date" {...field} />
+                                        </FormControl>
+                                        <p className="text-xs text-muted-foreground">Para sorprenderte en tu mes 🎁</p>
                                         <FormMessage />
                                     </FormItem>
                                 )}
