@@ -1728,17 +1728,23 @@ $$;
 REVOKE EXECUTE ON FUNCTION admin_reschedule_appointment(UUID, DATE, TIME) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION admin_reschedule_appointment(UUID, DATE, TIME) TO authenticated;
 
+-- MIGRACION 024: birth_date + segmentación (ver detalle completo al final del archivo)
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_date DATE;
+
 CREATE OR REPLACE FUNCTION get_clients_overview_page(
   p_search TEXT DEFAULT NULL,
   p_inactive_only BOOLEAN DEFAULT false,
   p_inactive_days INT DEFAULT 30,
   p_limit INT DEFAULT 20,
-  p_offset INT DEFAULT 0
+  p_offset INT DEFAULT 0,
+  p_sort TEXT DEFAULT 'recent',
+  p_segment TEXT DEFAULT NULL
 ) RETURNS TABLE (
   id UUID,
   full_name TEXT,
   phone TEXT,
   avatar_url TEXT,
+  birth_date DATE,
   created_at TIMESTAMPTZ,
   notes TEXT,
   last_visit DATE,
@@ -1752,6 +1758,11 @@ DECLARE
   v_limit INT := LEAST(GREATEST(COALESCE(p_limit, 20), 1), 100);
   v_offset INT := GREATEST(COALESCE(p_offset, 0), 0);
   v_inactive_days INT := GREATEST(COALESCE(p_inactive_days, 30), 1);
+  -- p_sort validado en SQL (nunca SQL dinámico): valor desconocido cae en 'recent'.
+  v_sort TEXT := CASE WHEN p_sort IN ('recent', 'spent', 'visits', 'name') THEN p_sort ELSE 'recent' END;
+  -- 'inactivos' como segmento es el mismo criterio que p_inactive_only (se mantiene por compatibilidad
+  -- con llamadas legacy que solo pasan p_inactive_only).
+  v_inactive_effective BOOLEAN := COALESCE(p_inactive_only, false) OR p_segment = 'inactivos';
 BEGIN
   IF NOT is_admin() THEN
     RAISE EXCEPTION 'NO_AUTORIZADO';
@@ -1764,6 +1775,7 @@ BEGIN
       p.full_name,
       p.phone,
       p.avatar_url,
+      p.birth_date,
       p.created_at,
       p.notes,
       MAX(a.appointment_date) FILTER (WHERE a.status = 'completed')::DATE AS last_visit,
@@ -1792,9 +1804,17 @@ BEGIN
         OR LOWER(COALESCE(o.phone, '')) LIKE '%' || v_search || '%'
       )
       AND (
-        NOT p_inactive_only
+        NOT v_inactive_effective
         OR o.last_visit IS NULL
         OR o.last_visit < (CURRENT_DATE - v_inactive_days)
+      )
+      AND (
+        p_segment IS DISTINCT FROM 'nuevos'
+        OR o.created_at >= (NOW() - INTERVAL '30 days')
+      )
+      AND (
+        p_segment IS DISTINCT FROM 'cumple_mes'
+        OR (o.birth_date IS NOT NULL AND EXTRACT(MONTH FROM o.birth_date) = EXTRACT(MONTH FROM CURRENT_DATE))
       )
   )
   SELECT
@@ -1802,6 +1822,7 @@ BEGIN
     f.full_name,
     f.phone,
     f.avatar_url,
+    f.birth_date,
     f.created_at,
     f.notes,
     f.last_visit,
@@ -1810,16 +1831,19 @@ BEGIN
     COUNT(*) OVER()::BIGINT AS total_count
   FROM filtered f
   ORDER BY
-    CASE WHEN p_inactive_only THEN f.last_visit END ASC NULLS LAST,
-    CASE WHEN NOT p_inactive_only THEN f.last_visit END DESC NULLS LAST,
+    CASE WHEN v_sort = 'spent' THEN f.total_spent END DESC NULLS LAST,
+    CASE WHEN v_sort = 'visits' THEN f.total_appointments END DESC NULLS LAST,
+    CASE WHEN v_sort = 'name' THEN f.full_name END ASC NULLS LAST,
+    CASE WHEN v_sort = 'recent' AND v_inactive_effective THEN f.last_visit END ASC NULLS LAST,
+    CASE WHEN v_sort = 'recent' AND NOT v_inactive_effective THEN f.last_visit END DESC NULLS LAST,
     f.created_at DESC
   LIMIT v_limit
   OFFSET v_offset;
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION get_clients_overview_page(TEXT, BOOLEAN, INT, INT, INT) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION get_clients_overview_page(TEXT, BOOLEAN, INT, INT, INT) TO authenticated;
+REVOKE EXECUTE ON FUNCTION get_clients_overview_page(TEXT, BOOLEAN, INT, INT, INT, TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_clients_overview_page(TEXT, BOOLEAN, INT, INT, INT, TEXT, TEXT) TO authenticated;
 -- =====================================================
 -- MIGRACION 019: BACKEND DE TIENDA
 -- Stock por sucursal, pedidos online/locales, POS y caja.
@@ -2584,3 +2608,37 @@ GRANT EXECUTE ON FUNCTION learn_chat_knowledge(TEXT, TEXT) TO anon, authenticate
 INSERT INTO app_settings (key, value, description) VALUES
   ('feature.chat_aprendizaje', 'true'::jsonb, 'Auto-aprendizaje del asistente IA (base de conocimiento)')
 ON CONFLICT (key) DO NOTHING;
+
+-- =============================================================
+-- 024 — CRM: segmentación de clientes + cumpleaños (FASE 33 polish).
+-- profiles.birth_date y get_clients_overview_page (p_sort/p_segment) ya
+-- espejados arriba, junto a la función original. Acá solo el evento
+-- 'birthday' de message_templates (con guard de existencia).
+-- =============================================================
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'message_templates'
+  ) THEN
+    EXECUTE 'ALTER TABLE message_templates DROP CONSTRAINT IF EXISTS message_templates_event_type_check';
+    EXECUTE $ct$
+      ALTER TABLE message_templates ADD CONSTRAINT message_templates_event_type_check
+        CHECK (event_type IN ('cancelled', 'confirmed', 'rescheduled', 'reminder', 'thanks', 'birthday'))
+    $ct$;
+
+    EXECUTE $ins$
+      INSERT INTO message_templates (event_type, name, body, is_active, sort_order)
+      SELECT 'birthday', 'Cumpleaños estándar',
+        '¡Feliz cumpleaños, {nombre}! 🎉 De regalo, te esperamos en NB Barber para que arranques tu año con el mejor look. Reservá tu turno cuando quieras.',
+        true, 0
+      WHERE NOT EXISTS (SELECT 1 FROM message_templates WHERE event_type = 'birthday')
+    $ins$;
+  END IF;
+END $$;
+
+-- Nota: no hace falta una RPC admin_update_client_birth_date — la policy
+-- "Admins update profiles" (FOR UPDATE USING (is_admin())) ya permite que
+-- el admin actualice birth_date de cualquier perfil directamente vía
+-- supabase.from('profiles').update(...), igual que hace hoy con notes.
