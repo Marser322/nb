@@ -2285,11 +2285,16 @@ $$;
 REVOKE EXECUTE ON FUNCTION create_counter_sale(UUID, payment_method, JSONB, UUID, TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION create_counter_sale(UUID, payment_method, JSONB, UUID, TEXT) TO authenticated;
 
+-- Cambia el tipo de retorno de VOID a JSONB (FASE 35 / migración 026) para
+-- poder avisar a la UI cuando el restock se omitió por falta de branch_id
+-- (RAISE WARNING + flag) y si hubo o no reversa de caja al cancelar.
+DROP FUNCTION IF EXISTS update_order_status(UUID, order_status);
+
 CREATE OR REPLACE FUNCTION update_order_status(
   p_order_id UUID,
   p_new_status order_status
 )
-RETURNS VOID
+RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -2298,6 +2303,9 @@ DECLARE
   v_order RECORD;
   v_item RECORD;
   v_cash_method TEXT;
+  v_income RECORD;
+  v_restock_skipped BOOLEAN := FALSE;
+  v_reversed BOOLEAN := FALSE;
 BEGIN
   IF NOT is_admin() THEN
     RAISE EXCEPTION 'NO_AUTORIZADO';
@@ -2313,7 +2321,7 @@ BEGIN
   END IF;
 
   IF v_order.status = p_new_status THEN
-    RETURN;
+    RETURN jsonb_build_object('restock_skipped', FALSE, 'reversed', FALSE);
   END IF;
 
   IF v_order.status IN ('cancelled', 'delivered') THEN
@@ -2328,20 +2336,28 @@ BEGIN
     RAISE EXCEPTION 'TRANSICION_INVALIDA';
   END IF;
 
-  IF p_new_status = 'cancelled' AND v_order.branch_id IS NOT NULL THEN
-    FOR v_item IN
-      SELECT product_id, quantity
-      FROM order_items
-      WHERE order_id = p_order_id AND product_id IS NOT NULL
-    LOOP
-      INSERT INTO product_stock (product_id, branch_id, quantity)
-      VALUES (v_item.product_id, v_order.branch_id, v_item.quantity)
-      ON CONFLICT (product_id, branch_id)
-      DO UPDATE SET quantity = product_stock.quantity + EXCLUDED.quantity;
+  IF p_new_status = 'cancelled' THEN
+    IF v_order.branch_id IS NOT NULL THEN
+      FOR v_item IN
+        SELECT product_id, quantity
+        FROM order_items
+        WHERE order_id = p_order_id AND product_id IS NOT NULL
+      LOOP
+        INSERT INTO product_stock (product_id, branch_id, quantity)
+        VALUES (v_item.product_id, v_order.branch_id, v_item.quantity)
+        ON CONFLICT (product_id, branch_id)
+        DO UPDATE SET quantity = product_stock.quantity + EXCLUDED.quantity;
 
-      INSERT INTO stock_movements (product_id, branch_id, delta, reason, reference_id, created_by)
-      VALUES (v_item.product_id, v_order.branch_id, v_item.quantity, 'cancel_restock', p_order_id, auth.uid());
-    END LOOP;
+        INSERT INTO stock_movements (product_id, branch_id, delta, reason, reference_id, created_by)
+        VALUES (v_item.product_id, v_order.branch_id, v_item.quantity, 'cancel_restock', p_order_id, auth.uid());
+      END LOOP;
+    ELSE
+      -- Orden sin sucursal (legacy, previa al multi-sucursal): no hay a qué
+      -- product_stock devolver el stock. Antes esto se saltaba en silencio;
+      -- ahora se avisa explícitamente (WARNING en el log + flag para la UI).
+      RAISE WARNING 'update_order_status: orden % cancelada sin branch_id, restock omitido', p_order_id;
+      v_restock_skipped := TRUE;
+    END IF;
   END IF;
 
   UPDATE orders
@@ -2370,6 +2386,37 @@ BEGIN
     )
     ON CONFLICT DO NOTHING;
   END IF;
+
+  -- Reversa de caja al cancelar una orden que ya estaba cobrada. El ingreso
+  -- original (si existe) es siempre 'income'/'product'/reference_id=orden,
+  -- tanto para POS (create_counter_sale) como para online marcada 'paid'
+  -- arriba. Si nunca se cobró (pending -> cancelled) no hay nada que revertir.
+  IF p_new_status = 'cancelled' THEN
+    SELECT * INTO v_income
+    FROM cash_movements
+    WHERE reference_id = v_order.id AND category = 'product' AND type = 'income'
+    LIMIT 1;
+
+    IF FOUND THEN
+      BEGIN
+        INSERT INTO cash_movements (
+          type, category, amount, payment_method, description, reference_id,
+          branch_id, created_by
+        )
+        VALUES (
+          'expense', 'adjustment', v_income.amount, v_income.payment_method,
+          'Reversa por cancelación de pedido', v_order.id, v_income.branch_id, auth.uid()
+        );
+        v_reversed := TRUE;
+      EXCEPTION WHEN unique_violation THEN
+        -- idx_cash_movements_void_once (025) ya tiene una reversa para este
+        -- reference_id: no duplicar, no romper el flujo de cancelación.
+        v_reversed := TRUE;
+      END;
+    END IF;
+  END IF;
+
+  RETURN jsonb_build_object('restock_skipped', v_restock_skipped, 'reversed', v_reversed);
 END;
 $$;
 
@@ -2750,6 +2797,13 @@ BEGIN
 
   IF v_mov.appointment_id IS NOT NULL THEN
     RAISE EXCEPTION 'MOVIMIENTO_DE_CITA';
+  END IF;
+
+  -- Ingreso de pedido (POS o pedido online cobrado, FASE 35): su reversa se
+  -- maneja SOLO desde Pedidos (cancelar la orden), no acá, para no terminar
+  -- con dos contra-asientos distintos para el mismo ingreso.
+  IF v_mov.category = 'product' AND v_mov.reference_id IS NOT NULL THEN
+    RAISE EXCEPTION 'MOVIMIENTO_DE_PEDIDO';
   END IF;
 
   IF v_mov.category = 'settlement' OR EXISTS (

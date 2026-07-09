@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format, parseISO } from "date-fns";
+import { differenceInDays, differenceInHours, format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { ClipboardList, Eye, Loader2, Package } from "lucide-react";
+import { AlertTriangle, ClipboardList, Eye, Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -149,16 +149,34 @@ export default function AdminPedidosPage() {
         return message;
     };
 
+    // Pedidos pending "viejos" (>= 48h): retienen stock indefinidamente sin
+    // que nadie los vea. Sin cron de expiración (fuera de alcance): solo se
+    // destacan para que el admin decida cancelarlos a mano.
+    const STALE_PENDING_HOURS = 48;
+
+    const isStalePending = (order: AdminOrder) =>
+        order.status === "pending" && differenceInHours(new Date(), parseISO(order.created_at)) >= STALE_PENDING_HOURS;
+
     const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
         setUpdatingOrderId(orderId);
 
-        const { error } = await supabase.rpc("update_order_status", {
+        const { data, error } = await supabase.rpc("update_order_status", {
             p_order_id: orderId,
             p_new_status: newStatus,
         });
 
         if (error) {
             toast.error(mapStatusError(error.message));
+        } else if (newStatus === "cancelled") {
+            const result = data as { restock_skipped?: boolean; reversed?: boolean } | null;
+            if (result?.restock_skipped) {
+                toast.warning("Pedido sin sucursal: el stock no se devolvió automáticamente, ajustalo a mano en Productos");
+            } else if (result?.reversed) {
+                toast.success("Pedido cancelado — stock devuelto y reversa registrada en caja");
+            } else {
+                toast.success("Pedido cancelado — stock devuelto");
+            }
+            await loadOrders();
         } else {
             toast.success("Pedido actualizado");
             await loadOrders();
@@ -168,11 +186,20 @@ export default function AdminPedidosPage() {
     };
 
     const getActions = (order: AdminOrder) => {
+        // Ventas de mostrador (order_type='local') nacen ya 'paid' y retiradas
+        // en el momento: no tienen envío ni entrega que gestionar, solo se
+        // pueden cancelar (p.ej. devolución) mientras no estén en un estado
+        // terminal.
+        if (order.order_type === "local") {
+            if (order.status === "cancelled" || order.status === "delivered") return [];
+            return [{ label: "Cancelar", status: "cancelled" as OrderStatus }];
+        }
+
         if (order.status === "pending") {
-            return [
-                { label: "Marcar pagada", status: "paid" as OrderStatus },
-                { label: "Cancelar", status: "cancelled" as OrderStatus },
-            ];
+            const payAction = { label: "Marcar pagada", status: "paid" as OrderStatus };
+            const cancelAction = { label: "Cancelar", status: "cancelled" as OrderStatus };
+            // Pendientes viejos: priorizar Cancelar (retienen stock hace días).
+            return isStalePending(order) ? [cancelAction, payAction] : [payAction, cancelAction];
         }
         if (order.status === "paid") {
             return [
@@ -313,9 +340,20 @@ export default function AdminPedidosPage() {
                                             <TableCell className="text-center">{itemCount}</TableCell>
                                             <TableCell className="text-right font-semibold">{formatPrice(order.total)}</TableCell>
                                             <TableCell>
-                                                <Badge variant="outline" className={ORDER_STATUS_COLORS[order.status] || ""}>
-                                                    {ORDER_STATUS_LABELS[order.status] || order.status}
-                                                </Badge>
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    <Badge variant="outline" className={ORDER_STATUS_COLORS[order.status] || ""}>
+                                                        {ORDER_STATUS_LABELS[order.status] || order.status}
+                                                    </Badge>
+                                                    {isStalePending(order) && (
+                                                        <Badge variant="outline" className="admin-warning-surface text-[10px] font-normal">
+                                                            <AlertTriangle className="admin-warning-icon mr-1 h-3 w-3" />
+                                                            Pendiente hace {(() => {
+                                                                const days = differenceInDays(new Date(), parseISO(order.created_at));
+                                                                return `${days} día${days === 1 ? "" : "s"}`;
+                                                            })()}
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex justify-end gap-2">
