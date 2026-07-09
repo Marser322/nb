@@ -1,12 +1,13 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -26,10 +27,13 @@ import {
     Scissors,
     Save,
     Loader2,
-    Clock,
     User as UserIcon,
     AlertCircle,
-    MessageCircle
+    MessageCircle,
+    Cake,
+    Wallet,
+    Repeat,
+    TrendingUp
 } from "lucide-react";
 import { toast } from "sonner";
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
@@ -44,7 +48,8 @@ import {
     getPaymentMethodLabel,
 } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
-import { format, parseISO } from "date-fns";
+import { isInactiveClient, isBirthdayThisMonth } from "@/lib/crm";
+import { format, parseISO, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 import type {
     Profile,
@@ -88,6 +93,11 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
     const [isLoading, setIsLoading] = useState(true);
     const [isSavingNotes, setIsSavingNotes] = useState(false);
     const [isWaOpen, setIsWaOpen] = useState(false);
+
+    // FASE 33 Bloque B: cumpleaños editable por el admin.
+    const [birthDateInput, setBirthDateInput] = useState("");
+    const [isSavingBirthDate, setIsSavingBirthDate] = useState(false);
+    const [isEditingBirthDate, setIsEditingBirthDate] = useState(false);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -154,6 +164,8 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
 
             setProfile(profileRes.data);
             setNotes(profileRes.data.notes || "");
+            setBirthDateInput(profileRes.data.birth_date || "");
+            setIsEditingBirthDate(false);
             setAppointments(appointmentsRes.data || []);
             setHaircuts(haircutsRes.data || []);
             setOrders(ordersRes.data || []);
@@ -192,6 +204,62 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
         }
     };
 
+    const handleSaveBirthDate = async () => {
+        if (!profile) return;
+        setIsSavingBirthDate(true);
+
+        // La policy "Admins update profiles" (is_admin()) permite el UPDATE directo,
+        // igual que con las notas: no hace falta una RPC dedicada.
+        const { error } = await supabase
+            .from("profiles")
+            .update({ birth_date: birthDateInput || null })
+            .eq("id", profile.id);
+
+        setIsSavingBirthDate(false);
+
+        if (error) {
+            console.error("Error saving birth date:", error);
+            toast.error("No se pudo guardar el cumpleaños");
+        } else {
+            toast.success("Cumpleaños actualizado correctamente");
+            setProfile(prev => prev ? { ...prev, birth_date: birthDateInput || null } : null);
+            setIsEditingBirthDate(false);
+        }
+    };
+
+    // FASE 33 Bloque B: métricas calculadas en memoria de los arrays ya cargados,
+    // sin queries nuevas. Mismo criterio de "gastado" que get_clients_overview_page.
+    const metrics = useMemo(() => {
+        const completedAppointments = appointments.filter((a) => a.status === "completed");
+        const paidOrders = orders.filter((o) => o.status === "paid" || o.status === "shipped" || o.status === "delivered");
+
+        const appointmentsSpent = completedAppointments.reduce((sum, a) => sum + (a.service?.price || 0), 0);
+        const ordersSpent = paidOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+        const totalSpent = appointmentsSpent + ordersSpent;
+
+        const visits = completedAppointments.length;
+        const avgTicket = visits > 0 ? totalSpent / visits : null;
+
+        const sortedDates = completedAppointments
+            .map((a) => a.appointment_date)
+            .filter((d): d is string => !!d)
+            .sort();
+
+        let avgFrequencyDays: number | null = null;
+        if (sortedDates.length >= 2) {
+            const gaps: number[] = [];
+            for (let i = 1; i < sortedDates.length; i++) {
+                gaps.push(differenceInDays(parseISO(sortedDates[i]), parseISO(sortedDates[i - 1])));
+            }
+            avgFrequencyDays = Math.round(gaps.reduce((sum, g) => sum + g, 0) / gaps.length);
+        }
+
+        const lastVisitDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : null;
+        const daysSinceLastVisit = lastVisitDate ? differenceInDays(new Date(), parseISO(lastVisitDate)) : null;
+
+        return { totalSpent, visits, avgTicket, avgFrequencyDays, lastVisitDate, daysSinceLastVisit };
+    }, [appointments, orders]);
+
     if (isLoading) {
         return (
             <div className="space-y-6">
@@ -218,6 +286,9 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
         );
     }
 
+    const birthdayThisMonth = isBirthdayThisMonth(profile.birth_date);
+    const clientInactive = isInactiveClient(metrics.lastVisitDate);
+
     return (
         <div className="space-y-8">
             {/* Header / Ficha superior */}
@@ -232,9 +303,77 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
                     <div>
-                        <h1 className="text-3xl font-bold text-foreground tracking-tight">{profile.full_name}</h1>
+                        <h1 className="text-3xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                            {profile.full_name}
+                            {birthdayThisMonth && (
+                                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-normal gap-1">
+                                    <Cake className="h-3 w-3" aria-hidden="true" />
+                                    Cumple este mes
+                                </Badge>
+                            )}
+                        </h1>
                         <p className="text-muted-foreground text-sm flex items-center gap-2 mt-1">
                             <span>Cliente registrado desde el {format(parseISO(profile.created_at), "dd/MM/yyyy")}</span>
+                        </p>
+                    </div>
+                </div>
+
+                {/* Métricas del cliente (Bloque B FASE 33): calculadas en memoria, sin queries nuevas */}
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="admin-agenda-stat rounded-xl border p-4" data-tone="completed">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Total Gastado</p>
+                                <p className="mt-2 text-2xl font-black tracking-tight text-foreground">{formatPrice(metrics.totalSpent)}</p>
+                            </div>
+                            <span className="admin-agenda-stat-icon inline-flex h-10 w-10 items-center justify-center rounded-xl">
+                                <Wallet className="h-5 w-5" aria-hidden="true" />
+                            </span>
+                        </div>
+                        <p className="mt-3 text-xs text-muted-foreground">Citas completadas + compras pagas</p>
+                    </div>
+                    <div className="admin-agenda-stat rounded-xl border p-4" data-tone="confirmed">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Visitas</p>
+                                <p className="mt-2 text-2xl font-black tracking-tight text-foreground">{metrics.visits}</p>
+                            </div>
+                            <span className="admin-agenda-stat-icon inline-flex h-10 w-10 items-center justify-center rounded-xl">
+                                <Scissors className="h-5 w-5" aria-hidden="true" />
+                            </span>
+                        </div>
+                        <p className="mt-3 text-xs text-muted-foreground">
+                            Ticket promedio: {metrics.avgTicket !== null ? formatPrice(metrics.avgTicket) : "—"}
+                        </p>
+                    </div>
+                    <div className="admin-agenda-stat rounded-xl border p-4">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Frecuencia Media</p>
+                                <p className="mt-2 text-2xl font-black tracking-tight text-foreground">
+                                    {metrics.avgFrequencyDays !== null ? `${metrics.avgFrequencyDays} días` : "—"}
+                                </p>
+                            </div>
+                            <span className="admin-agenda-stat-icon inline-flex h-10 w-10 items-center justify-center rounded-xl">
+                                <Repeat className="h-5 w-5" aria-hidden="true" />
+                            </span>
+                        </div>
+                        <p className="mt-3 text-xs text-muted-foreground">Entre visitas completadas</p>
+                    </div>
+                    <div className="admin-agenda-stat rounded-xl border p-4" data-tone={clientInactive ? "cancelled" : "pending"}>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Última Visita</p>
+                                <p className="mt-2 text-2xl font-black tracking-tight text-foreground">
+                                    {metrics.daysSinceLastVisit !== null ? `Hace ${metrics.daysSinceLastVisit} días` : "—"}
+                                </p>
+                            </div>
+                            <span className="admin-agenda-stat-icon inline-flex h-10 w-10 items-center justify-center rounded-xl">
+                                <TrendingUp className="h-5 w-5" aria-hidden="true" />
+                            </span>
+                        </div>
+                        <p className="mt-3 text-xs text-muted-foreground">
+                            {clientInactive ? "Cliente inactivo" : "Cliente activo"}
                         </p>
                     </div>
                 </div>
@@ -275,6 +414,65 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                                 <div className="flex flex-col">
                                     <span className="text-xs text-muted-foreground">Rol de Usuario</span>
                                     <span className="text-foreground capitalize">{profile.role}</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-primary/10 rounded-lg text-primary border border-primary/10">
+                                    <Cake className="h-5 w-5" />
+                                </div>
+                                <div className="flex flex-col gap-1.5 flex-1">
+                                    <span className="text-xs text-muted-foreground">
+                                        Cumpleaños {birthdayThisMonth && <span className="text-primary">🎂 ¡este mes!</span>}
+                                    </span>
+                                    {profile.birth_date && !isEditingBirthDate ? (
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-foreground">
+                                                {format(parseISO(profile.birth_date), "d 'de' MMMM", { locale: es })}
+                                            </span>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onClick={() => {
+                                                    setBirthDateInput(profile.birth_date || "");
+                                                    setIsEditingBirthDate(true);
+                                                }}
+                                                className="h-6 px-2 text-xs text-muted-foreground hover:text-primary"
+                                            >
+                                                Editar
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                type="date"
+                                                value={birthDateInput}
+                                                onChange={(e) => setBirthDateInput(e.target.value)}
+                                                className="admin-field-focus h-9 max-w-[170px] bg-background/50 border-input/50 text-sm"
+                                            />
+                                            <Button
+                                                size="sm"
+                                                onClick={handleSaveBirthDate}
+                                                disabled={isSavingBirthDate || birthDateInput === (profile.birth_date || "")}
+                                                className="h-9 bg-primary hover:bg-primary/90 text-black font-semibold gap-1.5"
+                                            >
+                                                {isSavingBirthDate ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                                Guardar
+                                            </Button>
+                                            {profile.birth_date && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => {
+                                                        setBirthDateInput(profile.birth_date || "");
+                                                        setIsEditingBirthDate(false);
+                                                    }}
+                                                    className="h-9 px-2 text-xs text-muted-foreground"
+                                                >
+                                                    Cancelar
+                                                </Button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </CardContent>
@@ -559,6 +757,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                 isOpen={isWaOpen}
                 onOpenChange={setIsWaOpen}
                 onLogAdded={loadData}
+                eventType={birthdayThisMonth ? "birthday" : undefined}
             />
         </div>
     );
