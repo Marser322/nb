@@ -120,6 +120,14 @@ Curadas por valor y diferenciación. Etiquetas: **[R]** ingreso recurrente · **
 14. **Reserva end-to-end desde el chat** **[D]** — el asistente llama `book_appointment` y confirma
     el turno dentro de la conversación (function calling). Detectada en el ciclo /polish FASE 20;
     excluida de ese brief a propósito (el chat guía al wizard, no lo reemplaza — por ahora).
+15. **Búsqueda semántica del conocimiento del chat (pgvector)** **[D]** — cuando `chat_knowledge`
+    (FASE 31) supere las decenas de entradas, reemplazar el match por keywords por embeddings
+    (pgvector en Supabase) para que el fallback local encuentre la respuesta correcta aunque la
+    pregunta esté formulada distinto. Detectada en el ciclo /polish FASE 31; excluida de ese brief.
+16. **Recordatorios masivos por día de agenda** **[LL][Q]** — "avisar a todos los de mañana" en una
+    pasada desde /admin/citas, iterando las plantillas por evento de la FASE 30 (sigue siendo `wa.me`
+    manual, cita por cita, o da el salto a WhatsApp API). Detectada en el ciclo /polish FASE 30;
+    excluida de ese brief (anti-monstruo: sin envíos masivos ni automatización).
 
 ---
 

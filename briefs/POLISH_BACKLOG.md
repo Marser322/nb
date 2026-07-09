@@ -14,7 +14,7 @@
 
 `pendiente` → `en análisis` → `brief listo (FASE_NN)` → `ejecutado` → `verificado`
 
-## Cola priorizada
+## Cola priorizada — Ciclo 1 (completada 9/9)
 
 | # | Área | Máximo valor a extraer | Estado |
 |---|------|------------------------|--------|
@@ -27,6 +27,21 @@
 | 7 | **Portal barbero (mi-agenda)** | Profundidad del día a día: agenda clara, ingresos del día, próxima cita a un vistazo. | ejecutado |
 | 8 | **Tienda + checkout (pulido menor)** | Solo terminación fina que no pise Tienda v2 del roadmap (PDP, cross-sell, etc. quedan allá). | ejecutado |
 | 9 | **Contacto / auth / detalles** | Terminación premium: recuperar contraseña, contacto, microcopy, estados vacíos. | ejecutado |
+
+## Cola priorizada — Ciclo 2 (sembrada 2026-07-09)
+
+> Foco del ciclo 2: pensamiento lateral sobre cada función del admin — evaluar todos los escenarios posibles, plantillas de mensajes por evento y chat con conocimiento vivo que aprende de las preguntas. Ítems 12-17 son propuestas reordenables; cada ciclo re-analiza el código antes de escribir el brief.
+
+| # | Área | Máximo valor a extraer | Estado |
+|---|------|------------------------|--------|
+| 10 | **Plantillas de mensajes contextuales** | Plantillas por evento (cancelación, confirmación, reprogramación, recordatorio de cita, agradecimiento post-visita) con variables `{fecha}/{hora}/{barbero}/{servicio}/{sucursal}`; al cancelar/reprogramar/confirmar desde `/admin/citas`, ofrecer avisar al cliente por WhatsApp con la plantilla precargada y loguear en `communication_logs`. Reusar `fillTemplate`/`SendWhatsappDialog`; envío sigue siendo `wa.me` manual. | brief listo (FASE_30) |
+| 11 | **Chat que aprende (auto-aprendizaje)** | `chat_logs` (pregunta/respuesta/proveedor/modo) + `chat_knowledge` auto-alimentada por el LLM e inyectada al prompt; panel en admin para ver preguntas frecuentes/sin respuesta y editar/borrar lo aprendido; flag `chat_aprendizaje` para apagarlo. Guardrail: lo aprendido nunca pisa datos live de Supabase. | brief listo (FASE_31) |
+| 12 | **Citas: escenarios límite** | No-show con reactivación, walk-in rápido, cliente llega tarde, doble gestión del mismo horario, cancelación en cadena por bloqueo de agenda. | pendiente |
+| 13 | **Clientes/CRM: segmentación y acciones** | Segmentos (top clientes, frecuencia, en riesgo), cumpleaños si hay dato, envío WhatsApp por segmento reutilizando `SendWhatsappDialog`. | pendiente |
+| 14 | **Caja + liquidaciones: escenarios** | Ajustes/retiros, cierre de día, diferencias de caja, liquidación con citas sin cobrar. | pendiente |
+| 15 | **Pedidos + POS: flujos de borde** | Cancelación con restock, stock insuficiente en mostrador, pedido pagado sin stock. | pendiente |
+| 16 | **Barberos: ausencias y perfil** | Vacaciones/licencias multi-día sobre `schedule_blocks`, franjas por día, perfil público más rico. | pendiente |
+| 17 | **Configuración: negocio editable** | Mover copy/valores de `BUSINESS_CONFIG` (horarios, tolerancia, ventana de cancelación) de `constants.ts` a `app_settings` editable desde `/admin/configuracion`, consumido también por el chat. | pendiente |
 
 ## Pre-análisis del ítem #1 (chat) — insumo listo, no re-explorar desde cero
 
@@ -51,5 +66,7 @@ Recolectado el 2026-07-08 sobre `src/app/api/chat/route.ts` y `src/components/ch
 | 2026-07-08 | #7 Portal barbero | `FASE_27_polish_portal_barbero.md` | merge `d13c95b` (`feat/polish-portal-barbero`) |
 | 2026-07-08 | #8 Tienda + checkout | `FASE_28_polish_tienda_checkout.md` | merge `acbc304` (`feat/polish-tienda-checkout`) |
 | 2026-07-08 | #9 Contacto / auth | `FASE_29_polish_contacto_auth.md` | merge `fe912e9` (`feat/polish-contacto-auth`) |
+| 2026-07-09 | #10 Plantillas de mensajes contextuales | `FASE_30_polish_plantillas_mensajes.md` | pendiente |
+| 2026-07-09 | #11 Chat que aprende (auto-aprendizaje) | `FASE_31_polish_chat_aprendizaje.md` | pendiente |
 
 > **Cola completada (9/9, 2026-07-08).** Próximos ciclos de /polish: proponer áreas nuevas o re-pulir con lo aprendido; las features grandes viven en `ROADMAP_CRECIMIENTO.md`.
