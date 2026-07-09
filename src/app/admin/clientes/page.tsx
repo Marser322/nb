@@ -15,12 +15,19 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, Contact, ArrowLeft, MessageCircle } from "lucide-react";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Search, Contact, ArrowLeft, MessageCircle, Cake } from "lucide-react";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils";
-import { INACTIVE_DAYS } from "@/lib/constants";
+import { CLIENT_SEGMENT_LABELS, CLIENT_SORT_LABELS, INACTIVE_DAYS } from "@/lib/constants";
 import { fetchClientsOverviewPage, isInactiveClient } from "@/lib/crm";
-import type { ClientOverview } from "@/types/database.types";
+import type { ClientOverview, ClientSegment, ClientSort } from "@/types/database.types";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
@@ -28,6 +35,10 @@ import { useFeatures } from "@/lib/features";
 import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
 
 const CLIENTS_PAGE_SIZE = 20;
+
+type SegmentOption = ClientSegment | "todos";
+
+const SEGMENT_OPTIONS: SegmentOption[] = ["todos", "nuevos", "inactivos", "cumple_mes"];
 
 function ClientesList() {
     const { features } = useFeatures();
@@ -40,13 +51,33 @@ function ClientesList() {
     const filterParam = searchParams.get("filtro");
     const router = useRouter();
     const supabase = useMemo(() => createClient(), []);
-    const inactiveOnly = filterParam === "inactivos";
+
+    // FASE 33: segmento y orden server-side. `?filtro=inactivos` (link histórico desde
+    // dashboard/mensajes) sigue mapeando al chip Inactivos.
+    const [segment, setSegment] = useState<SegmentOption>(filterParam === "inactivos" ? "inactivos" : "todos");
+    const [sort, setSort] = useState<ClientSort>("recent");
+    const [usedLegacyFallback, setUsedLegacyFallback] = useState(false);
+    const inactiveOnly = segment === "inactivos";
 
     useEffect(() => {
         setCurrentPage(1);
+        setSegment(filterParam === "inactivos" ? "inactivos" : "todos");
     }, [filterParam]);
 
+    const handleSegmentChange = (next: SegmentOption) => {
+        setSegment(next);
+        setCurrentPage(1);
+        // Si el usuario elige un segmento distinto de "inactivos" tras entrar por el
+        // deep link, limpiamos el query param para que no quede pisando el chip.
+        if (filterParam === "inactivos" && next !== "inactivos") {
+            router.replace("/admin/clientes");
+        }
+    };
 
+    const handleSortChange = (next: ClientSort) => {
+        setSort(next);
+        setCurrentPage(1);
+    };
 
     const [selectedClient, setSelectedClient] = useState<{
         id: string;
@@ -54,20 +85,24 @@ function ClientesList() {
         phone: string | null;
     } | null>(null);
     const [isWaOpen, setIsWaOpen] = useState(false);
+    const [waEventType, setWaEventType] = useState<string | undefined>(undefined);
 
     const loadClients = useCallback(async () => {
         setIsLoading(true);
         try {
-            const { clients: pageClients, total } = await fetchClientsOverviewPage(supabase, {
+            const { clients: pageClients, total, usedLegacyFallback: usedFallback } = await fetchClientsOverviewPage(supabase, {
                 search: searchQuery,
                 inactiveOnly,
                 inactiveDays: INACTIVE_DAYS,
                 limit: CLIENTS_PAGE_SIZE,
                 offset: (currentPage - 1) * CLIENTS_PAGE_SIZE,
+                sort,
+                segment: segment === "todos" ? null : segment,
             });
 
             setClients(pageClients);
             setTotalClients(total);
+            setUsedLegacyFallback(usedFallback);
         } catch (error) {
             console.error("Error loading clients:", error);
             toast.error("Error al cargar la lista de clientes");
@@ -76,7 +111,7 @@ function ClientesList() {
         } finally {
             setIsLoading(false);
         }
-    }, [currentPage, inactiveOnly, searchQuery, supabase]);
+    }, [currentPage, inactiveOnly, searchQuery, segment, sort, supabase]);
 
     useEffect(() => {
         loadClients();
@@ -99,7 +134,31 @@ function ClientesList() {
             full_name: client.full_name,
             phone: client.phone,
         });
+        setWaEventType(segment === "cumple_mes" ? "birthday" : undefined);
         setIsWaOpen(true);
+    };
+
+    const isLegacyBirthdaySegment = segment === "cumple_mes" && usedLegacyFallback;
+
+    const emptyStateTitle = isLegacyBirthdaySegment
+        ? "Este segmento necesita la migración 024"
+        : searchQuery
+            ? "No se encontraron clientes"
+            : "Tu cartera de clientes empieza acá";
+
+    const emptyStateDescription = isLegacyBirthdaySegment
+        ? "Corré supabase/migrations/024_crm_segmentation.sql en el SQL Editor para habilitar birth_date y el segmento de cumpleaños."
+        : searchQuery
+            ? "Ajustá el término de búsqueda para volver a encontrar el perfil correcto."
+            : segment !== "todos"
+                ? "No hay clientes en este segmento por ahora."
+                : "Los clientes aparecerán acá cuando se registren o completen su primera reserva.";
+
+    const segmentDescriptions: Record<SegmentOption, string> = {
+        todos: "Maestro general de clientes registrados",
+        nuevos: "Clientes registrados en los últimos 30 días",
+        inactivos: "Listado de clientes inactivos (más de 30 días sin visitas)",
+        cumple_mes: "Clientes que cumplen años este mes — el saludo a un click ya tiene la plantilla lista",
     };
 
     return (
@@ -112,16 +171,14 @@ function ClientesList() {
                         Gestión de Clientes
                     </h1>
                     <p className="text-muted-foreground mt-1">
-                        {filterParam === "inactivos"
-                            ? "Listado de clientes inactivos (más de 30 días sin visitas)"
-                            : "Maestro general de clientes registrados"}
+                        {segmentDescriptions[segment]}
                     </p>
                 </div>
-                {filterParam === "inactivos" && (
+                {segment !== "todos" && (
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => router.push("/admin/clientes")}
+                        onClick={() => handleSegmentChange("todos")}
                         className="self-start md:self-auto border-border"
                     >
                         <ArrowLeft className="mr-2 h-4 w-4" />
@@ -130,8 +187,29 @@ function ClientesList() {
                 )}
             </div>
 
-            {/* Controles de Búsqueda */}
-            <div className="flex items-center gap-4">
+            {/* Chips de segmento */}
+            <div className="flex flex-wrap items-center gap-2">
+                {SEGMENT_OPTIONS.map((option) => (
+                    <Button
+                        key={option}
+                        type="button"
+                        size="sm"
+                        variant={segment === option ? "default" : "outline"}
+                        onClick={() => handleSegmentChange(option)}
+                        className={
+                            segment === option
+                                ? "bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-1.5"
+                                : "border-border/50 text-muted-foreground hover:text-foreground gap-1.5"
+                        }
+                    >
+                        {option === "cumple_mes" && <Cake className="h-3.5 w-3.5" aria-hidden="true" />}
+                        {CLIENT_SEGMENT_LABELS[option]}
+                    </Button>
+                ))}
+            </div>
+
+            {/* Controles de Búsqueda y orden */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -144,6 +222,18 @@ function ClientesList() {
                         className="pl-10 bg-background/50 border-input/50 focus:border-primary/50 text-base md:text-sm"
                     />
                 </div>
+                <Select value={sort} onValueChange={(value) => handleSortChange(value as ClientSort)}>
+                    <SelectTrigger className="w-full sm:w-[190px] bg-background/50 border-input/50 focus:ring-0">
+                        <SelectValue placeholder="Ordenar por..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border text-foreground">
+                        {(Object.keys(CLIENT_SORT_LABELS) as ClientSort[]).map((key) => (
+                            <SelectItem key={key} value={key}>
+                                {CLIENT_SORT_LABELS[key]}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
 
             {/* Lista/Tabla */}
@@ -164,11 +254,11 @@ function ClientesList() {
                         </div>
                     ) : clients.length === 0 ? (
                         <IllustratedEmptyState
-                            icon={Contact}
+                            icon={segment === "cumple_mes" ? Cake : Contact}
                             imageSrc="/images/empty/no-clientes.webp"
                             imageAlt="Ficha premium de clientes New Brothers sin registros visibles"
-                            title={searchQuery ? "No se encontraron clientes" : "Tu cartera de clientes empieza acá"}
-                            description={searchQuery ? "Ajustá el término de búsqueda para volver a encontrar el perfil correcto." : "Los clientes aparecerán acá cuando se registren o completen su primera reserva."}
+                            title={emptyStateTitle}
+                            description={emptyStateDescription}
                             action={
                                 searchQuery ? (
                                     <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
@@ -296,6 +386,7 @@ function ClientesList() {
                     isOpen={isWaOpen}
                     onOpenChange={setIsWaOpen}
                     onLogAdded={loadClients}
+                    eventType={waEventType}
                 />
             )}
         </div>
