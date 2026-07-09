@@ -45,6 +45,8 @@ import {
     type Permission,
 } from "@/lib/permissions";
 import { usePermissions } from "@/lib/usePermissions";
+import { findScheduleBlockConflicts, type ScheduleBlockConflict } from "@/lib/booking";
+import { ScheduleBlockConflictDialog } from "@/components/admin/schedule-block-conflict-dialog";
 
 type StaffRole = "barbero" | "gerente";
 
@@ -132,6 +134,8 @@ export default function AdminBarberosPage() {
         reason: "",
     });
     const [isCreatingBlock, setIsCreatingBlock] = useState(false);
+    const [blockConflicts, setBlockConflicts] = useState<ScheduleBlockConflict[] | null>(null);
+    const [isCheckingBlockConflicts, setIsCheckingBlockConflicts] = useState(false);
 
     const supabase = useMemo(() => createClient(), []);
 
@@ -378,6 +382,40 @@ export default function AdminBarberosPage() {
         }
     };
 
+    // Inserta el bloqueo ya validado (sin choques, o el admin decidió crearlo igual)
+    const insertBlock = async () => {
+        if (!activeBarberForBlocks) return;
+
+        setIsCreatingBlock(true);
+        const { error } = await supabase
+            .from("schedule_blocks")
+            .insert({
+                barber_id: activeBarberForBlocks.id,
+                start_date: blockForm.startDate,
+                end_date: blockForm.endDate,
+                start_time: blockForm.isFullDay ? null : blockForm.startTime,
+                end_time: blockForm.isFullDay ? null : blockForm.endTime,
+                reason: blockForm.reason || null,
+            });
+
+        setIsCreatingBlock(false);
+        setBlockConflicts(null);
+        if (error) {
+            toast.error("Error al registrar bloqueo de agenda");
+        } else {
+            toast.success("Bloqueo registrado con éxito");
+            setBlockForm({
+                startDate: "",
+                endDate: "",
+                isFullDay: true,
+                startTime: "09:00",
+                endTime: "18:00",
+                reason: "",
+            });
+            loadBlocks(activeBarberForBlocks.id);
+        }
+    };
+
     const handleCreateBlock = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!activeBarberForBlocks) return;
@@ -397,33 +435,22 @@ export default function AdminBarberosPage() {
             return;
         }
 
-        setIsCreatingBlock(true);
-        const { error } = await supabase
-            .from("schedule_blocks")
-            .insert({
-                barber_id: activeBarberForBlocks.id,
-                start_date: blockForm.startDate,
-                end_date: blockForm.endDate,
-                start_time: blockForm.isFullDay ? null : blockForm.startTime,
-                end_time: blockForm.isFullDay ? null : blockForm.endTime,
-                reason: blockForm.reason || null,
-            });
+        setIsCheckingBlockConflicts(true);
+        const conflicts = await findScheduleBlockConflicts(supabase, {
+            barberIds: [activeBarberForBlocks.id],
+            startDate: blockForm.startDate,
+            endDate: blockForm.endDate,
+            startTime: blockForm.isFullDay ? null : blockForm.startTime,
+            endTime: blockForm.isFullDay ? null : blockForm.endTime,
+        });
+        setIsCheckingBlockConflicts(false);
 
-        setIsCreatingBlock(false);
-        if (error) {
-            toast.error("Error al registrar bloqueo de agenda");
-        } else {
-            toast.success("Bloqueo registrado con éxito");
-            setBlockForm({
-                startDate: "",
-                endDate: "",
-                isFullDay: true,
-                startTime: "09:00",
-                endTime: "18:00",
-                reason: "",
-            });
-            loadBlocks(activeBarberForBlocks.id);
+        if (conflicts.length > 0) {
+            setBlockConflicts(conflicts);
+            return;
         }
+
+        await insertBlock();
     };
 
     const handleDeleteBlock = async (blockId: string) => {
@@ -991,11 +1018,11 @@ export default function AdminBarberosPage() {
                                 >
                                     Cerrar
                                 </Button>
-                                <Button type="submit" disabled={isCreatingBlock}>
-                                    {isCreatingBlock ? (
+                                <Button type="submit" disabled={isCreatingBlock || isCheckingBlockConflicts}>
+                                    {isCreatingBlock || isCheckingBlockConflicts ? (
                                         <>
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Creando...
+                                            {isCheckingBlockConflicts ? "Revisando agenda..." : "Creando..."}
                                         </>
                                     ) : (
                                         "Crear Bloqueo"
@@ -1006,6 +1033,13 @@ export default function AdminBarberosPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <ScheduleBlockConflictDialog
+                conflicts={blockConflicts}
+                isSubmitting={isCreatingBlock}
+                onConfirm={insertBlock}
+                onCancel={() => setBlockConflicts(null)}
+            />
 
             {/* Diálogo para Gestionar Compensaciones */}
             <Dialog open={activeBarberForCompensation !== null} onOpenChange={(open) => !open && setActiveBarberForCompensation(null)}>

@@ -65,6 +65,78 @@ export function hasOverlap(
     );
 }
 
+/** Cita activa que choca con un bloqueo de agenda que se está por crear. */
+export type ScheduleBlockConflict = {
+    id: string;
+    appointment_date: string;
+    start_time: string;
+    end_time: string;
+    clientName: string;
+    barberName: string;
+};
+
+/**
+ * Busca citas activas (pending/confirmed) de uno o más barberos que se solapan
+ * con el rango de un bloqueo de agenda a punto de crearse. Usado por
+ * `/admin/barberos` y `/admin/sucursales` antes del INSERT en `schedule_blocks`
+ * para advertir al admin en vez de dejar citas huérfanas sin aviso.
+ *
+ * Si `startTime`/`endTime` son null, el bloqueo es de día(s) completo(s) y
+ * cualquier cita activa dentro del rango de fechas choca.
+ */
+export async function findScheduleBlockConflicts(
+    supabase: SupabaseClient<Database>,
+    params: {
+        barberIds: string[];
+        startDate: string; // yyyy-MM-dd
+        endDate: string; // yyyy-MM-dd
+        startTime: string | null; // HH:mm
+        endTime: string | null; // HH:mm
+    }
+): Promise<ScheduleBlockConflict[]> {
+    const barberIds = [...new Set(params.barberIds)];
+    if (barberIds.length === 0) return [];
+
+    const { data, error } = await supabase
+        .from("appointments")
+        .select("id, appointment_date, start_time, end_time, notes, barber:barbers(name), client:profiles(full_name)")
+        .in("barber_id", barberIds)
+        .gte("appointment_date", params.startDate)
+        .lte("appointment_date", params.endDate)
+        .in("status", ["pending", "confirmed"])
+        .order("appointment_date")
+        .order("start_time");
+
+    if (error) {
+        console.error("Error checking schedule block conflicts:", error);
+        return [];
+    }
+
+    type Row = {
+        id: string;
+        appointment_date: string;
+        start_time: string;
+        end_time: string;
+        notes: string | null;
+        barber: { name: string } | null;
+        client: { full_name: string | null } | null;
+    };
+
+    const rows = (data ?? []) as unknown as Row[];
+    const overlapping = params.startTime && params.endTime
+        ? rows.filter((row) => hasOverlap(params.startTime as string, params.endTime as string, [{ start_time: row.start_time, end_time: row.end_time }]))
+        : rows;
+
+    return overlapping.map((row) => ({
+        id: row.id,
+        appointment_date: row.appointment_date,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        clientName: row.client?.full_name || row.notes?.split(" - ")[0]?.replace("Cliente: ", "") || "Cliente",
+        barberName: row.barber?.name || "Sin asignar",
+    }));
+}
+
 /**
  * Invoca el RPC 'book_appointment' y traduce los errores a mensajes legibles en español (es-UY).
  */

@@ -17,6 +17,12 @@ import {
     Scissors,
     Timer,
     MessageSquare,
+    RotateCcw,
+    ChevronLeft,
+    ChevronRight,
+    ChevronDown,
+    ChevronUp,
+    AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,7 +54,7 @@ import { format, addDays, startOfToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { normalizeUyPhone } from "@/lib/whatsapp";
-import { fetchActiveAppointments, computeBookedSlots } from "@/lib/booking";
+import { fetchActiveAppointments, computeBookedSlots, hasOverlap } from "@/lib/booking";
 import { getBookingErrorMessage } from "@/lib/booking-errors";
 import ChargeDialog from "@/components/shared/ChargeDialog";
 import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
@@ -96,6 +102,13 @@ export default function AdminCitasPage() {
     const [chargeApt, setChargeApt] = useState<AppointmentWithRelations | null>(null);
     const [notifyApt, setNotifyApt] = useState<NotifyState>(null);
 
+    // Banner de pendientes vencidas (status pending con fecha anterior a hoy)
+    const [overdueAppointments, setOverdueAppointments] = useState<AppointmentWithRelations[]>([]);
+    const [overdueCount, setOverdueCount] = useState(0);
+    const [isOverdueExpanded, setIsOverdueExpanded] = useState(false);
+    const [isLoadingOverdue, setIsLoadingOverdue] = useState(false);
+    const [resolvingOverdueId, setResolvingOverdueId] = useState<string | null>(null);
+
     // Reprogramar cita
     const [rescheduleApt, setRescheduleApt] = useState<AppointmentWithRelations | null>(null);
     const [rescheduleDate, setRescheduleDate] = useState("");
@@ -139,6 +152,28 @@ export default function AdminCitasPage() {
     useEffect(() => {
         loadAppointments();
     }, [loadAppointments]);
+
+    // Pendientes de días anteriores sin resolver (invisibles en la vista de un solo día)
+    const loadOverdueAppointments = useCallback(async () => {
+        setIsLoadingOverdue(true);
+        const todayStr = format(startOfToday(), "yyyy-MM-dd");
+        const { data, count } = await supabase
+            .from("appointments")
+            .select("*, service:services(*), barber:barbers(*), client:profiles(*)", { count: "exact" })
+            .eq("status", APPOINTMENT_STATUS.PENDING)
+            .lt("appointment_date", todayStr)
+            .order("appointment_date", { ascending: false })
+            .order("start_time", { ascending: false })
+            .limit(20);
+
+        setOverdueAppointments(data || []);
+        setOverdueCount(count ?? (data?.length || 0));
+        setIsLoadingOverdue(false);
+    }, [supabase]);
+
+    useEffect(() => {
+        loadOverdueAppointments();
+    }, [loadOverdueAppointments]);
 
     // Cargar servicios, barberos y sucursales para el formulario/filtros
     useEffect(() => {
@@ -241,6 +276,40 @@ export default function AdminCitasPage() {
                 },
             }
             : undefined);
+    };
+
+    // Reactiva una cita cancelada/no-show a confirmada, si nadie más tomó el horario mientras tanto
+    const handleReactivate = (cita: AppointmentWithRelations) => {
+        const conflict = appointments.some(
+            (a) =>
+                a.id !== cita.id &&
+                a.barber_id === cita.barber_id &&
+                (a.status === APPOINTMENT_STATUS.PENDING || a.status === APPOINTMENT_STATUS.CONFIRMED) &&
+                hasOverlap(cita.start_time, cita.end_time, [{ start_time: a.start_time, end_time: a.end_time }])
+        );
+
+        if (conflict) {
+            toast.error("El horario ya fue ocupado — reprogramala en su lugar");
+            return;
+        }
+
+        updateStatus(cita, APPOINTMENT_STATUS.CONFIRMED);
+    };
+
+    // Resuelve una fila del banner de pendientes vencidas (Completar/No vino/Cancelar) y refresca el listado
+    const resolveOverdueAppointment = async (cita: AppointmentWithRelations, newStatus: string) => {
+        setResolvingOverdueId(cita.id);
+        await updateStatus(cita, newStatus);
+        await loadOverdueAppointments();
+        setResolvingOverdueId(null);
+    };
+
+    const handleOverdueComplete = (cita: AppointmentWithRelations) => {
+        if (features.contabilidad) {
+            setChargeApt(cita);
+        } else {
+            resolveOverdueAppointment(cita, APPOINTMENT_STATUS.COMPLETED);
+        }
     };
 
     // Abrir el diálogo de reprogramación precargando la fecha/hora actual de la cita
@@ -413,6 +482,14 @@ export default function AdminCitasPage() {
 
     // Generar fechas para selector rápido
     const quickDates = Array.from({ length: 7 }, (_, i) => addDays(startOfToday(), i));
+
+    // Navegación libre día a día, sin restricción hacia atrás
+    const goToPreviousDay = () => {
+        setSelectedDate((prev) => format(addDays(new Date(`${prev}T12:00:00`), -1), "yyyy-MM-dd"));
+    };
+    const goToNextDay = () => {
+        setSelectedDate((prev) => format(addDays(new Date(`${prev}T12:00:00`), 1), "yyyy-MM-dd"));
+    };
 
     const isSlotDisabled = (slot: string) => {
         if (isLoadingSlots) return true;
@@ -710,25 +787,135 @@ export default function AdminCitasPage() {
                 </DialogContent>
             </Dialog>
 
+            {overdueCount > 0 && (
+                <section className="admin-warning-surface rounded-2xl border p-4">
+                    <button
+                        type="button"
+                        onClick={() => setIsOverdueExpanded((prev) => !prev)}
+                        className="flex w-full items-center justify-between gap-3 text-left"
+                    >
+                        <div className="flex items-center gap-3">
+                            <AlertTriangle className="admin-warning-icon h-5 w-5 shrink-0" />
+                            <p className="admin-warning-text text-sm font-semibold">
+                                Tenés {overdueCount} cita{overdueCount === 1 ? "" : "s"} pendiente{overdueCount === 1 ? "" : "s"} de días anteriores sin resolver
+                            </p>
+                        </div>
+                        {isOverdueExpanded ? (
+                            <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        ) : (
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        )}
+                    </button>
+
+                    {isOverdueExpanded && (
+                        <div className="mt-4 space-y-2">
+                            {isLoadingOverdue ? (
+                                <div className="flex justify-center p-4">
+                                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                </div>
+                            ) : (
+                                overdueAppointments.map((cita) => (
+                                    <div
+                                        key={cita.id}
+                                        className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/40 p-3 text-xs md:flex-row md:items-center md:justify-between"
+                                    >
+                                        <div className="space-y-1">
+                                            <p className="font-semibold text-foreground">
+                                                {format(new Date(`${cita.appointment_date}T12:00:00`), "d 'de' MMMM", { locale: es })} · {cita.start_time.slice(0, 5)}
+                                            </p>
+                                            <p className="text-muted-foreground">
+                                                {getClientName(cita)} · {cita.service?.name || "Servicio"} · {cita.barber?.name || "Sin asignar"}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={resolvingOverdueId === cita.id}
+                                                onClick={() => handleOverdueComplete(cita)}
+                                                className="h-9 border-primary/30 text-primary hover:bg-primary/10"
+                                            >
+                                                <CheckCircle className="mr-1 h-3.5 w-3.5" />
+                                                {features.contabilidad ? "Cobrar" : "Completar"}
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={resolvingOverdueId === cita.id}
+                                                onClick={() => resolveOverdueAppointment(cita, APPOINTMENT_STATUS.NO_SHOW)}
+                                                className="h-9 text-muted-foreground hover:bg-muted/40"
+                                            >
+                                                <XCircle className="mr-1 h-3.5 w-3.5" />
+                                                No vino
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={resolvingOverdueId === cita.id}
+                                                onClick={() => resolveOverdueAppointment(cita, APPOINTMENT_STATUS.CANCELLED)}
+                                                className="h-9 border-destructive/30 text-destructive hover:bg-destructive/10"
+                                            >
+                                                <XCircle className="mr-1 h-3.5 w-3.5" />
+                                                Cancelar
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
+                </section>
+            )}
+
             <section className="admin-agenda-filterbar rounded-2xl border p-3">
-                <div className="flex gap-2 overflow-x-auto pb-2 xl:pb-0">
-                    {quickDates.map((date) => {
-                        const dateStr = format(date, "yyyy-MM-dd");
-                        const isSelected = selectedDate === dateStr;
-                        return (
-                            <button
-                                key={dateStr}
-                                onClick={() => setSelectedDate(dateStr)}
-                                className={`admin-date-pill flex-shrink-0 ${isSelected ? "admin-date-pill-active" : ""}`}
-                                aria-pressed={isSelected}
-                            >
-                                <span className="text-[10px] uppercase tracking-[0.16em]">
-                                    {format(date, "EEE", { locale: es })}
-                                </span>
-                                <span className="text-lg font-black">{format(date, "d")}</span>
-                            </button>
-                        );
-                    })}
+                <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                    <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 xl:pb-0">
+                        {quickDates.map((date) => {
+                            const dateStr = format(date, "yyyy-MM-dd");
+                            const isSelected = selectedDate === dateStr;
+                            return (
+                                <button
+                                    key={dateStr}
+                                    onClick={() => setSelectedDate(dateStr)}
+                                    className={`admin-date-pill flex-shrink-0 ${isSelected ? "admin-date-pill-active" : ""}`}
+                                    aria-pressed={isSelected}
+                                >
+                                    <span className="text-[10px] uppercase tracking-[0.16em]">
+                                        {format(date, "EEE", { locale: es })}
+                                    </span>
+                                    <span className="text-lg font-black">{format(date, "d")}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={goToPreviousDay}
+                            className="h-10 w-10 shrink-0"
+                            aria-label="Día anterior"
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                            className="admin-field-focus h-10 w-[150px] bg-background/50 border-input/50"
+                            aria-label="Ir a una fecha"
+                        />
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={goToNextDay}
+                            className="h-10 w-10 shrink-0"
+                            aria-label="Día siguiente"
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="grid gap-3 pt-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_180px] xl:pt-0">
@@ -838,6 +1025,8 @@ export default function AdminCitasPage() {
                                 }
                             }}
                             onCancel={(cita) => updateStatus(cita, "cancelled")}
+                            onNoShow={(cita) => updateStatus(cita, APPOINTMENT_STATUS.NO_SHOW)}
+                            onReactivate={handleReactivate}
                             onReschedule={openReschedule}
                             onNotify={(cita, eventType) => setNotifyApt({
                                 appointment: cita,
@@ -855,7 +1044,10 @@ export default function AdminCitasPage() {
                     appointment={chargeApt}
                     isOpen={chargeApt !== null}
                     onOpenChange={(open) => !open && setChargeApt(null)}
-                    onSuccess={loadAppointments}
+                    onSuccess={() => {
+                        loadAppointments();
+                        loadOverdueAppointments();
+                    }}
                 />
             )}
 
@@ -975,6 +1167,8 @@ function AgendaTimeline({
     onConfirm,
     onComplete,
     onCancel,
+    onNoShow,
+    onReactivate,
     onReschedule,
     onNotify,
 }: {
@@ -985,6 +1179,8 @@ function AgendaTimeline({
     onConfirm: (appointment: AppointmentWithRelations) => void;
     onComplete: (appointment: AppointmentWithRelations) => void;
     onCancel: (appointment: AppointmentWithRelations) => void;
+    onNoShow: (appointment: AppointmentWithRelations) => void;
+    onReactivate: (appointment: AppointmentWithRelations) => void;
     onReschedule: (appointment: AppointmentWithRelations) => void;
     onNotify: (appointment: AppointmentWithRelations, eventType: string) => void;
 }) {
@@ -1007,6 +1203,8 @@ function AgendaTimeline({
                                 onConfirm={() => onConfirm(appointment)}
                                 onComplete={() => onComplete(appointment)}
                                 onCancel={() => onCancel(appointment)}
+                                onNoShow={() => onNoShow(appointment)}
+                                onReactivate={() => onReactivate(appointment)}
                                 onReschedule={() => onReschedule(appointment)}
                                 onNotify={(eventType) => onNotify(appointment, eventType)}
                             />
@@ -1026,6 +1224,8 @@ function AppointmentCard({
     onConfirm,
     onComplete,
     onCancel,
+    onNoShow,
+    onReactivate,
     onReschedule,
     onNotify,
 }: {
@@ -1036,11 +1236,19 @@ function AppointmentCard({
     onConfirm: () => void;
     onComplete: () => void;
     onCancel: () => void;
+    onNoShow: () => void;
+    onReactivate: () => void;
     onReschedule: () => void;
     onNotify: (eventType: string) => void;
 }) {
-    const isActionable = appointment.status === "pending" || appointment.status === "confirmed";
-    const isCompleted = appointment.status === "completed";
+    const isPending = appointment.status === APPOINTMENT_STATUS.PENDING;
+    const isConfirmed = appointment.status === APPOINTMENT_STATUS.CONFIRMED;
+    const isCompleted = appointment.status === APPOINTMENT_STATUS.COMPLETED;
+    const isCancelled = appointment.status === APPOINTMENT_STATUS.CANCELLED;
+    const isNoShow = appointment.status === APPOINTMENT_STATUS.NO_SHOW;
+    const isActionable = isPending || isConfirmed;
+    const isPastDate = appointment.appointment_date < format(startOfToday(), "yyyy-MM-dd");
+    const showNoShow = isConfirmed || (isPending && isPastDate);
     const duration = appointment.service?.duration_minutes ? `${appointment.service.duration_minutes} min` : `${appointment.start_time.slice(0, 5)}-${appointment.end_time.slice(0, 5)}`;
 
     return (
@@ -1089,7 +1297,7 @@ function AppointmentCard({
 
                 {isActionable ? (
                     <div className="flex flex-wrap gap-2 xl:justify-end">
-                        {appointment.status === "pending" && (
+                        {isPending && (
                             <Button
                                 size="sm"
                                 variant="outline"
@@ -1100,7 +1308,7 @@ function AppointmentCard({
                                 Confirmar
                             </Button>
                         )}
-                        {appointment.status === "confirmed" && (
+                        {isConfirmed && (
                             <Button
                                 size="sm"
                                 className="admin-accent-button h-10 font-semibold md:h-8"
@@ -1125,6 +1333,17 @@ function AppointmentCard({
                                 Recordar
                             </Button>
                         )}
+                        {showNoShow && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-10 text-muted-foreground hover:bg-muted/40 md:h-8"
+                                onClick={onNoShow}
+                            >
+                                <XCircle className="h-4 w-4 mr-1" />
+                                No vino
+                            </Button>
+                        )}
                         <Button
                             size="sm"
                             variant="outline"
@@ -1145,6 +1364,18 @@ function AppointmentCard({
                         >
                             <MessageSquare className="h-4 w-4 mr-1" />
                             Agradecer
+                        </Button>
+                    </div>
+                ) : isCancelled || isNoShow ? (
+                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-10 border-primary/30 text-primary hover:bg-primary/10 md:h-8"
+                            onClick={onReactivate}
+                        >
+                            <RotateCcw className="h-4 w-4 mr-1" />
+                            Reactivar
                         </Button>
                     </div>
                 ) : (
