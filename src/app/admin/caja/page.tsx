@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFeatures } from "@/lib/features";
 import { createClient } from "@/lib/supabase/client";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatPrice } from "@/lib/utils";
 import { CalendarDateRangePicker } from "@/components/admin/date-range-picker";
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
 import {
     DollarSign,
@@ -27,6 +27,9 @@ import {
     Loader2,
     Receipt,
     Ban,
+    Lock,
+    CheckCircle2,
+    AlertTriangle,
 } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import {
@@ -61,6 +64,7 @@ import {
     CASH_CATEGORY_LABELS,
     normalizePaymentMethod,
 } from "@/lib/constants";
+import type { CashClosure } from "@/types/database.types";
 
 const EXPENSE_CATEGORIES = ['supply', 'salary', 'rent', 'adjustment', 'other'] as const;
 
@@ -74,6 +78,7 @@ interface CashSummary {
     transferPayments: number;
     cardPayments: number;
     otherPayments: number;
+    cashExpenses: number;
     expenses: number;
 }
 
@@ -121,6 +126,7 @@ export default function AdminCajaPage() {
         transferPayments: 0,
         cardPayments: 0,
         otherPayments: 0,
+        cashExpenses: 0,
         expenses: 0,
     });
 
@@ -147,6 +153,16 @@ export default function AdminCajaPage() {
     const [voidReason, setVoidReason] = useState("");
     const [isVoiding, setIsVoiding] = useState(false);
 
+    // Cierre de día (Bloque B): solo tiene sentido cuando el rango elegido es un único día.
+    const isSingleDay = !!(date?.from && (!date.to || isSameDay(date.from, date.to)));
+    const [closure, setClosure] = useState<CashClosure | null>(null);
+    const [closureCreatorName, setClosureCreatorName] = useState<string | null>(null);
+    const [isLoadingClosure, setIsLoadingClosure] = useState(false);
+    const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
+    const [countedCashInput, setCountedCashInput] = useState("");
+    const [closureNotes, setClosureNotes] = useState("");
+    const [isClosingDay, setIsClosingDay] = useState(false);
+
     const supabase = createClient();
 
     useEffect(() => {
@@ -154,6 +170,38 @@ export default function AdminCajaPage() {
             loadCajaData();
         }
     }, [date]);
+
+    const loadClosure = useCallback(async () => {
+        if (!isSingleDay || !date?.from) {
+            setClosure(null);
+            setClosureCreatorName(null);
+            return;
+        }
+        setIsLoadingClosure(true);
+        const dateStr = format(date.from, 'yyyy-MM-dd');
+        const { data } = await supabase
+            .from('cash_closures')
+            .select('*')
+            .eq('closure_date', dateStr)
+            .maybeSingle();
+        setClosure(data || null);
+
+        if (data?.created_by) {
+            const { data: creator } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', data.created_by)
+                .maybeSingle();
+            setClosureCreatorName(creator?.full_name || null);
+        } else {
+            setClosureCreatorName(null);
+        }
+        setIsLoadingClosure(false);
+    }, [isSingleDay, date, supabase]);
+
+    useEffect(() => {
+        loadClosure();
+    }, [loadClosure]);
 
     useEffect(() => {
         async function loadBarbers() {
@@ -231,6 +279,7 @@ export default function AdminCajaPage() {
         let transferPay = 0;
         let cardPay = 0;
         let otherPay = 0;
+        let cashExpenseTotal = 0;
         let totalExpenses = 0;
         let totalTips = 0;
         let totalServicesCount = 0;
@@ -266,6 +315,9 @@ export default function AdminCajaPage() {
 
                 if (mov.type === 'expense') {
                     totalExpenses += amount;
+                    if (normalizePaymentMethod(mov.payment_method) === 'cash') {
+                        cashExpenseTotal += amount;
+                    }
                     trans.push({
                         id: mov.id,
                         type: 'egreso',
@@ -348,6 +400,7 @@ export default function AdminCajaPage() {
             transferPayments: transferPay,
             cardPayments: cardPay,
             otherPayments: otherPay,
+            cashExpenses: cashExpenseTotal,
             expenses: totalExpenses,
         });
 
@@ -444,6 +497,61 @@ export default function AdminCajaPage() {
         setMovementForm({ amount: "", description: "", payment_method: "cash", category: "other", barber_id: "" });
         setIsMovementDialogOpen(true);
     };
+
+    // Efectivo esperado del día, calculado client-side con los movimientos ya
+    // cargados (solo payment_method='cash'). El servidor recalcula lo mismo
+    // con el mismo predicado TZ en close_cash_day — esto es solo el preview.
+    const expectedCashNow = summary.cashPayments - summary.cashExpenses;
+    const countedCashNum = parseFloat(countedCashInput);
+    const previewDifference = countedCashInput !== "" && !isNaN(countedCashNum)
+        ? countedCashNum - expectedCashNow
+        : null;
+
+    const openCloseDialog = () => {
+        setCountedCashInput("");
+        setClosureNotes("");
+        setIsCloseDialogOpen(true);
+    };
+
+    const handleCloseDay = async () => {
+        if (!date?.from) return;
+
+        if (isNaN(countedCashNum) || countedCashNum < 0) {
+            toast.error("Monto inválido");
+            return;
+        }
+
+        setIsClosingDay(true);
+        try {
+            const { error } = await supabase.rpc('close_cash_day', {
+                p_date: format(date.from, 'yyyy-MM-dd'),
+                p_counted_cash: countedCashNum,
+                p_notes: closureNotes || null,
+            });
+
+            if (error) {
+                if (error.message.includes("DIA_YA_CERRADO")) {
+                    toast.error("Ese día ya fue cerrado.");
+                } else if (error.message.includes("FECHA_FUTURA")) {
+                    toast.error("No podés cerrar un día futuro.");
+                } else if (error.message.includes("MONTO_INVALIDO")) {
+                    toast.error("Monto inválido.");
+                } else if (error.message.includes("NO_AUTORIZADO")) {
+                    toast.error("No tenés autorización para cerrar la caja.");
+                } else {
+                    toast.error("Error al cerrar caja: " + error.message);
+                }
+            } else {
+                toast.success("Caja del día cerrada");
+                setIsCloseDialogOpen(false);
+                setCountedCashInput("");
+                setClosureNotes("");
+                loadClosure();
+            }
+        } finally {
+            setIsClosingDay(false);
+        }
+    };
     if (!isLoaded || !features.contabilidad) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
@@ -481,7 +589,7 @@ export default function AdminCajaPage() {
             </div>
 
             {/* Acciones rápidas */}
-            <div id="admin-btn-register-movement" className="flex gap-2 flex-wrap">
+            <div id="admin-btn-register-movement" className="flex gap-2 flex-wrap items-center">
                 <Button onClick={() => openMovementDialog('income')} className="bg-green-600 hover:bg-green-700">
                     <ArrowDownCircle className="h-4 w-4 mr-2" />
                     Registrar Ingreso
@@ -490,7 +598,57 @@ export default function AdminCajaPage() {
                     <ArrowUpCircle className="h-4 w-4 mr-2" />
                     Registrar Egreso
                 </Button>
+                {isSingleDay && !isLoadingClosure && !closure && (
+                    <Button onClick={openCloseDialog} variant="outline" className="border-primary/30 text-primary hover:bg-primary/10">
+                        <Lock className="h-4 w-4 mr-2" />
+                        Cerrar caja del día
+                    </Button>
+                )}
+                {!isSingleDay && (
+                    <span className="text-xs text-muted-foreground">
+                        Elegí un único día para poder cerrar la caja.
+                    </span>
+                )}
             </div>
+
+            {/* Cierre de caja del día ya realizado: resumen en vez del botón */}
+            {isSingleDay && closure && (
+                <div className="rounded-md border bg-card p-4 space-y-3">
+                    <h3 className="font-semibold flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        Caja del día cerrada
+                        {Math.abs(closure.expected_cash - expectedCashNow) > 0.005 && (
+                            <Badge variant="outline" className="admin-warning-surface ml-2 text-[10px] font-normal">
+                                <AlertTriangle className="admin-warning-icon h-3 w-3 mr-1" />
+                                Hubo movimientos después del cierre
+                            </Badge>
+                        )}
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                        <div>
+                            <span className="text-muted-foreground text-xs block">Esperado</span>
+                            <span className="font-semibold">{formatPrice(closure.expected_cash)}</span>
+                        </div>
+                        <div>
+                            <span className="text-muted-foreground text-xs block">Contado</span>
+                            <span className="font-semibold">{formatPrice(closure.counted_cash)}</span>
+                        </div>
+                        <div>
+                            <span className="text-muted-foreground text-xs block">Diferencia</span>
+                            <span className={`font-semibold ${closure.difference === 0 ? 'text-emerald-500' : closure.difference > 0 ? 'text-amber-500' : 'text-destructive'}`}>
+                                {closure.difference > 0 ? '+' : ''}{formatPrice(closure.difference)}
+                            </span>
+                        </div>
+                        <div>
+                            <span className="text-muted-foreground text-xs block">Cerrado por</span>
+                            <span className="font-semibold">{closureCreatorName || "—"}</span>
+                        </div>
+                    </div>
+                    {closure.notes && (
+                        <p className="text-xs text-muted-foreground border-t border-border pt-2">{closure.notes}</p>
+                    )}
+                </div>
+            )}
 
             {/* Tarjetas de Resumen */}
             <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
@@ -867,6 +1025,67 @@ export default function AdminCajaPage() {
                             </Button>
                         </div>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Dialog de cierre de caja del día */}
+            <Dialog open={isCloseDialogOpen} onOpenChange={setIsCloseDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Cerrar caja del día</DialogTitle>
+                        <DialogDescription>
+                            {date?.from ? format(date.from, "d 'de' MMMM, yyyy", { locale: es }) : ""} — arqueá el
+                            efectivo contra lo esperado. Esta acción queda registrada y no se puede repetir el mismo día.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm">
+                            <span className="text-muted-foreground">Efectivo esperado</span>
+                            <span className="font-semibold">{formatPrice(expectedCashNow)}</span>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium mb-2 block">Efectivo contado</label>
+                            <Input
+                                type="number"
+                                min="0"
+                                step="any"
+                                placeholder="0"
+                                value={countedCashInput}
+                                onChange={(e) => setCountedCashInput(e.target.value)}
+                            />
+                        </div>
+                        {previewDifference !== null && (
+                            <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm">
+                                <span className="text-muted-foreground">Diferencia</span>
+                                <span className={`font-semibold ${previewDifference === 0 ? 'text-emerald-500' : previewDifference > 0 ? 'text-amber-500' : 'text-destructive'}`}>
+                                    {previewDifference > 0 ? '+' : ''}{formatPrice(previewDifference)}
+                                    {previewDifference > 0 ? ' (sobra)' : previewDifference < 0 ? ' (falta)' : ''}
+                                </span>
+                            </div>
+                        )}
+                        <div>
+                            <label className="text-sm font-medium mb-2 block">Notas (opcional)</label>
+                            <Textarea
+                                placeholder="Observaciones del arqueo, si las hay"
+                                value={closureNotes}
+                                onChange={(e) => setClosureNotes(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter className="pt-4">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsCloseDialogOpen(false)}
+                            disabled={isClosingDay}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button type="button" onClick={handleCloseDay} disabled={isClosingDay}>
+                            {isClosingDay && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            Confirmar cierre
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
