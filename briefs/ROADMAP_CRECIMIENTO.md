@@ -134,6 +134,12 @@ Curadas por valor y diferenciación. Etiquetas: **[R]** ingreso recurrente · **
     pasada desde /admin/citas, iterando las plantillas por evento de la FASE 30 (sigue siendo `wa.me`
     manual, cita por cita, o da el salto a WhatsApp API). Detectada en el ciclo /polish FASE 30;
     excluida de ese brief (anti-monstruo: sin envíos masivos ni automatización).
+19. **Perfil rico del barbero** **[Q]** — columnas nuevas en `barbers` (especialidades, Instagram,
+    rating de clientes) mostradas en el wizard y en un perfil público linkeable. Detectada en el
+    ciclo /polish FASE 36; excluida de ese brief (requiere migración y moderación de contenido).
+20. **Workflow de aprobación de ausencias** — el barbero solicita la licencia y el admin la
+    aprueba/rechaza con aviso (hoy el bloqueo propio es directo, permitido por RLS); incluye
+    calendario visual de ausencias del equipo. Detectada en el ciclo /polish FASE 36; excluida.
 
 ---
 
