@@ -114,6 +114,17 @@ export const COMMUNICATION_STATUS_COLORS: Record<string, string> = {
     failed: 'bg-red-500/20 text-red-400 border-red-500/30',
 }
 
+// Plantillas de mensajes por evento de cita (message_templates)
+export const MESSAGE_EVENT_TYPES = ['cancelled', 'confirmed', 'rescheduled', 'reminder', 'thanks'] as const
+
+export const MESSAGE_EVENT_LABELS: Record<string, string> = {
+    cancelled: 'Cancelación',
+    confirmed: 'Confirmación',
+    rescheduled: 'Reprogramación',
+    reminder: 'Recordatorio de cita',
+    thanks: 'Agradecimiento',
+}
+
 // Métodos de pago
 export const PAYMENT_METHODS = {
     CASH: 'cash',
