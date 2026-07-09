@@ -16,6 +16,7 @@ import {
     MapPin,
     Scissors,
     Timer,
+    MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,12 +53,19 @@ import { getBookingErrorMessage } from "@/lib/booking-errors";
 import ChargeDialog from "@/components/shared/ChargeDialog";
 import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
 import { useFeatures } from "@/lib/features";
+import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
 
 type AppointmentWithRelations = Appointment & {
     service?: Service;
     barber?: Barber;
     client?: Profile;
 };
+
+type NotifyState = {
+    appointment: AppointmentWithRelations;
+    eventType: string;
+    templateVars: Record<string, string>;
+} | null;
 
 type AgendaMetricTone = "primary" | "pending" | "confirmed" | "completed" | "cancelled";
 
@@ -86,6 +94,7 @@ export default function AdminCitasPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [chargeApt, setChargeApt] = useState<AppointmentWithRelations | null>(null);
+    const [notifyApt, setNotifyApt] = useState<NotifyState>(null);
 
     // Reprogramar cita
     const [rescheduleApt, setRescheduleApt] = useState<AppointmentWithRelations | null>(null);
@@ -203,9 +212,9 @@ export default function AdminCitasPage() {
     }, [formData.barberId, formData.date]);
 
     // Actualizar estado de cita
-    const updateStatus = async (id: string, newStatus: string) => {
+    const updateStatus = async (cita: AppointmentWithRelations, newStatus: string) => {
         const { error } = await supabase.rpc("admin_update_appointment_status", {
-            p_appointment_id: id,
+            p_appointment_id: cita.id,
             p_status: newStatus,
         });
 
@@ -214,12 +223,24 @@ export default function AdminCitasPage() {
             return;
         }
 
-        toast.success(`Cita ${APPOINTMENT_STATUS_LABELS[newStatus].toLowerCase()}`);
-
         // Actualizar estado local
         setAppointments((prev) =>
-            prev.map((a) => (a.id === id ? { ...a, status: newStatus as Appointment["status"] } : a))
+            prev.map((a) => (a.id === cita.id ? { ...a, status: newStatus as Appointment["status"] } : a))
         );
+
+        const canNotify = (newStatus === "cancelled" || newStatus === "confirmed") && features.mensajes_crm && !!getClientPhone(cita);
+        toast.success(`Cita ${APPOINTMENT_STATUS_LABELS[newStatus].toLowerCase()}`, canNotify
+            ? {
+                action: {
+                    label: "Avisar por WhatsApp",
+                    onClick: () => setNotifyApt({
+                        appointment: { ...cita, status: newStatus as Appointment["status"] },
+                        eventType: newStatus,
+                        templateVars: buildTemplateVars(cita, branches),
+                    }),
+                },
+            }
+            : undefined);
     };
 
     // Abrir el diálogo de reprogramación precargando la fecha/hora actual de la cita
@@ -277,7 +298,19 @@ export default function AdminCitasPage() {
                 return;
             }
 
-            toast.success("Cita reprogramada");
+            const canNotify = features.mensajes_crm && !!getClientPhone(rescheduleApt);
+            toast.success("Cita reprogramada", canNotify
+                ? {
+                    action: {
+                        label: "Avisar por WhatsApp",
+                        onClick: () => setNotifyApt({
+                            appointment: rescheduleApt,
+                            eventType: "rescheduled",
+                            templateVars: buildTemplateVars(rescheduleApt, branches, { date: rescheduleDate, time: startHHMM }),
+                        }),
+                    },
+                }
+                : undefined);
             setRescheduleApt(null);
             loadAppointments();
         } catch (err) {
@@ -796,16 +829,22 @@ export default function AdminCitasPage() {
                             groups={timelineGroups}
                             branches={branches}
                             canCharge={features.contabilidad}
-                            onConfirm={(cita) => updateStatus(cita.id, "confirmed")}
+                            onConfirm={(cita) => updateStatus(cita, "confirmed")}
                             onComplete={(cita) => {
                                 if (features.contabilidad) {
                                     setChargeApt(cita);
                                 } else {
-                                    updateStatus(cita.id, "completed");
+                                    updateStatus(cita, "completed");
                                 }
                             }}
-                            onCancel={(cita) => updateStatus(cita.id, "cancelled")}
+                            onCancel={(cita) => updateStatus(cita, "cancelled")}
                             onReschedule={openReschedule}
+                            onNotify={(cita, eventType) => setNotifyApt({
+                                appointment: cita,
+                                eventType,
+                                templateVars: buildTemplateVars(cita, branches),
+                            })}
+                            canNotify={features.mensajes_crm}
                         />
                     )}
                 </CardContent>
@@ -817,6 +856,19 @@ export default function AdminCitasPage() {
                     isOpen={chargeApt !== null}
                     onOpenChange={(open) => !open && setChargeApt(null)}
                     onSuccess={loadAppointments}
+                />
+            )}
+
+            {notifyApt && (
+                <SendWhatsappDialog
+                    clientId={notifyApt.appointment.client_id}
+                    clientName={getClientName(notifyApt.appointment)}
+                    clientPhone={getClientPhone(notifyApt.appointment)}
+                    isOpen={notifyApt !== null}
+                    onOpenChange={(open) => !open && setNotifyApt(null)}
+                    eventType={notifyApt.eventType}
+                    templateVars={notifyApt.templateVars}
+                    appointmentId={notifyApt.appointment.id}
                 />
             )}
 
@@ -919,18 +971,22 @@ function AgendaTimeline({
     groups,
     branches,
     canCharge,
+    canNotify,
     onConfirm,
     onComplete,
     onCancel,
     onReschedule,
+    onNotify,
 }: {
     groups: TimelineGroup[];
     branches: Branch[];
     canCharge: boolean;
+    canNotify: boolean;
     onConfirm: (appointment: AppointmentWithRelations) => void;
     onComplete: (appointment: AppointmentWithRelations) => void;
     onCancel: (appointment: AppointmentWithRelations) => void;
     onReschedule: (appointment: AppointmentWithRelations) => void;
+    onNotify: (appointment: AppointmentWithRelations, eventType: string) => void;
 }) {
     return (
         <div className="admin-timeline space-y-5">
@@ -947,10 +1003,12 @@ function AgendaTimeline({
                                 appointment={appointment}
                                 branchName={getBranchName(appointment, branches)}
                                 canCharge={canCharge}
+                                canNotify={canNotify && !!getClientPhone(appointment)}
                                 onConfirm={() => onConfirm(appointment)}
                                 onComplete={() => onComplete(appointment)}
                                 onCancel={() => onCancel(appointment)}
                                 onReschedule={() => onReschedule(appointment)}
+                                onNotify={(eventType) => onNotify(appointment, eventType)}
                             />
                         ))}
                     </div>
@@ -964,20 +1022,25 @@ function AppointmentCard({
     appointment,
     branchName,
     canCharge,
+    canNotify,
     onConfirm,
     onComplete,
     onCancel,
     onReschedule,
+    onNotify,
 }: {
     appointment: AppointmentWithRelations;
     branchName: string;
     canCharge: boolean;
+    canNotify: boolean;
     onConfirm: () => void;
     onComplete: () => void;
     onCancel: () => void;
     onReschedule: () => void;
+    onNotify: (eventType: string) => void;
 }) {
     const isActionable = appointment.status === "pending" || appointment.status === "confirmed";
+    const isCompleted = appointment.status === "completed";
     const duration = appointment.service?.duration_minutes ? `${appointment.service.duration_minutes} min` : `${appointment.start_time.slice(0, 5)}-${appointment.end_time.slice(0, 5)}`;
 
     return (
@@ -1051,6 +1114,17 @@ function AppointmentCard({
                             <Clock className="h-4 w-4 mr-1" />
                             Reprogramar
                         </Button>
+                        {canNotify && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-10 border-primary/30 text-primary hover:bg-primary/10 md:h-8"
+                                onClick={() => onNotify("reminder")}
+                            >
+                                <MessageSquare className="h-4 w-4 mr-1" />
+                                Recordar
+                            </Button>
+                        )}
                         <Button
                             size="sm"
                             variant="outline"
@@ -1059,6 +1133,18 @@ function AppointmentCard({
                         >
                             <XCircle className="h-4 w-4 mr-1" />
                             Cancelar
+                        </Button>
+                    </div>
+                ) : isCompleted && canNotify ? (
+                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-10 border-primary/30 text-primary hover:bg-primary/10 md:h-8"
+                            onClick={() => onNotify("thanks")}
+                        >
+                            <MessageSquare className="h-4 w-4 mr-1" />
+                            Agradecer
                         </Button>
                     </div>
                 ) : (
@@ -1078,4 +1164,29 @@ function getClientName(appointment: AppointmentWithRelations) {
 function getBranchName(appointment: AppointmentWithRelations, branches: Branch[]) {
     if (!appointment.barber?.branch_id) return "Sin sucursal";
     return branches.find((branch) => branch.id === appointment.barber?.branch_id)?.name || "Sin sucursal";
+}
+
+// Teléfono del cliente: registrado, o parseado de las notas de un walk-in ("... - Tel: 099123456")
+function getClientPhone(appointment: AppointmentWithRelations): string | null {
+    if (appointment.client?.phone) return appointment.client.phone;
+    const match = appointment.notes?.match(/Tel:\s*([^-]+)/);
+    return match ? match[1].trim() : null;
+}
+
+// Diccionario de variables para las plantillas de mensaje ({nombre} {fecha} {hora} {barbero} {servicio} {sucursal})
+function buildTemplateVars(
+    appointment: AppointmentWithRelations,
+    branches: Branch[],
+    overrides?: { date?: string; time?: string }
+): Record<string, string> {
+    const dateStr = overrides?.date || appointment.appointment_date;
+    const timeStr = (overrides?.time || appointment.start_time).slice(0, 5);
+    return {
+        nombre: getClientName(appointment),
+        fecha: format(new Date(`${dateStr}T12:00:00`), "EEEE d 'de' MMMM", { locale: es }),
+        hora: timeStr,
+        barbero: appointment.barber?.name || "el equipo",
+        servicio: appointment.service?.name || "tu servicio",
+        sucursal: getBranchName(appointment, branches),
+    };
 }
