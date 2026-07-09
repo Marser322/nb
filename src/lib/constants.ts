@@ -114,6 +114,18 @@ export const COMMUNICATION_STATUS_COLORS: Record<string, string> = {
     failed: 'bg-red-500/20 text-red-400 border-red-500/30',
 }
 
+// Chat que aprende (/admin/asistente): proveedor que generó la respuesta y modo de la conversación
+export const CHAT_PROVIDER_LABELS: Record<string, string> = {
+    gemini: 'Gemini',
+    openai: 'OpenAI',
+    rules: 'Motor de reglas',
+}
+
+export const CHAT_MODE_LABELS: Record<string, string> = {
+    client: 'Cliente',
+    admin: 'Admin',
+}
+
 // Métodos de pago
 export const PAYMENT_METHODS = {
     CASH: 'cash',
@@ -260,6 +272,7 @@ export const ROUTES = {
     ADMIN_BARBEROS: '/admin/barberos',
     ADMIN_SERVICIOS: '/admin/servicios',
     ADMIN_CONFIGURACION: '/admin/configuracion',
+    ADMIN_ASISTENTE: '/admin/asistente',
 
     // Barbero
     BARBERO_AGENDA: '/barbero/mi-agenda',

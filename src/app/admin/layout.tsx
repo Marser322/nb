@@ -18,6 +18,7 @@ import {
     Users,
     Sparkles,
     Settings,
+    Bot,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useFeatures } from "@/lib/features";
@@ -115,6 +116,12 @@ const sidebarLinks: {
         href: ROUTES.ADMIN_CONFIGURACION || "/admin/configuracion",
         label: "Configuración",
         icon: Settings,
+        permission: "settings.manage",
+    },
+    {
+        href: ROUTES.ADMIN_ASISTENTE,
+        label: "Asistente IA",
+        icon: Bot,
         permission: "settings.manage",
     },
 ];
