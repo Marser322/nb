@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isDemoMode } from "@/lib/demo";
 import { BUSINESS_CONFIG, ROUTES, SERVICE_CATEGORY_LABELS } from "@/lib/constants";
@@ -88,6 +88,13 @@ type ChatBranch = {
   hours?: string;
 };
 
+/** Par pregunta/respuesta de la base de conocimiento auto-aprendida (chat_knowledge). */
+type ChatKnowledgeEntry = {
+  question: string;
+  normalized_question: string;
+  answer: string;
+};
+
 const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
 /** Convierte un array de días (0=Domingo..6=Sábado) a un label legible ("Lunes a Sábado"). */
@@ -111,14 +118,18 @@ const businessHoursCopy = `${formatWorkingDaysLabel(BUSINESS_CONFIG.workingDays)
   BUSINESS_CONFIG.workingHours.start
 ).padStart(2, "0")}:00 - ${String(BUSINESS_CONFIG.workingHours.end).padStart(2, "0")}:00 (la disponibilidad exacta se confirma al reservar)`;
 
+/** Limpia los fences ```json ... ``` que a veces envuelven la respuesta del LLM. */
+function cleanJsonFences(text: string): string {
+  return text.replace(/```json\n?|```/g, "").trim();
+}
+
 /**
  * Parsea la respuesta de texto del LLM: si viene como bloque JSON con "content"/"data"
  * (posiblemente envuelto en ```json), lo desestructura; si no, lo trata como texto plano.
  */
 function parseAssistantText(text: string): { content: string; data: AssistantData | null } {
   try {
-    const cleanJson = text.replace(/```json\n?|```/g, "").trim();
-    const parsed = JSON.parse(cleanJson);
+    const parsed = JSON.parse(cleanJsonFences(text));
     if (parsed && typeof parsed === "object" && "content" in parsed) {
       return { content: parsed.content, data: parsed.data ?? null };
     }
@@ -126,6 +137,27 @@ function parseAssistantText(text: string): { content: string; data: AssistantDat
     // Texto plano, no es JSON estructurado
   }
   return { content: text, data: null };
+}
+
+/** Tokeniza un texto normalizado en palabras de 4+ letras, para matching por keywords. */
+function tokenize(normalizedText: string): string[] {
+  return normalizedText.split(/[^a-z0-9]+/i).filter((w) => w.length >= 4);
+}
+
+/**
+ * Busca en la base de conocimiento una entrada cuya normalized_question comparta
+ * al menos 2 tokens (palabras de 4+ letras) con la consulta del usuario.
+ */
+function findKnowledgeMatch(
+  normalizedUserQuery: string,
+  knowledge: ChatKnowledgeEntry[]
+): ChatKnowledgeEntry | undefined {
+  const queryTokens = new Set(tokenize(normalizedUserQuery));
+  if (queryTokens.size === 0) return undefined;
+  return knowledge.find((entry) => {
+    const shared = tokenize(entry.normalized_question).filter((t) => queryTokens.has(t));
+    return shared.length >= 2;
+  });
 }
 
 /**
@@ -286,6 +318,7 @@ export async function POST(req: Request) {
     let dbLookbook: ChatLookbook[] = [];
     const dbFeatures: Record<string, boolean> = {};
     let dbBranches: ChatBranch[] = [];
+    let dbKnowledge: ChatKnowledgeEntry[] = [];
 
     try {
       // Fetch active features
@@ -348,6 +381,17 @@ export async function POST(req: Request) {
       if (branchesData && branchesData.length > 0) {
         dbBranches = branchesData;
       }
+
+      // Fetch conocimiento aprendido activo (más reciente primero); si falla, lista vacía
+      const { data: knowledgeData } = await supabase
+        .from("chat_knowledge")
+        .select("question, normalized_question, answer")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(40);
+      if (knowledgeData && knowledgeData.length > 0) {
+        dbKnowledge = knowledgeData;
+      }
     } catch (dbError) {
       console.error("Error querying database in chat API, falling back to static:", dbError);
     }
@@ -367,6 +411,7 @@ export async function POST(req: Request) {
       lookbook: dbFeatures.lookbook !== undefined ? dbFeatures.lookbook : true,
       reservas_online: dbFeatures.reservas_online !== undefined ? dbFeatures.reservas_online : true,
       portal_barbero: dbFeatures.portal_barbero !== undefined ? dbFeatures.portal_barbero : true,
+      chat_aprendizaje: dbFeatures.chat_aprendizaje !== undefined ? dbFeatures.chat_aprendizaje : true,
     };
 
     // Static branches details matching BUSINESS_CONFIG
@@ -506,7 +551,16 @@ CITA DEL USUARIO (datos reales, usuario con sesión iniciada):
 CITA DEL USUARIO: el usuario tiene sesión iniciada pero no tiene ninguna cita próxima agendada. Si pregunta por su turno, decíselo e invitalo a reservar.`
           : "";
 
-      systemPrompt = `Eres el Asistente Virtual Inteligente (conserje amable) de la barbería premium "New Brothers" en Uruguay. 
+      const learnedKnowledgePrompt = dbKnowledge.length > 0
+        ? `
+
+CONOCIMIENTO APRENDIDO (generado automáticamente a partir de conversaciones; puede contener errores):
+${dbKnowledge.map((k) => `P: ${k.question}\nR: ${k.answer}`).join("\n\n")}
+
+REGLA: si algo de este bloque contradice la INFORMACIÓN OFICIAL o los datos en vivo, la información oficial SIEMPRE gana. Nunca uses este bloque para precios, horarios o disponibilidad.`
+        : "";
+
+      systemPrompt = `Eres el Asistente Virtual Inteligente (conserje amable) de la barbería premium "New Brothers" en Uruguay.
 Tus respuestas deben ser cálidas, educadas, atentas y serviciales, con una estética premium de lujo minimalista.
 Tus objetivos principales son:
 1. Responder las dudas del usuario con exactitud usando la información oficial de la barbería.
@@ -528,7 +582,7 @@ INFORMACIÓN OFICIAL DE LA BARBERÍA:
 RESTRICCIONES IMPORTANTES:
 - Reservas online: ${activeFeatures.reservas_online ? 'ACTIVADAS. Debes empujar al usuario a reservar su turno y guiarlo a hacerlo.' : 'DESACTIVADAS por mantenimiento. Informa al usuario que la agenda online no está disponible temporalmente y no ofrezcas reservar.'}
 - Tienda online: ${activeFeatures.tienda ? 'ACTIVADA.' : 'DESACTIVADA. No recomiendes productos ni menciones la tienda.'}
-- Responde siempre en español. No inventes información que no esté en la lista oficial.${demoAdminPrompt}${availabilityPrompt}${userAppointmentPrompt}`;
+- Responde siempre en español. No inventes información que no esté en la lista oficial.${demoAdminPrompt}${availabilityPrompt}${userAppointmentPrompt}${learnedKnowledgePrompt}`;
     }
 
     // Add structured UI formats prompt instruction
@@ -552,22 +606,93 @@ Reglas para "action":
     const openAiKey = process.env.OPENAI_API_KEY;
     const fullSystemPrompt = `${systemPrompt}\n${structuredOutputInstruction}`;
 
-    let llmText: string | null = null;
+    let llmResult: { provider: "gemini" | "openai"; text: string } | null = null;
 
     if (geminiKey) {
-      llmText = await callLLM("gemini", geminiKey, fullSystemPrompt, messages);
+      const text = await callLLM("gemini", geminiKey, fullSystemPrompt, messages);
+      if (text) llmResult = { provider: "gemini", text };
     }
-    if (!llmText && openAiKey) {
-      llmText = await callLLM("openai", openAiKey, fullSystemPrompt, messages);
+    if (!llmResult && openAiKey) {
+      const text = await callLLM("openai", openAiKey, fullSystemPrompt, messages);
+      if (text) llmResult = { provider: "openai", text };
     }
-    if (llmText) {
-      const { content, data } = parseAssistantText(llmText);
+    if (llmResult) {
+      const { content, data } = parseAssistantText(llmResult.text);
+      const provider = llmResult.provider;
+      const userQuestion = lastMessage?.content || "";
+
+      // Logging + extracción automática nunca deben sumar latencia al chat: todo
+      // el trabajo post-respuesta corre en after(), fuera del camino crítico, y
+      // con try/catch silencioso (degradación total si falla DB o LLM).
+      after(async () => {
+        try {
+          await supabase.rpc("log_chat_message", {
+            p_mode: mode,
+            p_question: userQuestion,
+            p_answer: content,
+            p_provider: provider,
+            p_was_fallback: false,
+          });
+        } catch (logError) {
+          console.error("Error logging chat message:", logError);
+        }
+
+        if (mode === "admin" || !activeFeatures.chat_aprendizaje) return;
+
+        try {
+          const alreadyKnown = Boolean(findKnowledgeMatch(normalizedUserQuery, dbKnowledge));
+          if (alreadyKnown) return;
+
+          const extractorProvider: "gemini" | "openai" | null = geminiKey ? "gemini" : openAiKey ? "openai" : null;
+          const extractorKey = geminiKey || openAiKey;
+          if (!extractorProvider || !extractorKey) return;
+
+          const extractorSystemPrompt = `Sos un extractor de conocimiento para el asistente virtual de la barbería "New Brothers". Se te muestra un par pregunta/respuesta real de una conversación con un cliente.
+
+Tu tarea: decidir si ese intercambio contiene información GENERAL y REUTILIZABLE sobre la barbería que valga la pena guardar para futuras conversaciones, y que NO esté ya cubierta por la información oficial (servicios, precios, horarios, sucursales, políticas).
+
+PROHIBIDO aprender:
+- Precios, horarios o disponibilidad (esos datos viven en Supabase y cambian).
+- Promociones con fecha o vigencia limitada.
+- Datos personales del usuario (nombre, teléfono, citas puntuales).
+- Cualquier cosa que el asistente haya inventado sin base real.
+
+Si el intercambio no aporta nada nuevo y general, respondé { "learn": false }.
+Si aporta algo útil, reformulá la pregunta de forma genérica (sin detalles de esta conversación puntual) y resumí la respuesta en máximo 2 frases.
+
+Respondé SOLO con un objeto JSON válido, sin texto adicional ni bloques de código:
+{ "learn": boolean, "question": "...", "answer": "..." }`;
+
+          const extractorText = await callLLM(extractorProvider, extractorKey, extractorSystemPrompt, [
+            { role: "user", content: `Pregunta del usuario: "${userQuestion}"\nRespuesta del asistente: "${content}"` },
+          ]);
+          if (!extractorText) return;
+
+          const parsedExtraction = JSON.parse(cleanJsonFences(extractorText));
+          if (
+            parsedExtraction?.learn === true &&
+            typeof parsedExtraction.question === "string" &&
+            typeof parsedExtraction.answer === "string" &&
+            parsedExtraction.question.trim() &&
+            parsedExtraction.answer.trim()
+          ) {
+            await supabase.rpc("learn_chat_knowledge", {
+              p_question: parsedExtraction.question,
+              p_answer: parsedExtraction.answer,
+            });
+          }
+        } catch (learnError) {
+          console.error("Error in chat auto-learning:", learnError);
+        }
+      });
+
       return NextResponse.json({ role: "assistant", content, data });
     }
 
     // 4. FALLBACK INTELIGENTE (Motor de Reglas Semántico Local)
     let reply = "";
     let dataPayload: AssistantData | null = null;
+    let wasFallbackReply = false;
 
     if (mode === "admin") {
       // Admin Local Rules Fallback
@@ -636,6 +761,7 @@ Reglas para "action":
       }
       else {
         reply = "Entendido. Como tu Coach de Gestión de **New Brothers**, te puedo asistir con la operativa del panel: cobro de citas, registro de movimientos en Caja, cálculo de Liquidaciones, control de stock en Productos, o personalización en Configuración. ¿Qué área querés optimizar?";
+        wasFallbackReply = true;
       }
     } else {
       // Client Local Rules Fallback (normalizedUserQuery en TODAS las ramas: sin tildes no rompe el match)
@@ -791,9 +917,31 @@ Reglas para "action":
         };
       }
       else {
-        reply = "Entiendo. En **New Brothers** nos enfocamos en brindarte la mejor experiencia de barbería. Si tenés dudas específicas sobre cómo reservar, precios de cortes, ubicaciones de nuestros locales o querés recomendaciones de estilos, ¡preguntame con confianza!";
+        // Antes de rendirse, el fallback local también busca en el conocimiento
+        // aprendido por keyword match (así funciona incluso sin keys de LLM).
+        const knowledgeMatch = findKnowledgeMatch(normalizedUserQuery, dbKnowledge);
+        if (knowledgeMatch) {
+          reply = knowledgeMatch.answer;
+        } else {
+          reply = "Entiendo. En **New Brothers** nos enfocamos en brindarte la mejor experiencia de barbería. Si tenés dudas específicas sobre cómo reservar, precios de cortes, ubicaciones de nuestros locales o querés recomendaciones de estilos, ¡preguntame con confianza!";
+          wasFallbackReply = true;
+        }
       }
     }
+
+    after(async () => {
+      try {
+        await supabase.rpc("log_chat_message", {
+          p_mode: mode,
+          p_question: lastMessage?.content || "",
+          p_answer: reply,
+          p_provider: "rules",
+          p_was_fallback: wasFallbackReply,
+        });
+      } catch (logError) {
+        console.error("Error logging chat message (rules):", logError);
+      }
+    });
 
     return NextResponse.json({
       role: "assistant",
