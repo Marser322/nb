@@ -18,6 +18,8 @@ export interface Profile {
   notes: string | null
   /** Overrides de permisos por persona (RBAC). Ver src/lib/permissions.ts */
   permissions?: Record<string, boolean> | null
+  /** Fecha de nacimiento, opcional. Alimenta el segmento "Cumplen este mes" del CRM. */
+  birth_date: string | null
   created_at: string
 }
 
@@ -282,7 +284,7 @@ export interface RemindersConfig {
 
 export interface MessageTemplate {
   id: string
-  event_type: 'cancelled' | 'confirmed' | 'rescheduled' | 'reminder' | 'thanks'
+  event_type: 'cancelled' | 'confirmed' | 'rescheduled' | 'reminder' | 'thanks' | 'birthday'
   name: string
   body: string
   is_active: boolean
@@ -296,6 +298,7 @@ export interface ClientOverview {
   full_name: string | null
   phone: string | null
   avatar_url: string | null
+  birth_date: string | null
   created_at: string
   notes: string | null
   last_visit: string | null
@@ -306,6 +309,12 @@ export interface ClientOverview {
 export interface ClientOverviewPage extends ClientOverview {
   total_count: number
 }
+
+/** Orden server-side de get_clients_overview_page (FASE 33). */
+export type ClientSort = 'recent' | 'spent' | 'visits' | 'name'
+
+/** Segmentos server-side de get_clients_overview_page (FASE 33). */
+export type ClientSegment = 'nuevos' | 'inactivos' | 'cumple_mes'
 
 export interface Subscription {
   id: string
