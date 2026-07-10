@@ -36,7 +36,6 @@ import { createClient } from "@/lib/supabase/client";
 import {
     APPOINTMENT_STATUS_COLORS,
     APPOINTMENT_STATUS_LABELS,
-    BUSINESS_CONFIG,
     FULFILLMENT_LABELS,
     ORDER_STATUS_COLORS,
     ORDER_STATUS_LABELS,
@@ -48,6 +47,7 @@ import { formatPrice, canCancelAppointment } from "@/lib/utils";
 import { getBarberAvatarUrl } from "@/lib/static-data";
 import type { Appointment, Barber, Branch, HaircutHistory, Order, OrderItem, Product, Profile, Service, Subscription } from "@/types/database.types";
 import { useFeatures } from "@/lib/features";
+import { useBusinessConfig, cancellationWindowLabel as formatCancellationWindow } from "@/lib/business-config";
 
 type AppointmentWithRelations = Appointment & {
     service?: Service | null;
@@ -72,11 +72,6 @@ type CancelTarget = {
 };
 
 const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-
-// FASE 22 C2: ventana de cancelación derivada de la config, no hardcodeada.
-const cancellationWindowLabel = BUSINESS_CONFIG.cancellationWindow % 60 === 0
-    ? `${BUSINESS_CONFIG.cancellationWindow / 60} hora${BUSINESS_CONFIG.cancellationWindow / 60 === 1 ? "" : "s"}`
-    : `${BUSINESS_CONFIG.cancellationWindow} minutos`;
 
 const profileFormSchema = z.object({
     full_name: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres"),
@@ -104,6 +99,7 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 export default function MiCuentaPage() {
     const { features } = useFeatures();
+    const { config } = useBusinessConfig();
     const router = useRouter();
     const supabase = useMemo(() => createClient(), []);
     const [isLoading, setIsLoading] = useState(true);
@@ -341,6 +337,9 @@ export default function MiCuentaPage() {
         ? `${ROUTES.RESERVAR}?serviceId=${lastExperience.service_id}&barberId=${lastExperience.barber_id}`
         : ROUTES.RESERVAR;
 
+    // Ventana de cancelación derivada de la config vigente, no hardcodeada.
+    const cancellationWindowLabel = formatCancellationWindow(config.cancellationWindowMinutes);
+
     return (
         <div className="min-h-screen bg-background">
             <Header />
@@ -525,7 +524,7 @@ export default function MiCuentaPage() {
                                                             {appointment.service && <span className="text-primary">{formatPrice(appointment.service.price)}</span>}
                                                         </div>
                                                         <div>
-                                                            {canCancelAppointment(appointment.appointment_date, appointment.start_time) ? (
+                                                            {canCancelAppointment(appointment.appointment_date, appointment.start_time, config.cancellationWindowMinutes) ? (
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="sm"

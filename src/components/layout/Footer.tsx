@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import { Scissors, Instagram, Phone, MapPin, Clock } from "lucide-react";
 import { ROUTES, BUSINESS_CONFIG } from "@/lib/constants";
 import { useFeatures } from "@/lib/features";
+import { useBusinessConfig, businessHoursLabel } from "@/lib/business-config";
 
 export function Footer() {
     const { features } = useFeatures();
+    const { config } = useBusinessConfig();
     const [clickCount, setClickCount] = useState(0);
     const router = useRouter();
 
@@ -103,11 +105,11 @@ export function Footer() {
                         <ul className="space-y-3">
                             <li className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Phone className="h-4 w-4 text-primary" />
-                                {BUSINESS_CONFIG.phone}
+                                {config.phone}
                             </li>
                             <li className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Instagram className="h-4 w-4 text-primary" />
-                                {BUSINESS_CONFIG.instagram}
+                                {config.instagram}
                             </li>
                             <li className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <MapPin className="h-4 w-4 text-primary" />
@@ -121,18 +123,9 @@ export function Footer() {
                         <h4 className="font-semibold text-lg">Horarios</h4>
                         <div className="flex items-start gap-2 text-sm text-muted-foreground">
                             <Clock className="h-4 w-4 text-primary mt-0.5" />
-                            <div>
-                                <p>Lunes a Viernes</p>
-                                <p className="text-foreground font-medium">
-                                    {BUSINESS_CONFIG.workingHours.start}:00 -{" "}
-                                    {BUSINESS_CONFIG.workingHours.end}:00
-                                </p>
-                                <p className="mt-2">Sábados</p>
-                                <p className="text-foreground font-medium">
-                                    {BUSINESS_CONFIG.workingHours.start}:00 -{" "}
-                                    {BUSINESS_CONFIG.workingHours.end}:00
-                                </p>
-                            </div>
+                            <p className="text-foreground font-medium">
+                                {businessHoursLabel(config)}
+                            </p>
                         </div>
                     </div>
                 </div>

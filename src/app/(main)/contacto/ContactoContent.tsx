@@ -17,8 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Header, Footer } from "@/components/layout";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
-import { BUSINESS_CONFIG, BRANCHES, ROUTES } from "@/lib/constants";
+import { BRANCHES, ROUTES } from "@/lib/constants";
 import { useFeatures } from "@/lib/features";
+import { useBusinessConfig } from "@/lib/business-config";
 import { normalizeUyPhone, buildWaLink } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
 
@@ -61,7 +62,8 @@ const DEFAULT_BIO = "Profesional del equipo NB, listo para tu próximo corte.";
 
 export function ContactoContent() {
     const { features } = useFeatures();
-    const hours = `${BUSINESS_CONFIG.workingHours.start}:00 - ${BUSINESS_CONFIG.workingHours.end}:00`;
+    const { config } = useBusinessConfig();
+    const hours = `${String(config.workingHours.start).padStart(2, "0")}:00 - ${String(config.workingHours.end).padStart(2, "0")}:00`;
     const supabase = useMemo(() => createClient(), []);
 
     const [team, setTeam] = useState<TeamMember[]>(TEAM);
@@ -421,7 +423,7 @@ export function ContactoContent() {
                                 asChild
                                 className="text-lg px-10 py-8 rounded-full border-white/15 bg-white/5 backdrop-blur-sm hover:bg-white/10 text-white"
                             >
-                                <a href={`mailto:${BUSINESS_CONFIG.email}`}>
+                                <a href={`mailto:${config.email}`}>
                                     <Mail className="mr-2 h-5 w-5" />
                                     Escribirnos
                                 </a>

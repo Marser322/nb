@@ -8,10 +8,11 @@ import { ArrowRight, Calendar, Clock, LayoutDashboard, Loader2, Star, Scissors, 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Header, Footer } from "@/components/layout";
-import { ROUTES, BUSINESS_CONFIG } from "@/lib/constants";
+import { ROUTES } from "@/lib/constants";
 import { BeforeAfterSlider } from "@/components/ui/before-after-slider";
 import { WhyChooseUsContent } from "@/components/home/WhyChooseUsContent";
 import { useFeatures } from "@/lib/features";
+import { useBusinessConfig } from "@/lib/business-config";
 import { buildWaLink } from "@/lib/whatsapp";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { useDemoAdminLogin } from "@/hooks/useDemoAdminLogin";
@@ -40,7 +41,8 @@ type StyleItem = Lookbook & { serviceId?: string | null };
 
 export default function HomePage() {
   const { features } = useFeatures();
-  const waLink = buildWaLink(BUSINESS_CONFIG.phone, "Hola, me gustaría reservar un turno.");
+  const { config } = useBusinessConfig();
+  const waLink = buildWaLink(config.phone, "Hola, me gustaría reservar un turno.");
   const { loginAsDemoAdmin, isDemoLoading } = useDemoAdminLogin();
   const supabase = useMemo(() => createClient(), []);
 
@@ -128,7 +130,7 @@ export default function HomePage() {
             <div className="luxury-rule my-7 max-w-lg" />
 
             <p className="text-lg md:text-xl text-zinc-300 max-w-2xl leading-relaxed">
-              Corte, barba y styling con precisión de taller privado. {features.reservas_online ? "Reservá online, elegí barbero y llegá directo a tu silla." : `Reservas por WhatsApp o teléfono al ${BUSINESS_CONFIG.phone}.`}
+              Corte, barba y styling con precisión de taller privado. {features.reservas_online ? "Reservá online, elegí barbero y llegá directo a tu silla." : `Reservas por WhatsApp o teléfono al ${config.phone}.`}
             </p>
 
             <div className="mt-9 flex flex-col sm:flex-row gap-4">

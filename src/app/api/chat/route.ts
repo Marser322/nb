@@ -1,8 +1,9 @@
 import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isDemoMode } from "@/lib/demo";
-import { BUSINESS_CONFIG, ROUTES, SERVICE_CATEGORY_LABELS } from "@/lib/constants";
+import { ROUTES, SERVICE_CATEGORY_LABELS } from "@/lib/constants";
 import { canCancelAppointment } from "@/lib/utils";
+import { formatWorkingDaysLabel, parseBusinessConfigRows, cancellationWindowLabel, type BusinessConfig } from "@/lib/business-config-shared";
 import { fetchAvailability, dayHasFreeSlot } from "@/lib/booking";
 import {
   STATIC_SERVICES,
@@ -94,29 +95,6 @@ type ChatKnowledgeEntry = {
   normalized_question: string;
   answer: string;
 };
-
-const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-
-/** Convierte un array de días (0=Domingo..6=Sábado) a un label legible ("Lunes a Sábado"). */
-function formatWorkingDaysLabel(days: readonly number[]): string {
-  if (days.length === 0) return "Consultá disponibilidad";
-  const sorted = [...days].sort((a, b) => a - b);
-  const isContiguous = sorted.every((d, i) => i === 0 || d === sorted[i - 1] + 1);
-  if (isContiguous) {
-    return sorted.length === 1
-      ? DAY_NAMES[sorted[0]]
-      : `${DAY_NAMES[sorted[0]]} a ${DAY_NAMES[sorted[sorted.length - 1]]}`;
-  }
-  return sorted.map((d) => DAY_NAMES[d]).join(", ");
-}
-
-/**
- * Copy de horarios derivado de BUSINESS_CONFIG (única fuente de verdad para el copy
- * de branding). La disponibilidad exacta en vivo sale del RPC get_availability.
- */
-const businessHoursCopy = `${formatWorkingDaysLabel(BUSINESS_CONFIG.workingDays)}: ${String(
-  BUSINESS_CONFIG.workingHours.start
-).padStart(2, "0")}:00 - ${String(BUSINESS_CONFIG.workingHours.end).padStart(2, "0")}:00 (la disponibilidad exacta se confirma al reservar)`;
 
 /** Limpia los fences ```json ... ``` que a veces envuelven la respuesta del LLM. */
 function cleanJsonFences(text: string): string {
@@ -319,19 +297,35 @@ export async function POST(req: Request) {
     const dbFeatures: Record<string, boolean> = {};
     let dbBranches: ChatBranch[] = [];
     let dbKnowledge: ChatKnowledgeEntry[] = [];
+    // Config de negocio vigente (contacto, horario de copy, ventana de cancelación,
+    // tolerancia). Fail-open a DEFAULTS si la query falla o no hay claves business.%.
+    let businessConfig: BusinessConfig = parseBusinessConfigRows([]);
 
     try {
-      // Fetch active features
+      // Fetch active features + config de negocio en el mismo round-trip.
       const { data: settingsData } = await supabase
         .from("app_settings")
         .select("key, value")
-        .like("key", "feature.%");
+        .or("key.like.feature.%,key.like.business.%");
 
       if (settingsData) {
         settingsData.forEach((row) => {
-          const featureName = row.key.replace("feature.", "");
-          dbFeatures[featureName] = row.value === true || row.value === "true";
+          if (row.key.startsWith("feature.")) {
+            const featureName = row.key.replace("feature.", "");
+            dbFeatures[featureName] = row.value === true || row.value === "true";
+          }
         });
+        businessConfig = parseBusinessConfigRows(settingsData);
+      }
+
+      // La ventana de cancelación de la próxima cita del usuario (calculada más
+      // arriba con el default) se recalcula acá con el valor vigente.
+      if (nextAppointment) {
+        nextAppointment.canCancel = canCancelAppointment(
+          nextAppointment.date,
+          nextAppointment.startTime,
+          businessConfig.cancellationWindowMinutes
+        );
       }
 
       // Fetch active services
@@ -414,7 +408,13 @@ export async function POST(req: Request) {
       chat_aprendizaje: dbFeatures.chat_aprendizaje !== undefined ? dbFeatures.chat_aprendizaje : true,
     };
 
-    // Static branches details matching BUSINESS_CONFIG
+    // Copy de horarios derivado de la config vigente (business.working_days/working_hours).
+    // La disponibilidad exacta en vivo sale del RPC get_availability.
+    const businessHoursCopy = `${formatWorkingDaysLabel(businessConfig.workingDays)}: ${String(
+      businessConfig.workingHours.start
+    ).padStart(2, "0")}:00 - ${String(businessConfig.workingHours.end).padStart(2, "0")}:00 (la disponibilidad exacta se confirma al reservar)`;
+
+    // Static branches details matching business config
     const staticBranches: AssistantBranchItem[] = [
       { id: 1, name: "New Brothers Central", address: "Av. Principal 1234, Centro", phone: "099 123 456", hours: businessHoursCopy },
       { id: 2, name: "New Brothers Norte", address: "Shopping Norte, Local 5", phone: "098 765 432", hours: businessHoursCopy },
@@ -575,9 +575,9 @@ INFORMACIÓN OFICIAL DE LA BARBERÍA:
 - Productos en tienda: ${activeFeatures.tienda ? JSON.stringify(products.map(p => ({ name: p.name, price: p.price, desc: p.description || "" }))) : 'La tienda online está desactivada actualmente.'}
 - Estilos (Lookbook): ${activeFeatures.lookbook ? JSON.stringify(lookbook.map(l => ({ id: l.id, name: l.title, tags: l.tags }))) : 'La galería de estilos está desactivada actualmente.'}
 - Políticas y FAQ:
-  * Cancelación de citas: Permitida hasta ${BUSINESS_CONFIG.cancellationWindow / 60} horas antes de la cita.
+  * Cancelación de citas: Permitida hasta ${cancellationWindowLabel(businessConfig.cancellationWindowMinutes)} antes de la cita.
   * Medios de pago: Efectivo en el local, transferencia bancaria y pagos online vía MercadoPago o tarjetas.
-  * Tolerancia: Agradecemos llegar 5-10 minutos antes. Pasados los 10 minutos de retraso, se puede tener que reprogramar.
+  * Tolerancia: Agradecemos llegar unos minutos antes. Pasados los ${businessConfig.lateToleranceMinutes} minutos de retraso, se puede tener que reprogramar.
 
 RESTRICCIONES IMPORTANTES:
 - Reservas online: ${activeFeatures.reservas_online ? 'ACTIVADAS. Debes empujar al usuario a reservar su turno y guiarlo a hacerlo.' : 'DESACTIVADAS por mantenimiento. Informa al usuario que la agenda online no está disponible temporalmente y no ofrezcas reservar.'}
@@ -786,7 +786,7 @@ Respondé SOLO con un objeto JSON válido, sin texto adicional ni bloques de có
           reply = `Tu próxima cita es el **${nextAppointment.date}** a las **${nextAppointment.startTime.slice(0, 5)}**: **${nextAppointment.serviceName}** con **${nextAppointment.barberName}**.\n\n` +
             (nextAppointment.canCancel
               ? "Todavía estás a tiempo de cancelarla o reprogramarla desde Mi Cuenta."
-              : `Ya pasó la ventana de ${BUSINESS_CONFIG.cancellationWindow / 60} horas para cancelar sin cargo.`);
+              : `Ya pasó la ventana de ${cancellationWindowLabel(businessConfig.cancellationWindowMinutes)} para cancelar sin cargo.`);
           dataPayload = { type: "action", label: "Ver en Mi Cuenta", url: ROUTES.MI_CUENTA };
         } else {
           reply = "No encontré ninguna cita próxima agendada a tu nombre. ¿Querés reservar un turno ahora?";
@@ -890,7 +890,7 @@ Respondé SOLO con un objeto JSON válido, sin texto adicional ni bloques de có
         normalizedUserQuery.includes("retraso") ||
         normalizedUserQuery.includes("llego tarde")
       ) {
-        reply = `**Políticas de Cancelación:** Podés cancelar o modificar tu turno de forma gratuita hasta ${BUSINESS_CONFIG.cancellationWindow / 60} horas antes de la cita acordada a través de la sección Mi Cuenta.\n\n**Tolerancia de Retraso:** Agradecemos llegar 5 o 10 minutos antes. Si te demorás más de 10 minutos, es posible que debamos reprogramar el turno para no retrasar a los demás clientes.`;
+        reply = `**Políticas de Cancelación:** Podés cancelar o modificar tu turno de forma gratuita hasta ${cancellationWindowLabel(businessConfig.cancellationWindowMinutes)} antes de la cita acordada a través de la sección Mi Cuenta.\n\n**Tolerancia de Retraso:** Agradecemos llegar unos minutos antes. Si te demorás más de ${businessConfig.lateToleranceMinutes} minutos, es posible que debamos reprogramar el turno para no retrasar a los demás clientes.`;
         dataPayload = { type: "action", label: "Gestionar mi turno", url: ROUTES.MI_CUENTA };
       }
       else if (

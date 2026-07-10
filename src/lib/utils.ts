@@ -67,13 +67,14 @@ export function generateTimeSlotsFromRange(
   return slots
 }
 
-// Verificar si una cita puede ser cancelada (2 horas antes)
-export function canCancelAppointment(appointmentDate: string, startTime: string): boolean {
+// Verificar si una cita puede ser cancelada (por defecto 2 horas antes; el
+// caller puede pasar la ventana vigente desde business-config.ts).
+export function canCancelAppointment(appointmentDate: string, startTime: string, windowMinutes: number = 120): boolean {
   const appointmentDateTime = parseISO(`${appointmentDate}T${startTime}`)
   const now = new Date()
-  const twoHoursBefore = addMinutes(appointmentDateTime, -120)
+  const windowBefore = addMinutes(appointmentDateTime, -windowMinutes)
 
-  return isBefore(now, twoHoursBefore)
+  return isBefore(now, windowBefore)
 }
 
 // Calcular hora de fin basándose en duración del servicio

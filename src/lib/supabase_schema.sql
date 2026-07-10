@@ -996,6 +996,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_client_id UUID;
   v_apt RECORD;
+  v_window_minutes INT;
 BEGIN
   SELECT id INTO v_client_id FROM profiles
   WHERE auth_user_id = auth.uid() OR id = auth.uid()
@@ -1015,7 +1016,12 @@ BEGIN
     RAISE EXCEPTION 'NO_CANCELABLE';
   END IF;
 
-  IF (v_apt.appointment_date + v_apt.start_time) - interval '2 hours'
+  v_window_minutes := COALESCE(
+    (SELECT (value #>> '{}')::int FROM app_settings WHERE key = 'business.cancellation_window_minutes'),
+    120
+  );
+
+  IF (v_apt.appointment_date + v_apt.start_time) - make_interval(mins => v_window_minutes)
      <= (now() AT TIME ZONE 'America/Montevideo') THEN
     RAISE EXCEPTION 'FUERA_DE_VENTANA';
   END IF;
@@ -1396,7 +1402,7 @@ ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public read feature flags" ON app_settings;
 CREATE POLICY "Public read feature flags" ON app_settings
-  FOR SELECT USING (key LIKE 'feature.%' OR is_admin());
+  FOR SELECT USING (key LIKE 'feature.%' OR key LIKE 'business.%' OR is_admin());
 DROP POLICY IF EXISTS "Admins manage settings" ON app_settings;
 CREATE POLICY "Admins manage settings" ON app_settings
   FOR ALL USING (is_admin()) WITH CHECK (is_admin());
@@ -3073,3 +3079,20 @@ END; $$;
 
 REVOKE EXECUTE ON FUNCTION get_uncharged_completed_appointments(UUID, DATE, DATE) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION get_uncharged_completed_appointments(UUID, DATE, DATE) TO authenticated;
+
+-- =============================================================
+-- MIGRACION 027 — Configuración de negocio editable (polish FASE 37).
+-- La policy de app_settings y cancel_appointment ya quedaron editados en
+-- su definición original más arriba; acá solo los seeds nuevos.
+-- =============================================================
+
+INSERT INTO app_settings (key, value, description) VALUES
+  ('business.phone', '"+598 99 123 456"'::jsonb, 'Teléfono de contacto (WhatsApp/llamadas) que se muestra en el sitio'),
+  ('business.email', '"contacto@nbbarber.com"'::jsonb, 'Email de contacto que se muestra en el sitio'),
+  ('business.instagram', '"@newbrothers.uy"'::jsonb, 'Usuario de Instagram que se muestra en el sitio'),
+  ('business.working_hours', '{"start": 9, "end": 20}'::jsonb, 'Horario de atención (copy del sitio). La disponibilidad real se gestiona por barbero y sucursal'),
+  ('business.working_days', '[1,2,3,4,5,6]'::jsonb, 'Días de atención (copy del sitio). 0=Domingo .. 6=Sábado'),
+  ('business.cancellation_window_minutes', '120'::jsonb, 'Minutos de anticipación mínima para que un cliente pueda cancelar su turno. Se aplica también en el servidor (cancel_appointment)'),
+  ('business.late_tolerance_minutes', '10'::jsonb, 'Minutos de tolerancia de llegada tarde antes de tener que reprogramar el turno'),
+  ('business.bank_transfer', '{"bank": "", "account": "", "holder": ""}'::jsonb, 'Datos bancarios para transferencias. Si están vacíos, el checkout ofrece coordinar por WhatsApp')
+ON CONFLICT (key) DO NOTHING;
