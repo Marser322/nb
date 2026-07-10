@@ -5,11 +5,33 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [isOverflowing, setIsOverflowing] = React.useState(false)
+
+  React.useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const table = container.querySelector<HTMLTableElement>("table")
+    const check = () =>
+      setIsOverflowing(container.scrollWidth > container.clientWidth + 1)
+    check()
+    const observer = new ResizeObserver(check)
+    observer.observe(container)
+    if (table) observer.observe(table)
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div
+      ref={containerRef}
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className="relative w-full overflow-x-auto overscroll-x-contain"
     >
+      {isOverflowing && (
+        <span className="sticky left-0 block w-fit px-2 pb-2 text-[11px] text-muted-foreground md:hidden" aria-hidden="true">
+          Deslizá para ver más
+        </span>
+      )}
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}

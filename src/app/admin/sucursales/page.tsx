@@ -12,14 +12,13 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
     DialogFooter,
 } from "@/components/ui/dialog";
 import { Building2, Plus, Loader2, MapPin, Phone, Edit2, CalendarRange, Trash2, Calendar, Clock } from "lucide-react";
@@ -28,6 +27,7 @@ import type { Branch, WorkingHours, ScheduleBlock, Barber } from "@/types/databa
 import { WorkingHoursEditor } from "@/components/admin/WorkingHoursEditor";
 import { findScheduleBlockConflicts, type ScheduleBlockConflict } from "@/lib/booking";
 import { ScheduleBlockConflictDialog } from "@/components/admin/schedule-block-conflict-dialog";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 
 export default function AdminSucursalesPage() {
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -93,8 +93,8 @@ export default function AdminSucursalesPage() {
         setIsBlocksLoading(false);
     }, [supabase]);
 
+    /* eslint-disable react-hooks/set-state-in-effect -- carga inicial desde Supabase */
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         loadBranches(false);
         loadBarbers();
     }, [loadBranches, loadBarbers]);
@@ -104,6 +104,7 @@ export default function AdminSucursalesPage() {
             loadBlocks(activeBranchForBlocks.id);
         }
     }, [activeBranchForBlocks, loadBlocks]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -273,25 +274,27 @@ export default function AdminSucursalesPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Sucursales</h1>
-                    <p className="text-muted-foreground">
-                        Gestiona las ubicaciones de tu barbería.
-                    </p>
-                </div>
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button onClick={openNewDialog}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Nueva Sucursal
-                        </Button>
-                    </DialogTrigger>
+            <AdminPageHeader
+                eyebrow="Equipo & sedes"
+                title="Sucursales"
+                icon={Building2}
+                description="Gestioná ubicaciones, horarios y bloqueos de agenda."
+                action={(
+                    <Button onClick={openNewDialog}>
+                        <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+                        Nueva sucursal
+                    </Button>
+                )}
+            />
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
                         <DialogHeader>
                             <DialogTitle>
-                                {editingBranch ? "Editar Sucursal" : "Nueva Sucursal"}
+                                {editingBranch ? "Editar sucursal" : "Nueva sucursal"}
                             </DialogTitle>
+                            <DialogDescription>
+                                Configurá los datos visibles y el horario operativo de la sede.
+                            </DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                             <div>
@@ -331,15 +334,31 @@ export default function AdminSucursalesPage() {
                                     Cancelar
                                 </Button>
                                 <Button type="submit">
-                                    {editingBranch ? "Guardar Cambios" : "Crear Sucursal"}
+                                    {editingBranch ? "Guardar cambios" : "Crear sucursal"}
                                 </Button>
                             </div>
                         </form>
                     </DialogContent>
-                </Dialog>
+            </Dialog>
+
+            <div className="grid gap-3 md:hidden">
+                {isLoading ? <div className="h-32 animate-pulse rounded-2xl bg-muted/40" /> : branches.length === 0 ? (
+                    <div className="admin-empty-state rounded-2xl p-5 text-center text-sm text-muted-foreground">No hay sucursales registradas.</div>
+                ) : branches.map((branch) => (
+                    <div key={branch.id} className="admin-mobile-record">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0"><p className="font-semibold">{branch.name}</p><p className="mt-1 flex items-start gap-2 text-xs text-muted-foreground"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{branch.address}</p>{branch.phone && <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground"><Phone className="h-3.5 w-3.5" aria-hidden="true" />{branch.phone}</p>}</div>
+                            <Switch checked={branch.is_active} onCheckedChange={() => toggleActive(branch)} aria-label={`${branch.is_active ? "Desactivar" : "Activar"} ${branch.name}`} />
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border/60 pt-3">
+                            <Button variant="outline" size="sm" onClick={() => openEditDialog(branch)}><Edit2 className="mr-2 h-4 w-4" aria-hidden="true" />Editar</Button>
+                            <Button variant="outline" size="sm" onClick={() => setActiveBranchForBlocks(branch)}><CalendarRange className="mr-2 h-4 w-4" aria-hidden="true" />Bloqueos</Button>
+                        </div>
+                    </div>
+                ))}
             </div>
 
-            <div className="rounded-md border bg-card">
+            <div className="hidden rounded-md border bg-card md:block">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -406,6 +425,7 @@ export default function AdminSucursalesPage() {
                                                 size="icon"
                                                 onClick={() => openEditDialog(branch)}
                                                 title="Editar"
+                                                aria-label={`Editar ${branch.name}`}
                                                 className="h-10 w-10 md:h-8 md:w-8"
                                             >
                                                 <Edit2 className="h-4 w-4" />
@@ -415,6 +435,7 @@ export default function AdminSucursalesPage() {
                                                 size="icon"
                                                 onClick={() => setActiveBranchForBlocks(branch)}
                                                 title="Bloqueos de Agenda"
+                                                aria-label={`Gestionar bloqueos de ${branch.name}`}
                                                 className="h-10 w-10 text-primary hover:text-primary-foreground hover:bg-primary/20 md:h-8 md:w-8"
                                             >
                                                 <CalendarRange className="h-4 w-4" />

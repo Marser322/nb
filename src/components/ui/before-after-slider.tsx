@@ -29,8 +29,6 @@ export function BeforeAfterSlider({ beforeImage, afterImage, className = "" }: B
     };
 
     const handleMouseDown = () => setIsDragging(true);
-    const handleMouseUp = () => setIsDragging(false);
-
     useEffect(() => {
         const handleGlobalMove = (e: MouseEvent | TouchEvent) => {
             if (isDragging) handleMove(e);

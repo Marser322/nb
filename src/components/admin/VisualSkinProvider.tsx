@@ -19,16 +19,11 @@ function applyVisualSkin(skin: VisualSkin) {
   document.documentElement.dataset.visualSkin = skin;
 }
 
-function readInitialSkin(): VisualSkin {
-  if (typeof document === "undefined") return DEFAULT_VISUAL_SKIN;
-  // El script anti-FOUC del <head> (VisualSkinInitScript) ya dejó el
-  // atributo seteado antes del primer paint; lo reusamos como estado
-  // inicial en vez de arrancar siempre en el default y re-aplicar.
-  return getVisualSkin(document.documentElement.dataset.visualSkin);
-}
-
 export function VisualSkinProvider({ children }: { children: React.ReactNode }) {
-  const [skin, setSkinState] = React.useState<VisualSkin>(readInitialSkin);
+  // El primer render debe coincidir con el servidor. El script anti-FOUC del
+  // layout ya aplica el atributo visual antes del paint y el layout effect
+  // sincroniza el contexto con la preferencia persistida inmediatamente después.
+  const [skin, setSkinState] = React.useState<VisualSkin>(DEFAULT_VISUAL_SKIN);
 
   React.useLayoutEffect(() => {
     let storedSkin: VisualSkin = DEFAULT_VISUAL_SKIN;

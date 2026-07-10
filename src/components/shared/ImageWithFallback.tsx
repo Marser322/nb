@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 type ImageWithFallbackProps = Omit<ImageProps, "src" | "alt"> & {
     src?: string | null;
+    fallbackSrc?: string | null;
     alt: string;
     fallbackClassName?: string;
     iconClassName?: string;
@@ -15,6 +16,7 @@ type ImageWithFallbackProps = Omit<ImageProps, "src" | "alt"> & {
 
 export function ImageWithFallback({
     src,
+    fallbackSrc,
     alt,
     className,
     fallbackClassName,
@@ -23,10 +25,14 @@ export function ImageWithFallback({
     onError,
     ...props
 }: ImageWithFallbackProps) {
-    const [failedSrc, setFailedSrc] = useState<string | null>(null);
-    const hasFailed = Boolean(src && failedSrc === src);
+    const [failedSources, setFailedSources] = useState<string[]>([]);
+    const resolvedSrc = src && !failedSources.includes(src)
+        ? src
+        : fallbackSrc && fallbackSrc !== src && !failedSources.includes(fallbackSrc)
+            ? fallbackSrc
+            : null;
 
-    if (!src || hasFailed) {
+    if (!resolvedSrc) {
         return (
             <div
                 className={cn(
@@ -43,14 +49,18 @@ export function ImageWithFallback({
 
     return (
         <Image
-            src={src}
+            key={resolvedSrc}
+            src={resolvedSrc}
             alt={alt}
             className={className}
             onError={(event) => {
-                setFailedSrc(src);
+                setFailedSources((current) =>
+                    current.includes(resolvedSrc) ? current : [...current, resolvedSrc]
+                );
                 onError?.(event);
             }}
             {...props}
+            unoptimized={props.unoptimized ?? resolvedSrc.startsWith("/")}
         />
     );
 }

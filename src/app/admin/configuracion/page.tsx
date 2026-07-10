@@ -13,6 +13,7 @@ import { invalidateFeatures } from "@/lib/features";
 import { invalidateBusinessConfig, DAY_NAMES } from "@/lib/business-config";
 import { BUSINESS_CONFIG, BANK_TRANSFER_INFO } from "@/lib/constants";
 import { AlertCircle, Loader2, Settings, ShoppingBag, Repeat, Wallet, MessageSquare, Sparkles, Camera, Calendar, Users, Bot, Building2, Save, Phone, Mail, Instagram, Clock, Timer, Landmark } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 
 interface AppSetting {
     key: string;
@@ -280,8 +281,19 @@ function BusinessSettingsCard() {
     };
 
     return (
-        <Card id="business-settings-card" className="border-border bg-card/50 backdrop-blur-md">
-            <CardHeader className="flex flex-row items-center gap-4">
+        <details open className="group rounded-2xl border border-border bg-card/70 md:rounded-none md:border-0 md:bg-transparent">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 md:hidden">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+                    <Building2 className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                    <span className="block font-semibold text-foreground">Datos del negocio</span>
+                    <span className="text-xs text-muted-foreground">Contacto, horarios y políticas</span>
+                </span>
+                <span className="text-lg text-muted-foreground transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+            </summary>
+            <Card id="business-settings-card" className="rounded-none border-0 bg-transparent shadow-none md:rounded-xl md:border md:border-border md:bg-card/50 md:shadow-sm md:backdrop-blur-md">
+            <CardHeader className="hidden flex-row items-center gap-4 md:flex">
                 <div className="rounded-xl border border-primary/20 bg-primary/10 p-3 text-primary">
                     <Building2 className="h-6 w-6" />
                 </div>
@@ -292,7 +304,7 @@ function BusinessSettingsCard() {
                     </CardDescription>
                 </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="border-t border-border/60 p-4 md:border-t-0 md:p-6">
                 {isLoading ? (
                     <div className="flex items-center justify-center py-10">
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -477,7 +489,8 @@ function BusinessSettingsCard() {
                     </div>
                 )}
             </CardContent>
-        </Card>
+            </Card>
+        </details>
     );
 }
 
@@ -572,15 +585,12 @@ export default function AdminConfiguracionPage() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                    <Settings className="h-8 w-8 text-primary" />
-                    Configuración
-                </h1>
-                <p className="text-muted-foreground">
-                    Datos del negocio y módulos activos de la barbería, editables en tiempo real.
-                </p>
-            </div>
+            <AdminPageHeader
+                eyebrow="Sistema"
+                title="Configuración"
+                icon={Settings}
+                description="Datos del negocio y módulos activos de la barbería, editables en tiempo real."
+            />
 
             {/* Advertencia de Caché */}
             <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground backdrop-blur-md">
@@ -606,7 +616,19 @@ export default function AdminConfiguracionPage() {
                         const isUpdating = updatingKeys.has(item.key);
 
                         return (
-                            <Card key={item.key} className="group relative overflow-hidden border-border bg-card/50 backdrop-blur-md transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10">
+                            <div key={item.key} className="contents">
+                            <details className="group rounded-2xl border border-border bg-card/70 md:hidden">
+                                <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
+                                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary"><Icon className="h-5 w-5" aria-hidden="true" /></span>
+                                    <span className="min-w-0 flex-1"><span className="block font-semibold text-foreground">{title}</span><span className={item.value ? "text-xs font-semibold text-primary" : "text-xs text-muted-foreground"}>{item.value ? "Activo" : "Inactivo"}</span></span>
+                                    <span className="text-lg text-muted-foreground transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+                                </summary>
+                                <div className="border-t border-border/60 p-4">
+                                    <p className="text-sm leading-relaxed text-muted-foreground">{item.description}</p>
+                                    <div className="mt-4 flex items-center justify-between gap-3"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Estado del módulo</span><div className="flex items-center gap-2">{isUpdating && <Loader2 className="h-4 w-4 animate-spin text-primary" />}<Switch checked={item.value} onCheckedChange={() => handleToggle(item.key, item.value)} disabled={isUpdating} aria-label={`${item.value ? "Desactivar" : "Activar"} ${title}`} /></div></div>
+                                </div>
+                            </details>
+                            <Card className="group relative hidden overflow-hidden border-border bg-card/50 transition-[border-color,box-shadow,transform] duration-200 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 md:flex">
                                 <div className="grid h-full sm:grid-cols-[170px_1fr]">
                                     <FeatureModuleArtwork imageSrc={imageSrc} imageAlt={`Miniatura del módulo ${title}`} Icon={Icon} />
                                     <div className="flex flex-col">
@@ -638,6 +660,7 @@ export default function AdminConfiguracionPage() {
                                                         checked={item.value}
                                                         onCheckedChange={() => handleToggle(item.key, item.value)}
                                                         disabled={isUpdating}
+                                                        aria-label={`${item.value ? "Desactivar" : "Activar"} ${title}`}
                                                         className="data-[state=checked]:bg-primary"
                                                     />
                                                 </div>
@@ -646,6 +669,7 @@ export default function AdminConfiguracionPage() {
                                     </div>
                                 </div>
                             </Card>
+                            </div>
                         );
                     })}
                 </div>

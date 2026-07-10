@@ -234,7 +234,7 @@ export function SendWhatsappDialog({
                             disabled={isLoadingTemplates}
                         >
                             <SelectTrigger id="template" className="bg-background/50 border-input/50 focus:ring-0">
-                                <SelectValue placeholder="Seleccioná una plantilla..." />
+                                <SelectValue placeholder="Seleccioná una plantilla…" />
                             </SelectTrigger>
                             <SelectContent className="bg-card border-border text-foreground">
                                 <SelectItem value="custom">Mensaje Personalizado (Vacío)</SelectItem>
@@ -258,7 +258,7 @@ export function SendWhatsappDialog({
                         <Label htmlFor="message" className="text-foreground/80">Mensaje</Label>
                         <Textarea
                             id="message"
-                            placeholder="Escribí el mensaje..."
+                            placeholder="Escribí el mensaje…"
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
                             className="min-h-[120px] bg-background/50 border-input/50 focus:border-primary/50"

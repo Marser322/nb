@@ -38,14 +38,8 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils";
+import { COMPENSATION_MODEL_LABELS } from "@/lib/constants";
 import {
-    COMPENSATION_MODEL_LABELS,
-    PAYMENT_METHOD_LABELS,
-} from "@/lib/constants";
-import {
-    DollarSign,
-    Scissors,
-    Calendar as CalendarIcon,
     Loader2,
     TrendingUp,
     AlertTriangle,
@@ -56,6 +50,7 @@ import {
 } from "lucide-react";
 import type { Barber, BarberSettlement, SettlementPreview, UnchargedAppointment, Appointment, Service, Profile } from "@/types/database.types";
 import ChargeDialog from "@/components/shared/ChargeDialog";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 
 // ChargeDialog reusado tal cual: espera un Appointment con relaciones expandidas.
 // Reconstruimos un objeto compatible a partir de la fila de la RPC de sin-cobrar
@@ -265,7 +260,7 @@ export default function AdminLiquidacionesPage() {
         const toStr = format(dateRange.to, "yyyy-MM-dd");
 
         try {
-            const { data, error } = await supabase.rpc("close_barber_settlement", {
+            const { error } = await supabase.rpc("close_barber_settlement", {
                 p_barber_id: selectedBarberId,
                 p_from: fromStr,
                 p_to: toStr,
@@ -358,16 +353,13 @@ export default function AdminLiquidacionesPage() {
     }
 
     return (
-        <div className="space-y-8 text-foreground">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Liquidaciones</h1>
-                    <p className="text-muted-foreground mt-1">
-                        Gestioná el pago de comisiones y controlá el alquiler de sillones.
-                    </p>
-                </div>
-                <div className="flex gap-2 flex-wrap">
+        <div className="space-y-6 text-foreground">
+            <AdminPageHeader
+                eyebrow="Equipo & finanzas"
+                title="Liquidaciones"
+                icon={TrendingUp}
+                description="Gestioná comisiones, períodos cerrados y alquileres de sillón."
+                action={(
                     <Button
                         onClick={() => {
                             setRentaBarberId(selectedBarberId !== "all" ? selectedBarberId : "");
@@ -378,8 +370,8 @@ export default function AdminLiquidacionesPage() {
                         <Plus className="h-4 w-4 mr-2" />
                         Registrar Renta Cobrada
                     </Button>
-                </div>
-            </div>
+                )}
+            />
 
             {/* Filtros y Preview */}
             <div className="grid gap-6 lg:grid-cols-3">

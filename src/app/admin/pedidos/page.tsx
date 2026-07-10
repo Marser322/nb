@@ -41,6 +41,7 @@ import {
 } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import type { Branch, OrderStatus } from "@/types/database.types";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 
 type AdminOrder = {
     id: string;
@@ -227,12 +228,12 @@ export default function AdminPedidosPage() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
-                <p className="text-muted-foreground">
-                    Gestioná pedidos online, ventas locales y cambios de estado.
-                </p>
-            </div>
+            <AdminPageHeader
+                eyebrow="Ventas"
+                title="Pedidos"
+                icon={ClipboardList}
+                description="Gestioná pedidos online, ventas locales y cambios de estado."
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 rounded-lg border bg-card p-4">
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -289,7 +290,23 @@ export default function AdminPedidosPage() {
                 />
             </div>
 
-            <div className="rounded-md border bg-card">
+            <div className="grid gap-3 md:hidden">
+                {isLoading ? <div className="h-32 animate-pulse rounded-2xl bg-muted/40" /> : orders.length === 0 ? (
+                    <div className="admin-empty-state rounded-2xl p-5 text-center text-sm text-muted-foreground">No hay pedidos para los filtros elegidos.</div>
+                ) : orders.map((order) => {
+                    const itemCount = order.items?.reduce((total, item) => total + item.quantity, 0) || 0;
+                    const actions = getActions(order);
+                    return (
+                        <div key={order.id} className="admin-mobile-record">
+                            <div className="flex items-start justify-between gap-3"><div><p className="font-mono text-xs text-muted-foreground">#{order.id.slice(0, 8).toUpperCase()}</p><p className="mt-1 font-semibold">{order.client?.full_name || order.contact_name || "Venta sin cliente"}</p><p className="mt-1 text-xs text-muted-foreground">{format(parseISO(order.created_at), "d MMM yyyy", { locale: es })} · {order.branch?.name || "Sin sucursal"}</p></div><Badge variant="outline" className={ORDER_STATUS_COLORS[order.status] || ""}>{ORDER_STATUS_LABELS[order.status] || order.status}</Badge></div>
+                            <div className="mt-4 grid grid-cols-3 gap-2 border-y border-border/60 py-3 text-xs"><div><span className="block text-muted-foreground">Tipo</span><strong>{ORDER_TYPE_LABELS[order.order_type] || order.order_type}</strong></div><div><span className="block text-muted-foreground">Items</span><strong>{itemCount}</strong></div><div><span className="block text-muted-foreground">Total</span><strong className="text-primary">{formatPrice(order.total)}</strong></div></div>
+                            <div className="mt-3 flex flex-wrap justify-end gap-2"><Button variant="outline" size="sm" onClick={() => setSelectedOrder(order)}><Eye className="mr-2 h-4 w-4" aria-hidden="true" />Detalle</Button>{actions.map((action) => <Button key={action.status} variant={action.status === "cancelled" ? "ghost" : "outline"} size="sm" disabled={updatingOrderId === order.id} onClick={() => updateOrderStatus(order.id, action.status)} className={action.status === "cancelled" ? "text-destructive hover:text-destructive" : ""}>{action.label}</Button>)}</div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="hidden rounded-md border bg-card md:block">
                 <div className="overflow-x-auto">
                     <Table>
                         <TableHeader>
@@ -357,7 +374,7 @@ export default function AdminPedidosPage() {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex justify-end gap-2">
-                                                    <Button variant="outline" size="icon" onClick={() => setSelectedOrder(order)}>
+                                                    <Button variant="outline" size="icon" onClick={() => setSelectedOrder(order)} aria-label={`Ver pedido ${order.id.slice(0, 8)}`}>
                                                         <Eye className="h-4 w-4" />
                                                     </Button>
                                                     {actions.map((action) => (

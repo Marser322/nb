@@ -17,8 +17,6 @@ import {
     ShoppingBag,
     TrendingUp,
     Calendar as CalendarIcon,
-    Plus,
-    Minus,
     CreditCard,
     Banknote,
     ArrowDownCircle,
@@ -60,11 +58,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
     PAYMENT_METHOD_LABELS,
-    CASH_MOVEMENT_TYPE_LABELS,
     CASH_CATEGORY_LABELS,
     normalizePaymentMethod,
 } from "@/lib/constants";
 import type { CashClosure } from "@/types/database.types";
+import { AdminPageHeader, AdminToolbar } from "@/components/admin/admin-ui";
 
 const EXPENSE_CATEGORIES = ['supply', 'salary', 'rent', 'adjustment', 'other'] as const;
 
@@ -567,12 +565,15 @@ export default function AdminCajaPage() {
     }
 
     return (
-        <div className="space-y-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Caja del Día</h1>
-                    <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                        <CalendarIcon className="h-4 w-4" />
+        <div className="space-y-6">
+            <AdminPageHeader
+                eyebrow="Operación financiera"
+                title="Caja del Día"
+                icon={DollarSign}
+                description="Controlá ingresos, egresos y cierres del período seleccionado."
+                meta={(
+                    <span className="flex items-center gap-2">
+                        <CalendarIcon className="h-4 w-4" aria-hidden="true" />
                         <span>
                             {date?.from ? (
                                 date.to && date.to.getTime() !== date.from.getTime() ? (
@@ -587,15 +588,14 @@ export default function AdminCajaPage() {
                                 "Seleccionar fecha"
                             )}
                         </span>
-                    </div>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                    <CalendarDateRangePicker date={date} setDate={setDate} />
-                </div>
-            </div>
+                    </span>
+                )}
+                action={<CalendarDateRangePicker date={date} setDate={setDate} />}
+            />
 
             {/* Acciones rápidas */}
-            <div id="admin-btn-register-movement" className="flex gap-2 flex-wrap items-center">
+            <div id="admin-btn-register-movement">
+            <AdminToolbar className="[&>button]:w-full sm:[&>button]:w-auto">
                 <Button onClick={() => openMovementDialog('income')} className="bg-green-600 hover:bg-green-700">
                     <ArrowDownCircle className="h-4 w-4 mr-2" />
                     Registrar Ingreso
@@ -615,6 +615,7 @@ export default function AdminCajaPage() {
                         Elegí un único día para poder cerrar la caja.
                     </span>
                 )}
+            </AdminToolbar>
             </div>
 
             {/* Cierre de caja del día ya realizado: resumen en vez del botón */}
@@ -657,8 +658,8 @@ export default function AdminCajaPage() {
             )}
 
             {/* Tarjetas de Resumen */}
-            <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
-                <Card className="bg-gradient-to-br from-green-500/10 to-green-500/5 border-green-500/20">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-5">
+                <Card className="col-span-2 border-green-500/20 bg-gradient-to-br from-green-500/10 to-green-500/5 md:col-span-1">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">
                             Total del Periodo

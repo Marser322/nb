@@ -92,7 +92,7 @@ export function Header() {
 
     return (
         <header
-            className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled
+            className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-300 ${isScrolled
                 ? "bg-background/80 backdrop-blur-lg border-b border-border"
                 : "bg-transparent"
                 }`}
@@ -102,11 +102,11 @@ export function Header() {
                     {/* Logo */}
                     <Link href="/" className="flex items-center gap-3">
                         <Image
-                            src="/logo.png"
+                            src="/logo-transparent-512.png"
                             alt="New Brothers Logo"
                             width={48}
                             height={48}
-                            className="h-10 w-10 md:h-12 md:w-12 rounded-full border border-border object-cover"
+                            className="h-10 w-10 rounded-full border border-border object-contain md:h-12 md:w-12"
                             priority
                         />
                         <span className="font-display text-xl md:text-2xl font-bold uppercase tracking-normal">

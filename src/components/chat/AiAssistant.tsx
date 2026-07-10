@@ -2,13 +2,14 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, X, Send, Scissors, Sparkles, Calendar, MapPin, DollarSign, ArrowRight, Wallet, Settings, Package, Clock } from "lucide-react";
+import { X, Send, Scissors, Sparkles, Calendar, MapPin, DollarSign, ArrowRight, Wallet, Settings, Package, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePathname } from "next/navigation";
 import { useFeatures } from "@/lib/features";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import { useAssistiveHub } from "@/components/assistive/AssistiveHubProvider";
 
 type ServiceItem = {
   id: string;
@@ -64,7 +65,7 @@ interface AiAssistantProps {
 export function AiAssistant({ mode: propMode }: AiAssistantProps) {
   const pathname = usePathname();
   const { features } = useFeatures();
-  const [isOpen, setIsOpen] = useState(false);
+  const { isAssistantOpen: isOpen, setAssistantOpen: setIsOpen } = useAssistiveHub();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Determine mode and visibility
@@ -228,25 +229,6 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
 
   return (
     <>
-      {/* Floating Action Button - Positioned bottom-left to avoid colliding with HelpFab (bottom-right) */}
-      <div
-        className="nb-assistive-fab-wrap-chat fixed left-4 z-50 sm:left-6"
-        style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
-      >
-        <Button
-          onClick={() => setIsOpen(!isOpen)}
-          variant="ghost"
-          size="icon"
-          aria-label={isOpen ? "Cerrar asistente" : "Abrir asistente"}
-          className="nb-assistive-fab nb-assistive-fab-chat h-14 w-14 rounded-full"
-        >
-          {isOpen ? <X className="h-6 w-6 animate-in spin-in duration-300" aria-hidden="true" /> : <MessageSquare className="h-6 w-6 animate-in zoom-in duration-300" aria-hidden="true" />}
-          <span className="nb-assistive-badge absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold tracking-[0.08em]">
-            {resolvedMode === 'admin' ? 'CRM' : 'AI'}
-          </span>
-        </Button>
-      </div>
-
       {/* Chat Drawer/Panel */}
       <AnimatePresence>
         {isOpen && (
@@ -256,7 +238,7 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.3 }}
             className="nb-assistive-panel fixed left-3 right-3 z-50 flex h-[70dvh] max-h-[calc(100dvh-8rem)] w-auto flex-col overflow-hidden overscroll-contain rounded-3xl border backdrop-blur-2xl sm:left-6 sm:right-auto sm:max-h-[600px] sm:w-[400px]"
-            style={{ bottom: "calc(6rem + env(safe-area-inset-bottom))" }}
+            style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}
           >
             {/* Header */}
             <div className="nb-assistive-panel-header flex items-center justify-between border-b p-4">
@@ -291,7 +273,7 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                   key={action.label}
                   variant="outline"
                   onClick={() => handleSendMessage(action.label)}
-                  className="nb-assistive-action flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs transition-all md:h-8"
+                  className="nb-assistive-action flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs transition-[background-color,border-color,color] md:h-8"
                 >
                   <action.icon className="h-3 w-3" aria-hidden="true" />
                   {action.label}
@@ -334,7 +316,7 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                               <Link
                                 key={service.id}
                                 href={`/reservar?serviceId=${service.id}`}
-                                className="flex justify-between items-center bg-card p-2 rounded-lg border border-border hover:border-primary/50 hover:bg-accent transition-all text-xs group"
+                                className="group flex items-center justify-between rounded-lg border border-border bg-card p-2 text-xs transition-[background-color,border-color] hover:border-primary/50 hover:bg-accent"
                               >
                                 <div>
                                   <p className="nb-assistive-hover-title font-bold text-foreground">{service.name}</p>
@@ -342,7 +324,7 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                                 </div>
                                 <div className="flex items-center gap-1.5 font-mono">
                                   <span className="font-bold text-foreground">${service.price}</span>
-                                  <ArrowRight className="nb-assistive-link-accent h-3 w-3 opacity-0 transition-all group-hover:opacity-100" />
+                                  <ArrowRight className="nb-assistive-link-accent h-3 w-3 opacity-0 transition-[opacity,transform] group-hover:opacity-100" />
                                 </div>
                               </Link>
                             ))}
@@ -356,7 +338,7 @@ export function AiAssistant({ mode: propMode }: AiAssistantProps) {
                               <Link
                                 key={style.id}
                                 href={`/reservar?styleId=${style.id}&serviceId=${style.serviceId}`}
-                                className="bg-card p-2 rounded-lg border border-border hover:border-primary/50 hover:bg-accent transition-all text-left text-xs block group"
+                                className="group block rounded-lg border border-border bg-card p-2 text-left text-xs transition-[background-color,border-color] hover:border-primary/50 hover:bg-accent"
                               >
                                 <p className="nb-assistive-hover-title line-clamp-1 font-bold text-foreground">{style.name}</p>
                                 <p className="nb-assistive-link-accent mt-1 flex items-center gap-1 text-[10px]">

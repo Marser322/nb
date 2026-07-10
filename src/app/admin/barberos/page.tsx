@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { format, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
@@ -22,9 +21,9 @@ import { Badge } from "@/components/ui/badge";
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
     DialogFooter,
 } from "@/components/ui/dialog";
 import { Users, Plus, Loader2, Edit2, CalendarRange, Trash2, Calendar, Clock, DollarSign, Search, ShieldCheck, Copy, KeyRound } from "lucide-react";
@@ -50,6 +49,9 @@ import {
 import { usePermissions } from "@/lib/usePermissions";
 import { findScheduleBlockConflicts, type ScheduleBlockConflict } from "@/lib/booking";
 import { ScheduleBlockConflictDialog } from "@/components/admin/schedule-block-conflict-dialog";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
+import { getBarberAvatarFallback } from "@/lib/static-data";
 
 type StaffRole = "barbero" | "gerente";
 
@@ -176,9 +178,6 @@ export default function AdminBarberosPage() {
     }, [allBlocks]);
 
     const supabase = useMemo(() => createClient(), []);
-
-    const canRenderAvatar = (url: string | null) =>
-        !!url && (url.startsWith("/") || url.includes(".supabase.co"));
 
     const loadBarbers = useCallback(async (showLoading = true) => {
         if (showLoading) setIsLoading(true);
@@ -567,25 +566,27 @@ export default function AdminBarberosPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Barberos</h1>
-                    <p className="text-muted-foreground">
-                        Gestiona el equipo de profesionales.
-                    </p>
-                </div>
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button id="admin-btn-new-barber" onClick={openNewDialog}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Nuevo Miembro del Equipo
-                        </Button>
-                    </DialogTrigger>
+            <AdminPageHeader
+                eyebrow="Equipo"
+                title="Barberos"
+                icon={Users}
+                description="Administrá profesionales, accesos, horarios y compensaciones."
+                action={(
+                    <Button id="admin-btn-new-barber" onClick={openNewDialog}>
+                        <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+                        Nuevo miembro
+                    </Button>
+                )}
+            />
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
                         <DialogHeader>
                             <DialogTitle>
-                                {editingBarber ? "Editar Barbero" : "Nuevo Miembro del Equipo"}
+                                {editingBarber ? "Editar miembro" : "Nuevo miembro del equipo"}
                             </DialogTitle>
+                            <DialogDescription>
+                                Gestioná su perfil, acceso, sucursal y disponibilidad de agenda.
+                            </DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                             <div>
@@ -668,7 +669,7 @@ export default function AdminBarberosPage() {
                             <div>
                                 <label className="text-sm font-medium mb-2 block">Biografía</label>
                                 <Textarea
-                                    placeholder="Especialista en cortes modernos..."
+                                    placeholder="Especialista en cortes modernos…"
                                     value={formData.bio}
                                     onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                                     rows={3}
@@ -771,21 +772,51 @@ export default function AdminBarberosPage() {
                             </div>
                         </form>
                     </DialogContent>
-                </Dialog>
-            </div>
+            </Dialog>
 
             {/* Buscador */}
             <div className="flex items-center gap-4 bg-card/50 p-4 rounded-lg border border-border/50 mb-6">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <Input
-                    placeholder="Buscar barbero por nombre..."
+                    placeholder="Buscar barbero por nombre…"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="max-w-sm border-none bg-transparent focus-visible:ring-0 px-0"
                 />
             </div>
 
-            <div className="rounded-md border bg-card">
+            <div className="grid gap-3 md:hidden">
+                {isLoading ? <div className="h-32 animate-pulse rounded-2xl bg-muted/40" /> : filteredBarbers.length === 0 ? (
+                    <div className="admin-empty-state rounded-2xl p-5 text-center text-sm text-muted-foreground">No se encontraron barberos.</div>
+                ) : filteredBarbers.map((barber) => (
+                    <div key={barber.id} className="admin-mobile-record">
+                        <div className="flex gap-3">
+                            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted">
+                                <ImageWithFallback
+                                    src={barber.avatar_url}
+                                    fallbackSrc={getBarberAvatarFallback(barber)}
+                                    alt={barber.name}
+                                    fill
+                                    sizes="64px"
+                                    className="object-cover"
+                                    fallbackClassName="h-full w-full"
+                                />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate font-semibold">{barber.name}</p><p className="mt-1 text-xs text-muted-foreground">{branches.find((branch) => branch.id === barber.branch_id)?.name || "Sin sucursal"}</p></div><Switch checked={barber.is_active} onCheckedChange={() => toggleActive(barber)} aria-label={`${barber.is_active ? "Desactivar" : "Activar"} ${barber.name}`} /></div>
+                                <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{barber.bio || "Sin biografía"}</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 grid grid-cols-3 gap-1 border-t border-border/60 pt-3">
+                            <Button variant="ghost" size="sm" onClick={() => openEditDialog(barber)}><Edit2 className="mr-1.5 h-4 w-4" aria-hidden="true" />Editar</Button>
+                            <Button variant="ghost" size="sm" onClick={() => setActiveBarberForBlocks(barber)}><CalendarRange className="mr-1.5 h-4 w-4" aria-hidden="true" />Agenda</Button>
+                            <Button variant="ghost" size="sm" onClick={() => setActiveBarberForCompensation(barber)}><DollarSign className="mr-1.5 h-4 w-4" aria-hidden="true" />Pago</Button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="hidden rounded-md border bg-card md:block">
                 <div className="overflow-x-auto">
                     <Table>
                         <TableHeader>
@@ -851,17 +882,15 @@ export default function AdminBarberosPage() {
                                     <TableCell>
                                         <div className="flex items-center gap-3">
                                             <div className="relative h-10 w-10 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                                                {canRenderAvatar(barber.avatar_url) ? (
-                                                    <Image
-                                                        src={barber.avatar_url!}
-                                                        alt={barber.name}
-                                                        fill
-                                                        sizes="40px"
-                                                        className="object-cover"
-                                                    />
-                                                ) : (
-                                                    <Users className="h-5 w-5 text-muted-foreground" />
-                                                )}
+                                                <ImageWithFallback
+                                                    src={barber.avatar_url}
+                                                    fallbackSrc={getBarberAvatarFallback(barber)}
+                                                    alt={barber.name}
+                                                    fill
+                                                    sizes="40px"
+                                                    className="object-cover"
+                                                    fallbackClassName="h-full w-full"
+                                                />
                                             </div>
                                             <span className="font-medium">{barber.name}</span>
                                         </div>
@@ -909,6 +938,7 @@ export default function AdminBarberosPage() {
                                                 size="icon"
                                                 onClick={() => openEditDialog(barber)}
                                                 title="Editar"
+                                                aria-label={`Editar ${barber.name}`}
                                                 className="h-10 w-10 md:h-8 md:w-8"
                                             >
                                                 <Edit2 className="h-4 w-4" />
@@ -918,6 +948,7 @@ export default function AdminBarberosPage() {
                                                 size="icon"
                                                 onClick={() => setActiveBarberForBlocks(barber)}
                                                 title="Bloqueos de Agenda"
+                                                aria-label={`Gestionar agenda de ${barber.name}`}
                                                 className="h-10 w-10 text-primary hover:text-primary-foreground hover:bg-primary/20 md:h-8 md:w-8"
                                             >
                                                 <CalendarRange className="h-4 w-4" />
@@ -927,6 +958,7 @@ export default function AdminBarberosPage() {
                                                 size="icon"
                                                 onClick={() => setActiveBarberForCompensation(barber)}
                                                 title="Compensación"
+                                                aria-label={`Gestionar compensación de ${barber.name}`}
                                                 className="h-10 w-10 text-primary hover:text-primary hover:bg-primary/10 md:h-8 md:w-8"
                                             >
                                                 <DollarSign className="h-4 w-4" />

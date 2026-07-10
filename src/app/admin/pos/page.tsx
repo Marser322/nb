@@ -24,6 +24,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getPaymentMethodLabel } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import type { Barber, Branch, Product, ProductStock } from "@/types/database.types";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 
 type PosPaymentMethod = "efectivo" | "transferencia" | "mercadopago";
 
@@ -117,6 +118,7 @@ export default function AdminPosPage() {
     );
 
     const total = cart.reduce((sum, line) => sum + line.product.price * line.quantity, 0);
+    const cartItemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
 
     // Cualquier cambio manual al carrito invalida las marcas de stock
     // insuficiente de un intento de cobro anterior: se revalida de nuevo al
@@ -260,13 +262,23 @@ export default function AdminPosPage() {
     }
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight">Punto de venta</h1>
-                <p className="text-muted-foreground">
-                    Registrá ventas de mostrador, descontá stock por sucursal y enviá el ingreso a caja.
-                </p>
-            </div>
+        <div className="space-y-6 pb-20 xl:pb-0">
+            <AdminPageHeader
+                eyebrow="Mostrador"
+                title="Punto de venta"
+                icon={ShoppingCart}
+                description="Registrá ventas, descontá stock por sucursal y enviá el ingreso a caja."
+            />
+
+            <Button
+                type="button"
+                onClick={() => document.getElementById("pos-cart")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                className="fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40 justify-between rounded-full shadow-xl xl:hidden"
+                aria-label={`Ver carrito con ${cartItemCount} productos por ${formatPrice(total)}`}
+            >
+                <span className="flex items-center gap-2"><ShoppingCart className="h-4 w-4" aria-hidden="true" />Carrito ({cartItemCount})</span>
+                <strong>{formatPrice(total)}</strong>
+            </Button>
 
             <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
                 <div className="space-y-4">
@@ -292,7 +304,7 @@ export default function AdminPosPage() {
                         <div className="flex items-center gap-3">
                             <Search className="h-4 w-4 text-muted-foreground shrink-0" />
                             <Input
-                                placeholder="Buscar producto..."
+                                placeholder="Buscar producto…"
                                 value={searchQuery}
                                 onChange={(event) => setSearchQuery(event.target.value)}
                                 className="border-none bg-transparent focus-visible:ring-0 px-0 text-base md:text-sm"
@@ -305,13 +317,14 @@ export default function AdminPosPage() {
                                 onClick={refreshStock}
                                 disabled={isRefreshingStock}
                                 title="Actualizar stock"
+                                aria-label="Actualizar stock"
                             >
                                 <RefreshCw className={`h-4 w-4 ${isRefreshingStock ? "animate-spin" : ""}`} />
                             </Button>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 gap-3 2xl:grid-cols-3">
                         {isLoading ? (
                             [...Array(6)].map((_, index) => (
                                 <Card key={index} className="animate-pulse">
@@ -323,8 +336,8 @@ export default function AdminPosPage() {
                                 </Card>
                             ))
                         ) : filteredProducts.length === 0 ? (
-                            <Card className="md:col-span-2 2xl:col-span-3">
-                                <CardContent className="py-12 text-center text-muted-foreground">
+                            <Card className="col-span-2 2xl:col-span-3">
+                                <CardContent className="py-6 text-center text-muted-foreground">
                                     <Package className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
                                     No hay productos para la búsqueda.
                                 </CardContent>
@@ -337,13 +350,13 @@ export default function AdminPosPage() {
 
                                 return (
                                     <Card key={product.id} className="overflow-hidden">
-                                        <div className="relative h-36 bg-muted">
+                                        <div className="relative h-28 bg-muted md:h-36">
                                             {product.image_url && (product.image_url.startsWith("/") || product.image_url.includes(".supabase.co")) ? (
                                                 <Image
                                                     src={product.image_url}
                                                     alt={product.name}
                                                     fill
-                                                    sizes="(max-width: 768px) 100vw, 33vw"
+                                                    sizes="(max-width: 768px) 50vw, 33vw"
                                                     className="object-cover"
                                                 />
                                             ) : (
@@ -352,10 +365,10 @@ export default function AdminPosPage() {
                                                 </div>
                                             )}
                                         </div>
-                                        <CardContent className="p-4 space-y-4">
+                                        <CardContent className="space-y-3 p-3 md:p-4">
                                             <div>
                                                 <p className="font-semibold text-foreground line-clamp-1">{product.name}</p>
-                                                <div className="mt-2 flex items-center justify-between gap-3">
+                                                <div className="mt-2 flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between md:gap-3">
                                                     <span className="font-bold text-primary">{formatPrice(product.price)}</span>
                                                     <Badge variant="outline">
                                                         Stock {remaining}
@@ -378,7 +391,7 @@ export default function AdminPosPage() {
                     </div>
                 </div>
 
-                <Card className="h-fit xl:sticky xl:top-24">
+                <Card id="pos-cart" className="h-fit scroll-mt-24 xl:sticky xl:top-24">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <ShoppingCart className="h-5 w-5 text-primary" />

@@ -311,14 +311,39 @@ const BARBER_AVATARS: Record<string, string> = {
   carlos: "/images/barbers/carlos.jpg",
   miguel: "/images/barbers/miguel.jpg",
   diego: "/images/barbers/diego.jpg",
-  martin: "/images/barbers/carlos.jpg",
-  lucas: "/images/barbers/miguel.jpg",
-  facundo: "/images/barbers/diego.jpg",
+  martin: "/images/barbers/martin.jpg",
+  lucas: "/images/barbers/lucas.jpg",
+  facundo: "/images/barbers/facundo.jpg",
 };
 
-export function getBarberAvatarUrl(barber: Pick<Barber, "name" | "avatar_url">): string | null {
-  if (barber.avatar_url) return barber.avatar_url;
+const SERVICE_CATEGORY_IMAGES: Record<string, string> = {
+  corte: "/images/hero/maquina-clippers.jpg",
+  barba: "/images/hero/detalle-barba.jpg",
+  combo: "/images/hero/detalle-corte.jpg",
+  tratamiento: "/images/features/producto-textura.jpg",
+  color: "/images/hero/estilo-moderno.jpg",
+  otro: "/images/fallbacks/servicio-generico.webp",
+};
 
+const PRODUCT_CATEGORY_IMAGES: Record<string, string> = {
+  afeitado: "/images/tienda/cat-afeitado.webp",
+  barba: "/images/tienda/cat-barba.webp",
+  cabello: "/images/tienda/cat-cabello.webp",
+  styling: "/images/tienda/cat-styling.webp",
+  general: "/images/tienda/cat-styling.webp",
+};
+
+export function getServiceImageFallback(service?: Pick<Service, "category"> | null): string {
+  return SERVICE_CATEGORY_IMAGES[service?.category || "otro"]
+    ?? "/images/fallbacks/servicio-generico.webp";
+}
+
+export function getProductImageFallback(product?: Pick<Product, "category"> | null): string {
+  const category = product?.category?.trim().toLowerCase() || "general";
+  return PRODUCT_CATEGORY_IMAGES[category] ?? PRODUCT_CATEGORY_IMAGES.general;
+}
+
+export function getBarberAvatarFallback(barber: Pick<Barber, "name">): string | null {
   const firstName = barber.name
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -326,6 +351,10 @@ export function getBarberAvatarUrl(barber: Pick<Barber, "name" | "avatar_url">):
     .toLowerCase();
 
   return BARBER_AVATARS[firstName] ?? null;
+}
+
+export function getBarberAvatarUrl(barber: Pick<Barber, "name" | "avatar_url">): string | null {
+  return barber.avatar_url || getBarberAvatarFallback(barber);
 }
 
 export function getServiceIdForStyle(styleId: string): string | null {

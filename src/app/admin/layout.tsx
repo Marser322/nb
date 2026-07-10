@@ -19,13 +19,14 @@ import {
     Sparkles,
     Settings,
     Bot,
+    HelpCircle,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useFeatures } from "@/lib/features";
 import type { Permission } from "@/lib/permissions";
 import { usePermissions } from "@/lib/usePermissions";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import { isDemoMode } from "@/lib/demo";
@@ -33,11 +34,35 @@ import { logoutAdmin } from "./actions";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { VisualSkinSelector } from "@/components/admin/VisualSkinSelector";
 import { VisualSkinProvider } from "@/components/admin/VisualSkinProvider";
+import { useAssistiveHub } from "@/components/assistive/AssistiveHubProvider";
+import { useTourStore } from "@/lib/store/tour-store";
+import { APP_TOURS } from "@/lib/tours-data";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+type SidebarGroup = "operacion" | "clientes" | "catalogo" | "equipo" | "sistema";
+
+const SIDEBAR_GROUP_LABELS: Record<SidebarGroup, string> = {
+    operacion: "Operación",
+    clientes: "Clientes",
+    catalogo: "Catálogo",
+    equipo: "Equipo",
+    sistema: "Sistema",
+};
+
+const SIDEBAR_GROUP_ORDER: SidebarGroup[] = ["operacion", "clientes", "catalogo", "equipo", "sistema"];
 
 const sidebarLinks: {
     href: string;
     label: string;
     icon: typeof LayoutDashboard;
+    group: SidebarGroup;
     /** Si se define, el link solo se muestra a quien tenga este permiso (admin siempre lo tiene). */
     permission?: Permission;
 }[] = [
@@ -45,83 +70,97 @@ const sidebarLinks: {
         href: ROUTES.ADMIN_DASHBOARD,
         label: "Dashboard",
         icon: LayoutDashboard,
+        group: "operacion",
     },
     {
         href: ROUTES.ADMIN_CITAS,
         label: "Citas",
         icon: Calendar,
+        group: "operacion",
         permission: "agenda.all",
     },
     {
         href: ROUTES.ADMIN_CLIENTES,
         label: "Clientes",
         icon: Contact,
+        group: "clientes",
         permission: "clients.view",
     },
     {
         href: ROUTES.ADMIN_MENSAJES,
         label: "Mensajes",
         icon: MessageSquare,
+        group: "clientes",
         permission: "clients.view",
     },
     {
         href: ROUTES.ADMIN_PRODUCTOS,
         label: "Productos",
         icon: Package,
+        group: "catalogo",
         permission: "products.manage",
     },
     {
         href: ROUTES.ADMIN_PEDIDOS,
         label: "Pedidos",
         icon: ClipboardList,
+        group: "catalogo",
         permission: "products.manage",
     },
     {
         href: ROUTES.ADMIN_POS,
         label: "Punto de venta",
         icon: ShoppingCart,
+        group: "operacion",
         permission: "cash.operate",
     },
     {
         href: ROUTES.ADMIN_CAJA,
         label: "Caja",
         icon: Wallet,
+        group: "operacion",
         permission: "cash.operate",
     },
     {
         href: ROUTES.ADMIN_LIQUIDACIONES,
         label: "Liquidaciones",
         icon: Wallet,
+        group: "operacion",
         permission: "finances.view",
     },
     {
         href: ROUTES.ADMIN_SUCURSALES,
         label: "Sucursales",
         icon: Building2,
+        group: "equipo",
         permission: "branches.manage",
     },
     {
         href: ROUTES.ADMIN_BARBEROS,
         label: "Barberos",
         icon: Users,
+        group: "equipo",
         permission: "staff.manage",
     },
     {
         href: ROUTES.ADMIN_SERVICIOS,
         label: "Servicios",
         icon: Sparkles,
+        group: "catalogo",
         permission: "services.manage",
     },
     {
         href: ROUTES.ADMIN_CONFIGURACION || "/admin/configuracion",
         label: "Configuración",
         icon: Settings,
+        group: "sistema",
         permission: "settings.manage",
     },
     {
         href: ROUTES.ADMIN_ASISTENTE,
         label: "Asistente IA",
         icon: Bot,
+        group: "sistema",
         permission: "settings.manage",
     },
 ];
@@ -182,8 +221,19 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 space-y-1.5 p-4">
-                {filteredLinks.map((link) => (
+            <nav className="flex-1 overflow-y-auto overscroll-contain p-4">
+                {(isMobile ? SIDEBAR_GROUP_ORDER : [null]).map((group) => {
+                    const groupLinks = group ? filteredLinks.filter((link) => link.group === group) : filteredLinks;
+                    if (groupLinks.length === 0) return null;
+
+                    return (
+                    <div key={group || "all"} className={cn("space-y-1.5", group && "mb-5 last:mb-0")}>
+                    {group && (
+                        <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            {SIDEBAR_GROUP_LABELS[group]}
+                        </p>
+                    )}
+                    {groupLinks.map((link) => (
                     <Link
                         key={link.href}
                         href={link.href}
@@ -195,10 +245,13 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
                                 : "text-muted-foreground hover:bg-primary/5 hover:text-foreground"
                         )}
                     >
-                        <link.icon className="h-5 w-5" />
+                        <link.icon className="h-5 w-5" aria-hidden="true" />
                         {link.label}
                     </Link>
-                ))}
+                    ))}
+                    </div>
+                    );
+                })}
             </nav>
 
             {/* Bottom */}
@@ -221,6 +274,39 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
     );
 }
 
+function AdminAssistiveMenu() {
+    const pathname = usePathname();
+    const { setAssistantOpen } = useAssistiveHub();
+    const { startTour } = useTourStore();
+    const tour = APP_TOURS[pathname];
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="Abrir ayuda del panel" className="admin-chip">
+                    <HelpCircle className="h-4 w-4" aria-hidden="true" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>Ayuda del panel</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => setAssistantOpen(true)} className="gap-2">
+                    <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                    Abrir Coach de Gestión
+                </DropdownMenuItem>
+                {tour && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => startTour(pathname, tour)} className="gap-2">
+                            <Sparkles className="h-4 w-4" aria-hidden="true" />
+                            Recorrer esta sección
+                        </DropdownMenuItem>
+                    </>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
+
 export default function AdminLayout({
     children,
 }: {
@@ -238,7 +324,8 @@ export default function AdminLayout({
                                     <Menu className="h-5 w-5" />
                                 </Button>
                             </SheetTrigger>
-                            <SheetContent side="left" className="admin-mobile-sheet w-72 p-0">
+                            <SheetContent side="left" className="admin-mobile-sheet w-72 p-0" aria-describedby={undefined}>
+                                <SheetTitle className="sr-only">Menú de navegación admin</SheetTitle>
                                 <SidebarContent isMobile={true} />
                             </SheetContent>
                         </Sheet>
@@ -250,6 +337,7 @@ export default function AdminLayout({
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <AdminAssistiveMenu />
                         <VisualSkinSelector />
                         <ThemeToggle />
                     </div>

@@ -104,7 +104,10 @@ export function WelcomeModal({ role }: WelcomeModalProps) {
 
         if (!shouldShow) return;
 
-        const timeoutId = window.setTimeout(() => setIsOpen(true), 0);
+        // Deferimos la apertura hasta que la hidratación y el primer paint hayan
+        // terminado; Radix puede aplicar aria-hidden al árbol mientras React aún
+        // está comparando el HTML del servidor si el portal abre inmediatamente.
+        const timeoutId = window.setTimeout(() => setIsOpen(true), 420);
         return () => window.clearTimeout(timeoutId);
     }, [content.storageKey]);
 
@@ -153,8 +156,8 @@ export function WelcomeModal({ role }: WelcomeModalProps) {
                                     exit={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.98, y: prefersReducedMotion ? 0 : 12 }}
                                     transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: [0.16, 1, 0.3, 1] }}
                                 >
-                                    <div className="grid max-h-[90vh] overflow-y-auto md:grid-cols-[0.96fr_1.04fr]">
-                                        <div className="relative min-h-[220px] overflow-hidden bg-muted md:min-h-full">
+                                    <div className="grid max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain md:max-h-[90vh] md:grid-cols-[0.96fr_1.04fr]">
+                                        <div className="relative min-h-[150px] overflow-hidden bg-muted sm:min-h-[190px] md:min-h-full">
                                             <Image
                                                 src={content.image}
                                                 alt={content.imageAlt}
@@ -168,7 +171,7 @@ export function WelcomeModal({ role }: WelcomeModalProps) {
                                             <div className="absolute inset-x-5 bottom-5 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
                                         </div>
 
-                                        <div className="relative p-6 sm:p-8">
+                                        <div className="relative p-5 sm:p-8">
                                             <DialogPrimitive.Close asChild>
                                                 <button
                                                     type="button"
@@ -179,28 +182,28 @@ export function WelcomeModal({ role }: WelcomeModalProps) {
                                                 </button>
                                             </DialogPrimitive.Close>
 
-                                            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                                            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary sm:mb-5 sm:text-xs">
                                                 <Sparkles className="h-3.5 w-3.5" />
                                                 {content.eyebrow}
                                             </div>
 
-                                            <DialogTitle className="pr-10 font-display text-3xl font-bold leading-tight text-foreground sm:text-4xl">
+                                            <DialogTitle className="pr-10 font-display text-2xl font-bold leading-tight text-foreground sm:text-4xl">
                                                 {content.title}
                                             </DialogTitle>
-                                            <DialogDescription className="mt-3 text-base leading-relaxed text-muted-foreground">
+                                            <DialogDescription className="mt-2 text-sm leading-relaxed text-muted-foreground sm:mt-3 sm:text-base">
                                                 {content.description}
                                             </DialogDescription>
 
-                                            <div className="mt-6 space-y-3">
+                                            <div className="mt-4 space-y-2 sm:mt-6 sm:space-y-3">
                                                 {content.bullets.map((bullet) => (
-                                                    <div key={bullet} className="flex items-center gap-3 rounded-xl border border-border/70 bg-background/45 px-4 py-3">
-                                                        <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" />
+                                                    <div key={bullet} className="flex items-center gap-3 rounded-xl border border-border/70 bg-background/45 px-3 py-2.5 sm:px-4 sm:py-3">
+                                                        <CheckCircle2 className="h-4 w-4 shrink-0 text-primary sm:h-5 sm:w-5" />
                                                         <span className="text-sm font-medium text-foreground">{bullet}</span>
                                                     </div>
                                                 ))}
                                             </div>
 
-                                            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                                            <div className="mt-5 grid grid-cols-2 gap-2 sm:mt-8 sm:flex sm:gap-3">
                                                 <Button className="rounded-full font-semibold" onClick={handleStartTour}>
                                                     {content.tourCta}
                                                 </Button>
@@ -213,7 +216,7 @@ export function WelcomeModal({ role }: WelcomeModalProps) {
                                                 type="button"
                                                 onClick={rememberAndClose}
                                                 className={cn(
-                                                    "mt-5 text-sm text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline",
+                                                    "mt-3 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline sm:mt-5",
                                                     "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card"
                                                 )}
                                             >

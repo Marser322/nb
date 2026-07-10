@@ -15,7 +15,7 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <Button variant="ghost" size="icon" className="w-9 h-9 opacity-0" disabled>
+      <Button variant="ghost" size="icon" className="size-11 opacity-0 md:size-9" disabled>
         <Sun className="h-5 w-5" />
       </Button>
     );
@@ -28,7 +28,7 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="w-9 h-9 text-muted-foreground hover:text-foreground transition-colors"
+      className="size-11 text-muted-foreground transition-colors hover:text-foreground md:size-9"
       title={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
     >
       {isDark ? (

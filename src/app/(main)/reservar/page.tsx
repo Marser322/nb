@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect, useRef, Suspense, useMemo, type KeyboardEvent } from "react";
+import { useState, useEffect, useRef, Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { format, addDays, isBefore, startOfToday, isToday, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
@@ -11,6 +11,8 @@ import { Calendar, Clock, User, Scissors, ArrowRight, ArrowLeft, Check, MapPin, 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Header, Footer } from "@/components/layout";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { cn, formatPrice, generateTimeSlotsFromRange, calculateEndTime } from "@/lib/utils";
@@ -18,7 +20,14 @@ import { BRANCHES, ROUTES, SERVICE_CATEGORIES, SERVICE_CATEGORY_LABELS } from "@
 import { createClient } from "@/lib/supabase/client";
 import type { Service, Barber, DayAvailability } from "@/types/database.types";
 import { toast } from "sonner";
-import { STATIC_STYLES, getBarberAvatarUrl, STATIC_SERVICES, STATIC_BARBERS } from "@/lib/static-data";
+import {
+  STATIC_STYLES,
+  getBarberAvatarFallback,
+  getBarberAvatarUrl,
+  getServiceImageFallback,
+  STATIC_SERVICES,
+  STATIC_BARBERS,
+} from "@/lib/static-data";
 import { bookAppointment, fetchAvailability, dayHasFreeSlot } from "@/lib/booking";
 import { useFeatures } from "@/lib/features";
 
@@ -95,7 +104,11 @@ function ReservarPageContent() {
         supabase.from("lookbook").select("*").order("created_at", { ascending: false }),
       ]);
 
-      const loadedServices = servicesRes?.data && servicesRes.data.length > 0 ? servicesRes.data : STATIC_SERVICES;
+      const loadedServices = (servicesRes?.data && servicesRes.data.length > 0 ? servicesRes.data : STATIC_SERVICES)
+        .map((service) => ({
+          ...service,
+          image_url: service.image_url || getServiceImageFallback(service),
+        }));
       const loadedBarbers = barbersRes?.data && barbersRes.data.length > 0 ? barbersRes.data : STATIC_BARBERS;
       const loadedStyles: StyleItem[] =
         lookbookRes?.data && lookbookRes.data.length > 0
@@ -447,51 +460,49 @@ function ReservarPageContent() {
   // Card de servicio (paso 1). Extraída para reusarse tanto en la lista plana
   // como en los grupos por categoría (FASE 26).
   const renderServiceCard = (service: Service) => (
-    <Card
+    <button
+      type="button"
       key={service.id}
-      role="button"
-      tabIndex={0}
       aria-pressed={selectedService?.id === service.id}
       className={cn(
-        "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative",
-        selectedService?.id === service.id ? "border-primary bg-primary/5" : "bg-card/50 hover:bg-card/80"
+        "group relative w-full overflow-hidden rounded-2xl border p-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 md:p-5",
+        selectedService?.id === service.id
+          ? "border-primary bg-primary/8 shadow-md shadow-primary/10"
+          : "border-border bg-card/60 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-card"
       )}
       onClick={() => handleServiceSelect(service)}
-      onKeyDown={(event) => handleSelectionKey(event, () => handleServiceSelect(service))}
       onMouseEnter={() => setHoveredService(service)}
       onMouseLeave={() => setHoveredService(null)}
     >
-      <CardContent className="p-6 relative z-10">
-        <div className="flex items-start gap-4">
-          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border bg-muted lg:hidden">
+      <div className="relative z-10 flex items-center gap-4">
+          <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl border border-border bg-muted lg:hidden">
             <ImageWithFallback
               src={service.image_url}
+              fallbackSrc="/images/fallbacks/servicio-generico.webp"
               alt={service.name}
               fill
-              sizes="64px"
+              sizes="72px"
               className="object-cover"
               fallbackClassName="h-full w-full"
               iconClassName="h-6 w-6"
             />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex justify-between items-start mb-2 opacity-90 group-hover:opacity-100 transition-opacity">
-              <h3 className="font-bold text-lg">{service.name}</h3>
+            <div className="mb-1.5 flex items-start justify-between gap-3 opacity-90 transition-opacity group-hover:opacity-100">
+              <h3 className="text-base font-bold text-foreground md:text-lg">{service.name}</h3>
               <Badge variant="secondary" className="bg-muted border-border group-hover:border-primary/30 transition-colors">
                 {service.duration_minutes} min
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground mb-4 group-hover:text-foreground transition-colors">
+            <p className="mb-2 line-clamp-2 text-xs text-muted-foreground transition-colors group-hover:text-foreground md:mb-3">
               {service.description}
             </p>
-            <p className="text-xl font-bold text-primary">
+            <p className="text-lg font-bold text-primary md:text-xl">
               {formatPrice(service.price)}
             </p>
           </div>
-        </div>
-      </CardContent>
-      <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/5 to-primary/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-    </Card>
+      </div>
+    </button>
   );
 
   const handleBarberSelect = (barber: Barber) => {
@@ -504,13 +515,6 @@ function ReservarPageContent() {
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
     setSelectedTime(null);
-  };
-
-  const handleSelectionKey = (event: KeyboardEvent<HTMLElement>, action: () => void) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      action();
-    }
   };
 
   // Navegación entre pasos
@@ -785,58 +789,43 @@ function ReservarPageContent() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="pb-16 relative">
-        {/* Hero Section */}
-        <div className="relative h-[40vh] min-h-[350px] w-full flex items-center justify-center overflow-hidden mb-12">
-          {/* Background Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/95 via-black/80 to-background z-0" />
-          <div className="absolute inset-0 bg-noise opacity-30 mix-blend-overlay z-0" />
+      <main className="relative pb-28 md:pb-16">
+        <section className="relative flex h-[240px] w-full items-end overflow-hidden border-b border-primary/20 md:h-[300px]">
+          <Image
+            src="/images/booking/reserva-hero.webp"
+            alt="Puesto de trabajo y herramientas de New Brothers"
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover object-[64%_center] md:object-center"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/78 to-black/20" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/35" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
 
-          {/* Floating Images Composition */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-            <div className="absolute top-0 left-0 bottom-0 w-[15%] md:w-[25%] flex flex-col justify-center py-10 pl-4 md:pl-10">
-              <motion.div
-                animate={{ y: [0, -15, 0] }}
-                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                className="relative w-20 h-20 md:w-32 md:h-32 opacity-20"
-              >
-                <Image src="/images/hero/herramientas-barberia.jpg" alt="Herramientas de barbería" fill sizes="(max-width: 768px) 80px, 128px" className="object-cover rounded-2xl grayscale border border-border" />
-              </motion.div>
-            </div>
-
-            <div className="absolute top-0 right-0 bottom-0 w-[15%] md:w-[25%] flex flex-col justify-center py-10 pr-4 md:pr-10 items-end">
-              <motion.div
-                animate={{ y: [0, 20, 0] }}
-                transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                className="relative w-24 h-24 md:w-40 md:h-40 opacity-20"
-              >
-                <Image src="/images/hero/maquina-clippers.jpg" alt="Máquina de corte profesional" fill sizes="(max-width: 768px) 96px, 160px" className="object-cover rounded-full grayscale blur-[1px]" />
-              </motion.div>
-            </div>
-          </div>
-
-          <div className="relative z-10 text-center px-4 max-w-4xl pt-16">
+          <div className="container relative z-10 mx-auto px-4 pb-6 pt-20 md:pb-8">
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
+              transition={{ duration: 0.45 }}
+              className="max-w-2xl"
             >
-              <Badge variant="outline" className="mb-6 border-primary/50 text-foreground bg-primary/10 backdrop-blur-md px-4 py-1 uppercase tracking-[0.2em] text-xs">
-                Premium Booking
+              <Badge variant="outline" className="mb-3 border-primary/55 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white backdrop-blur-sm md:text-xs">
+                Reserva premium
               </Badge>
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-4 text-foreground tracking-tighter drop-shadow-2xl">
-                Elegí tu <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-amber-200 to-primary">Estilo</span>
+              <h1 className="font-display text-4xl font-bold leading-none tracking-tight text-white text-balance md:text-6xl">
+                Elegí tu <span className="text-primary">estilo</span>
               </h1>
-              <p className="text-base md:text-lg text-zinc-300 max-w-2xl mx-auto leading-relaxed font-light">
-                Seleccioná el servicio, tu profesional de confianza y el horario que mejor te quede. Nosotros nos ocupamos del resto.
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-zinc-200 text-pretty md:text-base">
+                Servicio, profesional y horario en un flujo simple. Nosotros nos ocupamos del resto.
               </p>
             </motion.div>
           </div>
-        </div>
+        </section>
 
-        <div className="container mx-auto px-4 relative z-10">
+        <div className="container relative z-10 mx-auto px-4 pt-5 md:pt-7">
           {/* Indicador de pasos */}
-          <div className="mb-10 rounded-2xl border border-border bg-card/50 p-4 shadow-sm md:hidden">
+          <div className="mb-6 rounded-2xl border border-border bg-card/85 p-4 shadow-sm md:hidden">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
@@ -852,19 +841,19 @@ function ReservarPageContent() {
             </div>
             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-primary transition-all"
+                className="h-full rounded-full bg-primary transition-[width]"
                 style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
               />
             </div>
           </div>
 
-          <div className="mb-12 hidden max-w-3xl items-center justify-center gap-2 md:flex md:flex-wrap md:gap-4 md:mx-auto">
+          <div className="mb-8 hidden max-w-4xl items-center justify-center gap-2 md:mx-auto md:flex md:flex-wrap md:gap-4">
             {STEPS.map((step, index) => (
               <div key={step} className="flex items-center">
                 <div
                   id={`step-indicator-${index}`}
                   className={cn(
-                    "flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-full text-xs md:text-sm font-medium transition-all",
+                    "flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-full text-xs md:text-sm font-medium transition-[background-color,border-color,color,box-shadow]",
                     index < currentStep
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
                       : index === currentStep
@@ -906,21 +895,20 @@ function ReservarPageContent() {
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {branches.map((branch) => (
-                    <Card
+                    <button
+                      type="button"
                       key={branch.id}
-                      role="button"
-                      tabIndex={0}
                       aria-pressed={selectedBranch?.id === branch.id}
                       className={cn(
-                        "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative h-full flex flex-col",
-                        selectedBranch?.id === branch.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card/50 hover:bg-card/80"
+                        "group relative flex h-full w-full flex-col overflow-hidden rounded-2xl border text-left transition-[border-color,background-color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 hover:-translate-y-0.5 hover:border-primary/50",
+                        selectedBranch?.id === branch.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border bg-card/60 hover:bg-card"
                       )}
                       onClick={() => handleBranchSelect(branch)}
-                      onKeyDown={(event) => handleSelectionKey(event, () => handleBranchSelect(branch))}
                     >
                       <div className="relative h-48 w-full overflow-hidden">
                         <ImageWithFallback
                           src={branch.image}
+                          fallbackSrc="/images/branches/sucursal-central.jpg"
                           alt={branch.name}
                           fill
                           sizes="(max-width: 768px) 100vw, 33vw"
@@ -932,7 +920,7 @@ function ReservarPageContent() {
                           <h3 className="font-bold text-white text-lg">{branch.name}</h3>
                         </div>
                       </div>
-                      <CardContent className="p-4 flex-grow">
+                      <div className="flex-grow p-4">
                         <p className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
                           <MapPin className="h-4 w-4 text-primary" />
                           {branch.address}
@@ -946,13 +934,13 @@ function ReservarPageContent() {
                             {branch.phone}
                           </p>
                         )}
-                      </CardContent>
+                      </div>
                       {selectedBranch?.id === branch.id && (
                         <div className="absolute top-4 right-4 bg-primary text-primary-foreground h-8 w-8 rounded-full flex items-center justify-center shadow-lg animate-in zoom-in">
                           <Check className="h-5 w-5" />
                         </div>
                       )}
-                    </Card>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1013,6 +1001,7 @@ function ReservarPageContent() {
                     >
                       <ImageWithFallback
                         src={hoveredService?.image_url || selectedService?.image_url || "/images/hero/ambiente-barberia.jpg"}
+                        fallbackSrc="/images/fallbacks/servicio-generico.webp"
                         alt={hoveredService?.name || selectedService?.name || "Vista previa del servicio"}
                         fill
                         sizes="(max-width: 1024px) 0px, 50vw"
@@ -1078,23 +1067,22 @@ function ReservarPageContent() {
                     )}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4">
                   {styles.map((style) => (
-                    <Card
+                    <button
+                      type="button"
                       key={style.id}
-                      role="button"
-                      tabIndex={0}
                       aria-pressed={selectedStyle?.id === style.id}
                       className={cn(
-                        "cursor-pointer transition-all duration-300 hover:border-primary/50 group overflow-hidden relative flex flex-col h-full",
-                        selectedStyle?.id === style.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card/50 hover:bg-card/80"
+                        "group relative grid min-h-24 w-full grid-cols-[96px_1fr] overflow-hidden rounded-2xl border text-left transition-[border-color,background-color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 hover:-translate-y-0.5 hover:border-primary/50 md:flex md:h-full md:flex-col",
+                        selectedStyle?.id === style.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border bg-card/60 hover:bg-card"
                       )}
                       onClick={() => setSelectedStyle(style)}
-                      onKeyDown={(event) => handleSelectionKey(event, () => setSelectedStyle(style))}
                     >
-                      <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+                      <div className="relative h-full min-h-24 w-24 overflow-hidden bg-muted md:aspect-[4/3] md:h-auto md:w-full">
                         <ImageWithFallback
                           src={style.image_url}
+                          fallbackSrc="/images/fallbacks/servicio-generico.webp"
                           alt={style.title}
                           fill
                           sizes="(max-width: 768px) 50vw, 33vw"
@@ -1103,17 +1091,17 @@ function ReservarPageContent() {
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                       </div>
-                      <CardContent className="p-3 text-center flex-grow flex items-center justify-center">
-                        <span className="font-bold text-xs text-foreground group-hover:text-primary transition-colors">
+                      <div className="flex flex-grow items-center p-3 md:justify-center md:text-center">
+                        <span className="text-sm font-bold text-foreground transition-colors group-hover:text-primary md:text-xs">
                           {style.title}
                         </span>
-                      </CardContent>
+                      </div>
                       {selectedStyle?.id === style.id && (
                         <div className="absolute top-2 right-2 bg-primary text-primary-foreground h-6 w-6 rounded-full flex items-center justify-center shadow-lg animate-in zoom-in">
                           <Check className="h-4 w-4" />
                         </div>
                       )}
-                    </Card>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1152,22 +1140,20 @@ function ReservarPageContent() {
                     const isSelected = selectedBarber?.id === barber.id;
 
                     return (
-                      <Card
+                      <button
+                        type="button"
                         key={barber.id}
-                        role="button"
-                        tabIndex={0}
                         aria-pressed={isSelected}
                         className={cn(
-                          "group cursor-pointer transition-all duration-300 hover:border-primary/50 overflow-hidden",
-                          isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card/50 hover:bg-card/80"
+                          "group grid w-full grid-cols-[104px_1fr] overflow-hidden rounded-2xl border text-left transition-[border-color,background-color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 hover:-translate-y-0.5 hover:border-primary/50 md:block",
+                          isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border bg-card/60 hover:bg-card"
                         )}
                         onClick={() => handleBarberSelect(barber)}
-                        onKeyDown={(event) => handleSelectionKey(event, () => handleBarberSelect(barber))}
                       >
-                        <CardContent className="p-0">
-                          <div className="relative aspect-square overflow-hidden bg-muted">
+                          <div className="relative h-full min-h-36 overflow-hidden bg-muted md:aspect-square md:min-h-0">
                             <ImageWithFallback
                               src={avatarUrl}
+                              fallbackSrc={getBarberAvatarFallback(barber)}
                               alt={barber.name}
                               fill
                               sizes="(max-width: 768px) 100vw, 33vw"
@@ -1182,7 +1168,7 @@ function ReservarPageContent() {
                               </div>
                             )}
                           </div>
-                          <div className="p-5">
+                          <div className="min-w-0 p-4 md:p-5">
                             <h3 className="font-semibold text-base text-foreground">{barber.name}</h3>
                             {barber.bio && (
                               <p className="text-xs text-muted-foreground mt-2 line-clamp-3">
@@ -1209,8 +1195,7 @@ function ReservarPageContent() {
                               );
                             })()}
                           </div>
-                        </CardContent>
-                      </Card>
+                      </button>
                     );
                   })}
                   {barbers.length === 0 && (
@@ -1385,24 +1370,24 @@ function ReservarPageContent() {
 
                 {/* Toggle de Suscripción Recurrente */}
                 {features.suscripciones && (
-                  <div className="mt-6 p-5 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 backdrop-blur-md">
-                    <div className="flex items-start gap-4 justify-between">
+                  <div className="mt-6 rounded-2xl border border-primary/20 bg-primary/5 p-5">
+                    <div className="flex items-start justify-between gap-4">
                       <div className="space-y-1">
-                        <h3 className="font-bold text-sm md:text-base text-foreground flex items-center gap-2">
-                          <Repeat className="h-5 w-5 text-primary animate-pulse" />
-                          ¿Querés reservar este turno de forma fija semanal?
-                        </h3>
+                        <Label htmlFor="recurring-toggle" className="flex cursor-pointer items-center gap-2 text-sm font-bold text-foreground md:text-base">
+                          <Repeat className="h-5 w-5 text-primary" aria-hidden="true" />
+                          Reservar este turno semanalmente
+                        </Label>
                         <p className="text-xs text-muted-foreground leading-relaxed max-w-lg">
                           Activá una suscripción para asegurar automáticamente este horario ({selectedTime} todos los {selectedDate && format(selectedDate, "EEEE", { locale: es })}) con {selectedBarber?.name}. Podrás cancelarla en cualquier momento desde tu perfil.
                         </p>
                       </div>
-                      <div className="flex items-center pt-1">
-                        <input
-                          type="checkbox"
+                      <div className="flex items-center pt-1.5">
+                        <Switch
                           id="recurring-toggle"
                           checked={isRecurring}
-                          onChange={(e) => setIsRecurring(e.target.checked)}
-                          className="w-10 h-6 bg-muted checked:bg-primary border-border rounded-full cursor-pointer appearance-none relative before:content-[''] before:absolute before:w-4 before:h-4 before:rounded-full before:bg-muted-foreground before:top-1 before:left-1 checked:before:left-5 checked:before:bg-primary-foreground before:transition-all duration-300"
+                          onCheckedChange={setIsRecurring}
+                          aria-label="Reservar este turno semanalmente"
+                          className="h-6 w-11"
                         />
                       </div>
                     </div>
@@ -1412,19 +1397,19 @@ function ReservarPageContent() {
             )}
 
             {/* Navegación */}
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between mt-8 border-t border-border pt-6">
+            <div className="fixed inset-x-0 bottom-0 z-40 flex gap-3 border-t border-border bg-background/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl md:static md:mt-8 md:justify-between md:bg-transparent md:px-0 md:pb-0 md:pt-6 md:backdrop-blur-none">
               <Button
                 variant="outline"
                 onClick={prevStep}
                 disabled={currentStep === 0}
-                className="gap-2 h-11 px-4 text-sm border-border text-muted-foreground hover:text-foreground"
+                className="h-11 shrink-0 gap-2 border-border px-4 text-sm text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Atrás
               </Button>
 
               {currentStep < STEPS.length - 1 ? (
-                <Button onClick={nextStep} disabled={!canProceed()} className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground h-11 px-5 text-sm rounded-full">
+                <Button onClick={nextStep} disabled={!canProceed()} className="h-11 flex-1 gap-2 rounded-full bg-primary px-5 text-sm text-primary-foreground hover:bg-primary/90 md:flex-none">
                   Siguiente
                   <ArrowRight className="h-4 w-4" />
                 </Button>
@@ -1432,7 +1417,7 @@ function ReservarPageContent() {
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-bold h-11 px-6 rounded-full shadow-lg shadow-primary/10 active:scale-95 transition-all"
+                  className="h-11 flex-1 gap-2 rounded-full bg-primary px-6 font-bold text-primary-foreground shadow-lg shadow-primary/10 transition-[background-color,transform,box-shadow] hover:bg-primary/90 active:scale-95 md:flex-none"
                 >
                   {isSubmitting ? "Confirmando…" : "Confirmar Reserva"}
                   <Check className="h-4 w-4" />
@@ -1450,7 +1435,7 @@ function ReservarPageContent() {
 
 export default function ReservarPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-foreground">Cargando...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-foreground">Cargando…</div>}>
       <ReservarPageContent />
     </Suspense>
   );

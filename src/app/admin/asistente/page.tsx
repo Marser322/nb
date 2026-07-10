@@ -42,6 +42,7 @@ import { toast } from "sonner";
 import { CHAT_PROVIDER_LABELS, CHAT_MODE_LABELS, ROUTES } from "@/lib/constants";
 import type { ChatLog, ChatKnowledge } from "@/types/database.types";
 import { format, parseISO } from "date-fns";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 
 /** Normaliza igual que el backend: minúsculas y sin tildes, para dedupe por pregunta. */
 function normalizeQuestion(text: string): string {
@@ -114,12 +115,12 @@ export default function AdminAsistentePage() {
         setIsKnowledgeLoading(false);
     }, [supabase]);
 
+    /* eslint-disable react-hooks/set-state-in-effect -- carga inicial desde Supabase */
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadLogs();
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadKnowledge();
     }, [loadLogs, loadKnowledge]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // Top 5 preguntas más repetidas (agregación en memoria sobre los últimos 500 logs)
     const topRepeatedQuestions = useMemo(() => {
@@ -262,15 +263,12 @@ export default function AdminAsistentePage() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                    <Bot className="h-8 w-8 text-primary" />
-                    Asistente IA
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                    Mirá qué preguntan tus clientes y curá la base de conocimiento que el asistente aprende solo.
-                </p>
-            </div>
+            <AdminPageHeader
+                eyebrow="Inteligencia aplicada"
+                title="Asistente IA"
+                icon={Bot}
+                description="Revisá qué preguntan tus clientes y curá la base de conocimiento que aprende el asistente."
+            />
 
             {/* Banner de estado del flag */}
             <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground backdrop-blur-md sm:flex-row sm:items-start sm:justify-between">
@@ -290,7 +288,7 @@ export default function AdminAsistentePage() {
             </div>
 
             <Tabs defaultValue="preguntas" className="w-full">
-                <TabsList className="bg-card/60 border border-border/40 p-1 h-11">
+                <TabsList className="grid h-auto w-full grid-cols-2 border border-border/40 bg-card/60 p-1 [&_[data-slot=tabs-trigger]]:min-h-10 [&_[data-slot=tabs-trigger]]:whitespace-normal [&_[data-slot=tabs-trigger]]:text-center">
                     <TabsTrigger value="preguntas" className="gap-2">
                         <MessageCircleQuestion className="h-4 w-4" />
                         Preguntas
@@ -332,7 +330,7 @@ export default function AdminAsistentePage() {
                         <div className="relative flex-1 min-w-[220px] max-w-md">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Buscar por pregunta o respuesta..."
+                                placeholder="Buscar por pregunta o respuesta…"
                                 value={logsSearch}
                                 onChange={(e) => setLogsSearch(e.target.value)}
                                 className="pl-10 bg-background/50 border-input/50 focus:border-primary/50"
@@ -375,7 +373,16 @@ export default function AdminAsistentePage() {
                                     </p>
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto">
+                                <>
+                                <div className="grid gap-3 p-3 md:hidden">
+                                    {filteredLogs.map((log) => (
+                                        <div key={log.id} className="admin-mobile-record">
+                                            <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] text-muted-foreground">{format(parseISO(log.created_at), "dd/MM/yyyy HH:mm")}</p><p className="mt-2 text-sm leading-relaxed text-foreground">{log.question}</p></div>{log.was_fallback ? <Badge variant="outline" className="shrink-0 bg-amber-500/20 text-amber-400 border-amber-500/30">Sin respuesta</Badge> : <Badge variant="outline" className="shrink-0 bg-green-500/20 text-green-400 border-green-500/30">Respondida</Badge>}</div>
+                                            <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3"><span className="text-xs text-muted-foreground">{CHAT_MODE_LABELS[log.mode] || log.mode} · {CHAT_PROVIDER_LABELS[log.provider] || log.provider}</span><Button size="sm" variant="outline" onClick={() => openTeachDialog(log.question)}><GraduationCap className="mr-2 h-4 w-4" aria-hidden="true" />Enseñar</Button></div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="hidden overflow-x-auto md:block">
                                     <Table>
                                         <TableHeader className="bg-muted/10 border-b border-border/30">
                                             <TableRow className="hover:bg-transparent">
@@ -429,6 +436,7 @@ export default function AdminAsistentePage() {
                                         </TableBody>
                                     </Table>
                                 </div>
+                                </>
                             )}
                         </CardContent>
                     </Card>
@@ -465,7 +473,16 @@ export default function AdminAsistentePage() {
                                     </p>
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto">
+                                <>
+                                <div className="grid gap-3 p-3 md:hidden">
+                                    {knowledge.map((entry) => (
+                                        <div key={entry.id} className="admin-mobile-record">
+                                            <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold text-foreground">{entry.question}</p><p className="mt-2 line-clamp-4 text-xs leading-relaxed text-muted-foreground">{entry.answer}</p></div><Switch checked={entry.is_active} onCheckedChange={() => toggleKnowledgeActive(entry)} aria-label={`${entry.is_active ? "Desactivar" : "Activar"} entrada`} /></div>
+                                            <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3"><Badge variant="outline">{entry.source === "auto" ? "Auto" : "Manual"}</Badge><div className="flex gap-1"><Button size="icon" variant="ghost" onClick={() => openEditDialog(entry)} aria-label="Editar entrada"><Edit2 className="h-4 w-4" aria-hidden="true" /></Button><Button size="icon" variant="ghost" onClick={() => handleDeleteKnowledge(entry.id)} aria-label="Eliminar entrada" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" aria-hidden="true" /></Button></div></div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="hidden overflow-x-auto md:block">
                                     <Table>
                                         <TableHeader className="bg-muted/10 border-b border-border/30">
                                             <TableRow className="hover:bg-transparent">
@@ -531,6 +548,7 @@ export default function AdminAsistentePage() {
                                         </TableBody>
                                     </Table>
                                 </div>
+                                </>
                             )}
                         </CardContent>
                     </Card>
@@ -559,7 +577,7 @@ export default function AdminAsistentePage() {
                             <Label htmlFor="teach-answer">Respuesta</Label>
                             <Textarea
                                 id="teach-answer"
-                                placeholder="Escribí la respuesta que debería usar el asistente..."
+                                placeholder="Escribí la respuesta que debería usar el asistente…"
                                 value={teachAnswer}
                                 onChange={(e) => setTeachAnswer(e.target.value)}
                                 className="min-h-[120px] bg-background/50 border-input/50"

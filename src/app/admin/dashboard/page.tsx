@@ -25,6 +25,7 @@ import { fetchClientsOverviewPage } from "@/lib/crm";
 import { createClient } from "@/lib/supabase/client";
 import type { Appointment, Service, Barber, Branch, ClientOverview } from "@/types/database.types";
 import { CrmCards, type RankingItem } from "@/components/admin/crm-cards";
+import { AdminMetricCard, AdminPageHeader } from "@/components/admin/admin-ui";
 import { usePermissions } from "@/lib/usePermissions";
 import { useFeatures } from "@/lib/features";
 import {
@@ -307,58 +308,39 @@ export default function AdminDashboardPage() {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="admin-hero rounded-2xl p-5 md:p-6">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="max-w-2xl space-y-3">
-                        <div className="admin-chip inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-                            <Activity className="h-3.5 w-3.5" aria-hidden="true" />
-                            Centro de mando
-                        </div>
-                        <div>
-                            <h1 className="font-display text-3xl font-bold leading-tight md:text-5xl">
-                                Dashboard
-                            </h1>
-                            <p className="mt-2 max-w-xl text-sm text-muted-foreground md:text-base">
-                                {format(new Date(), "EEEE, d 'de' MMMM yyyy", { locale: es })}. Una vista compacta para leer agenda, caja, clientes y stock sin perder ritmo.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:min-w-[420px]">
-                        <div className="admin-chip rounded-xl p-3">
-                            <p className="text-xs text-muted-foreground">Citas hoy</p>
-                            <p className="mt-1 text-2xl font-bold">{filteredCitasHoy.length}</p>
-                        </div>
-                        <div className="admin-chip rounded-xl p-3">
-                            <p className="text-xs text-muted-foreground">Barberos activos</p>
-                            <p className="mt-1 text-2xl font-bold">{barbers.length}</p>
-                        </div>
-                        <div className="admin-chip col-span-2 rounded-xl p-3 sm:col-span-1">
-                            <p className="text-xs text-muted-foreground">Sucursales</p>
-                            <p className="mt-1 text-2xl font-bold">{branches.length}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <AdminPageHeader
+                eyebrow="Centro de mando"
+                title="Dashboard"
+                icon={Activity}
+                featured
+                description={`${format(new Date(), "EEEE, d 'de' MMMM yyyy", { locale: es })}. Leé agenda, caja, clientes y stock sin perder ritmo.`}
+                metrics={
+                    <>
+                        <AdminMetricCard label="Citas hoy" value={filteredCitasHoy.length} icon={Calendar} />
+                        <AdminMetricCard label="Barberos" value={barbers.length} icon={Scissors} tone="info" />
+                        <AdminMetricCard label="Sucursales" value={branches.length} icon={Package} />
+                    </>
+                }
+            />
 
             {/* Stats Grid */}
-            <div id="admin-stats" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+            <div id="admin-stats" className="grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
                 {statCards.map((stat) => {
                     const cardContent = (
                         <CardContent className="relative z-10 p-4">
                             <div className="mb-4 flex items-start justify-between gap-3">
                                 <div className="admin-stat-icon rounded-xl p-2">
-                                    <stat.icon className="h-5 w-5" />
+                                    <stat.icon className="h-5 w-5" aria-hidden="true" />
                                 </div>
-                                <span className={`admin-chip inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] ${deltaToneClass(stat.meta)}`}>
+                                <span className={`admin-chip hidden max-w-[8rem] items-center gap-1 truncate rounded-full px-2 py-1 text-[10px] sm:inline-flex sm:max-w-none sm:text-[11px] ${deltaToneClass(stat.meta)}`}>
                                     <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
                                     {stat.meta}
                                 </span>
                             </div>
-                            <p className="text-3xl font-bold tracking-tight">{stat.value}</p>
-                            <p className="text-sm text-muted-foreground">{stat.title}</p>
+                            <p className="text-2xl font-bold tracking-tight md:text-3xl">{stat.value}</p>
+                            <p className="text-xs text-muted-foreground sm:text-sm">{stat.title}</p>
                             {stat.series && (
-                                <div className="mt-4 h-14">
+                                <div className="mt-4 hidden h-14 sm:block">
                                     <MiniSparkline values={stat.series} />
                                 </div>
                             )}

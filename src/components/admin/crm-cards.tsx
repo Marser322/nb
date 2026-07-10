@@ -67,7 +67,7 @@ export function CrmCards({
                                 ))}
                             </div>
                         ) : inactiveClients.length === 0 ? (
-                            <div className="admin-empty-state rounded-xl py-10 text-center text-muted-foreground">
+                            <div className="admin-empty-state rounded-xl py-5 text-center text-muted-foreground">
                                 <UserRoundX className="mx-auto mb-3 h-10 w-10 text-muted-foreground/30" />
                                 <p>No hay clientes inactivos para reactivar.</p>
                             </div>
@@ -175,7 +175,7 @@ function RankingCard({
                         ))}
                     </div>
                 ) : items.length === 0 ? (
-                    <div className="admin-empty-state rounded-xl py-10 text-center text-muted-foreground">
+                    <div className="admin-empty-state rounded-xl py-5 text-center text-muted-foreground">
                         <Icon className="mx-auto mb-3 h-10 w-10 text-muted-foreground/30" />
                         <p>{emptyText}</p>
                     </div>

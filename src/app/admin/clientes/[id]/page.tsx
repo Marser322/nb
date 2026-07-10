@@ -290,7 +290,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
     const clientInactive = isInactiveClient(metrics.lastVisitDate);
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6">
             {/* Header / Ficha superior */}
             <div className="flex flex-col gap-6">
                 <div className="flex items-center gap-4">
@@ -299,11 +299,12 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                         size="icon"
                         onClick={() => router.push("/admin/clientes")}
                         className="h-10 w-10 border-border md:h-8 md:w-8"
+                        aria-label="Volver a clientes"
                     >
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
                     <div>
-                        <h1 className="text-3xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                        <h1 className="flex flex-wrap items-center gap-2 font-display text-3xl font-bold tracking-tight text-foreground">
                             {profile.full_name}
                             {birthdayThisMonth && (
                                 <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-normal gap-1">
@@ -319,7 +320,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                 </div>
 
                 {/* Métricas del cliente (Bloque B FASE 33): calculadas en memoria, sin queries nuevas */}
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
                     <div className="admin-agenda-stat rounded-xl border p-4" data-tone="completed">
                         <div className="flex items-start justify-between gap-3">
                             <div>
@@ -503,7 +504,7 @@ export default function AdminClienteDetailPage({ params }: { params: Promise<{ i
                         </CardHeader>
                         <CardContent>
                             <Textarea
-                                placeholder="Escribí notas sobre este cliente... (ej. le gusta mate amargo, prefiere corte a tijera con navaja en patillas, etc.)"
+                                placeholder="Escribí notas sobre este cliente… Por ejemplo: prefiere corte a tijera."
                                 value={notes}
                                 onChange={(e) => setNotes(e.target.value)}
                                 className="admin-field-focus min-h-[100px] bg-background/50 border-input/50 resize-y"

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { HelpCircle, Loader2, LogIn, Mail, Sparkles } from 'lucide-react';
+import { HelpCircle, Loader2, LogIn, Mail, MessageSquare, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTourStore } from '@/lib/store/tour-store';
 import { APP_TOURS } from '@/lib/tours-data';
@@ -17,16 +17,24 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { isDemoMode, useDemoAdminLogin } from '@/hooks/useDemoAdminLogin';
 import { ROUTES } from '@/lib/constants';
+import { cn } from '@/lib/utils';
+import { useAssistiveHub } from '@/components/assistive/AssistiveHubProvider';
 
 export function HelpFab() {
     const pathname = usePathname();
     const { startTour, isOpen } = useTourStore();
     const { loginAsDemoAdmin, isDemoLoading } = useDemoAdminLogin();
+    const { setAssistantOpen } = useAssistiveHub();
 
     // Determine if there is a tour for the current page
     const tourKey = APP_TOURS[pathname] ? pathname : null;
     const isReservedRoute = pathname.startsWith('/admin') || pathname.startsWith('/barbero');
-    const shouldShow = !isOpen && !isReservedRoute && (isDemoMode || Boolean(tourKey));
+    const isClientRoute = pathname === '/' || ['/reservar', '/tienda', '/lookbook', '/contacto', '/checkout', '/mi-cuenta']
+        .some((route) => pathname.startsWith(route));
+    const shouldShow = !isOpen && !isReservedRoute && (isClientRoute || isDemoMode || Boolean(tourKey));
+    // En /reservar la navegación del wizard es una barra fija inferior en mobile:
+    // el FAB debe quedar por encima de ella para no tapar "Siguiente/Confirmar".
+    const hasFixedBottomBar = pathname.startsWith('/reservar');
 
     if (!shouldShow) return null;
 
@@ -34,8 +42,12 @@ export function HelpFab() {
         <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="fixed right-4 z-50 sm:right-6"
-            style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
+            className={cn(
+                "fixed right-4 z-50 sm:right-6",
+                hasFixedBottomBar
+                    ? "bottom-[calc(5.75rem_+_env(safe-area-inset-bottom))] md:bottom-[calc(1.5rem_+_env(safe-area-inset-bottom))]"
+                    : "bottom-[calc(1.5rem_+_env(safe-area-inset-bottom))]"
+            )}
         >
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -58,6 +70,15 @@ export function HelpFab() {
                     <DropdownMenuLabel className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                         Ayuda rápida
                     </DropdownMenuLabel>
+                    {isClientRoute && (
+                        <DropdownMenuItem
+                            className="cursor-pointer gap-3 rounded-md px-3 py-2"
+                            onSelect={() => setAssistantOpen(true)}
+                        >
+                            <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                            Abrir asistente IA
+                        </DropdownMenuItem>
+                    )}
                     {tourKey && (
                         <DropdownMenuItem
                             className="cursor-pointer gap-3 rounded-md px-3 py-2"
@@ -83,7 +104,7 @@ export function HelpFab() {
                             Entrar al panel admin demo
                         </DropdownMenuItem>
                     )}
-                    {(tourKey || isDemoMode) && <DropdownMenuSeparator />}
+                    {(tourKey || isDemoMode || isClientRoute) && <DropdownMenuSeparator />}
                     <DropdownMenuItem asChild className="cursor-pointer gap-3 rounded-md px-3 py-2">
                         <Link href={ROUTES.CONTACTO}>
                             <Mail className="h-4 w-4" aria-hidden="true" />

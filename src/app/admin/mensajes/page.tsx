@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
     Dialog,
     DialogContent,
@@ -44,7 +44,7 @@ import {
 } from "@/lib/constants";
 import type { CommunicationLog, RemindersConfig, MessageTemplate } from "@/types/database.types";
 import { format, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 
 type CommunicationLogMetadata = { event_type?: string; source?: string; template_id?: string | null; appointment_id?: string | null };
 
@@ -143,14 +143,13 @@ export default function AdminMensajesPage() {
         setIsEventTemplatesLoading(false);
     }, [supabase]);
 
+    /* eslint-disable react-hooks/set-state-in-effect -- carga inicial desde Supabase */
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadLogs();
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadTemplates();
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadEventTemplates();
     }, [loadLogs, loadTemplates, loadEventTemplates]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // 3. Crear / Editar plantilla
     const handleSubmitTemplate = async (e: React.FormEvent) => {
@@ -385,18 +384,15 @@ export default function AdminMensajesPage() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                    <MessageCircle className="h-8 w-8 text-primary" />
-                    Mensajería y Reactivación
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                    Controlá el historial de comunicaciones por WhatsApp y definí plantillas automáticas de reactivación.
-                </p>
-            </div>
+            <AdminPageHeader
+                eyebrow="Relación con clientes"
+                title="Mensajería y Reactivación"
+                icon={MessageCircle}
+                description="Controlá el historial de WhatsApp y definí plantillas automáticas de reactivación."
+            />
 
             <Tabs defaultValue="historial" className="w-full">
-                <TabsList className="bg-card/60 border border-border/40 p-1 h-11">
+                <TabsList className="grid h-auto w-full grid-cols-2 border border-border/40 bg-card/60 p-1 [&_[data-slot=tabs-trigger]]:min-h-10 [&_[data-slot=tabs-trigger]]:whitespace-normal [&_[data-slot=tabs-trigger]]:text-center">
                     <TabsTrigger value="historial" className="gap-2">
                         <ClipboardList className="h-4 w-4" />
                         Historial de Envíos
@@ -414,7 +410,7 @@ export default function AdminMensajesPage() {
                         <div className="relative flex-1 max-w-md">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Buscar por cliente, teléfono o mensaje..."
+                                placeholder="Buscar por cliente, teléfono o mensaje…"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-10 bg-background/50 border-input/50 focus:border-primary/50"
@@ -545,7 +541,7 @@ export default function AdminMensajesPage() {
                                         <Label htmlFor="message_template">Cuerpo del mensaje</Label>
                                         <Textarea
                                             id="message_template"
-                                            placeholder="Escribí la plantilla..."
+                                            placeholder="Escribí la plantilla…"
                                             value={formData.message_template}
                                             onChange={(e) => setFormData({ ...formData, message_template: e.target.value })}
                                             className="min-h-[120px] bg-background/50 border-input/50"
@@ -723,7 +719,7 @@ export default function AdminMensajesPage() {
                                         <Label htmlFor="template_body">Cuerpo del mensaje</Label>
                                         <Textarea
                                             id="template_body"
-                                            placeholder="Escribí la plantilla..."
+                                            placeholder="Escribí la plantilla…"
                                             value={eventFormData.body}
                                             onChange={(e) => setEventFormData({ ...eventFormData, body: e.target.value })}
                                             className="min-h-[120px] bg-background/50 border-input/50"

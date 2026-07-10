@@ -6,6 +6,7 @@ import { HelpFab } from "@/components/tour/HelpFab";
 import { AiAssistant } from "@/components/chat/AiAssistant";
 import { ThemeProvider } from "@/components/theme-provider";
 import { VisualSkinInitScript } from "@/components/admin/VisualSkinInitScript";
+import { AssistiveHubProvider } from "@/components/assistive/AssistiveHubProvider";
 import { BUSINESS_CONFIG } from "@/lib/constants";
 import { getBusinessConfigServer, type BusinessConfig } from "@/lib/business-config-shared";
 import { createClient } from "@/lib/supabase/server";
@@ -132,10 +133,12 @@ export default async function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          {children}
-          <TourOverlay />
-          <HelpFab />
-          <AiAssistant />
+          <AssistiveHubProvider>
+            {children}
+            <TourOverlay />
+            <HelpFab />
+            <AiAssistant />
+          </AssistiveHubProvider>
           <Toaster position="top-right" richColors />
         </ThemeProvider>
       </body>

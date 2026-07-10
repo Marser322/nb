@@ -138,19 +138,13 @@ export function Footer() {
                     </p>
                     <div className="flex items-center gap-4">
                         {/* Hidden admin access - 5 clicks activates */}
-                        <span
+                        <button
+                            type="button"
                             onClick={handleSecretClick}
-                            onKeyDown={(event) => {
-                                if (event.key === "Enter" || event.key === " ") {
-                                    handleSecretClick();
-                                }
-                            }}
-                            role="button"
-                            tabIndex={0}
-                            className="inline-flex min-h-11 items-center text-xs text-muted-foreground/70 cursor-pointer select-none transition-colors hover:text-muted-foreground md:min-h-0"
+                            className="inline-flex min-h-11 cursor-pointer select-none items-center text-xs text-muted-foreground/70 transition-colors hover:text-muted-foreground md:min-h-0"
                         >
                             v1.0.0
-                        </span>
+                        </button>
                     </div>
                 </div>
             </div>

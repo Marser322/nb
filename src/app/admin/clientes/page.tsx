@@ -33,6 +33,7 @@ import { es } from "date-fns/locale";
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
 import { useFeatures } from "@/lib/features";
 import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
+import { AdminPageHeader, AdminToolbar } from "@/components/admin/admin-ui";
 
 const CLIENTS_PAGE_SIZE = 20;
 
@@ -163,18 +164,12 @@ function ClientesList() {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                        <Contact className="h-8 w-8 text-primary" />
-                        Gestión de Clientes
-                    </h1>
-                    <p className="text-muted-foreground mt-1">
-                        {segmentDescriptions[segment]}
-                    </p>
-                </div>
-                {segment !== "todos" && (
+            <AdminPageHeader
+                eyebrow="Clientes"
+                title="Gestión de Clientes"
+                icon={Contact}
+                description={segmentDescriptions[segment]}
+                action={segment !== "todos" ? (
                     <Button
                         variant="outline"
                         size="sm"
@@ -184,10 +179,10 @@ function ClientesList() {
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Ver Todos
                     </Button>
-                )}
-            </div>
+                ) : undefined}
+            />
 
-            {/* Chips de segmento */}
+            <AdminToolbar className="items-stretch md:flex-col md:items-stretch lg:flex-row lg:items-center">
             <div className="flex flex-wrap items-center gap-2">
                 {SEGMENT_OPTIONS.map((option) => (
                     <Button
@@ -208,12 +203,11 @@ function ClientesList() {
                 ))}
             </div>
 
-            {/* Controles de Búsqueda y orden */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <div className="relative flex-1 max-w-md">
+            <div className="flex min-w-0 flex-1 flex-col items-stretch gap-3 sm:flex-row sm:items-center lg:justify-end">
+                <div className="relative min-w-0 flex-1 lg:max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Buscar por nombre o teléfono..."
+                        placeholder="Buscar por nombre o teléfono…"
                         value={searchQuery}
                         onChange={(e) => {
                             setSearchQuery(e.target.value);
@@ -224,7 +218,7 @@ function ClientesList() {
                 </div>
                 <Select value={sort} onValueChange={(value) => handleSortChange(value as ClientSort)}>
                     <SelectTrigger className="w-full sm:w-[190px] bg-background/50 border-input/50 focus:ring-0">
-                        <SelectValue placeholder="Ordenar por..." />
+                        <SelectValue placeholder="Ordenar por…" />
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border text-foreground">
                         {(Object.keys(CLIENT_SORT_LABELS) as ClientSort[]).map((key) => (
@@ -235,6 +229,7 @@ function ClientesList() {
                     </SelectContent>
                 </Select>
             </div>
+            </AdminToolbar>
 
             {/* Lista/Tabla */}
             <Card className="bg-card/50 border-border/50 overflow-hidden">
@@ -269,7 +264,40 @@ function ClientesList() {
                         />
                     ) : (
                         <>
-                            <div className="overflow-x-auto">
+                            <div className="grid gap-3 p-3 md:hidden">
+                                {clients.map((client) => {
+                                    const inactive = isInactiveClient(client.last_visit);
+                                    return (
+                                        <div key={client.id} className="admin-mobile-record">
+                                            <button
+                                                type="button"
+                                                onClick={() => router.push(`/admin/clientes/${client.id}`)}
+                                                className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate font-semibold text-foreground">{client.full_name || "Sin nombre"}</p>
+                                                        <p className="mt-1 font-mono text-xs text-muted-foreground">{client.phone || "Sin teléfono"}</p>
+                                                    </div>
+                                                    {inactive && <Badge variant="outline" className="border-primary/20 bg-primary/10 text-[10px] text-primary">Inactivo</Badge>}
+                                                </div>
+                                                <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                                                    <div><span className="block text-muted-foreground">Última visita</span><strong className="mt-1 block text-foreground">{formatLastVisit(client.last_visit)}</strong></div>
+                                                    <div><span className="block text-muted-foreground">Citas</span><strong className="mt-1 block text-foreground">{client.total_appointments}</strong></div>
+                                                    <div><span className="block text-muted-foreground">Total</span><strong className="mt-1 block text-primary">{formatPrice(Number(client.total_spent))}</strong></div>
+                                                </div>
+                                            </button>
+                                            {features.mensajes_crm && (
+                                                <Button variant="outline" size="sm" onClick={(event) => handleOpenWa(event, client)} className="mt-4 w-full">
+                                                    <MessageCircle className="mr-2 h-4 w-4" aria-hidden="true" />
+                                                    Enviar WhatsApp
+                                                </Button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <div className="hidden overflow-x-auto md:block">
                                 <Table>
                                     <TableHeader className="bg-muted/10 border-b border-border/30">
                                         <TableRow className="hover:bg-transparent">

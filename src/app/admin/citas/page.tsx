@@ -61,6 +61,7 @@ import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState
 import { useFeatures } from "@/lib/features";
 import { useBusinessConfig } from "@/lib/business-config";
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 
 type AppointmentWithRelations = Appointment & {
     service?: Service;
@@ -99,6 +100,7 @@ export default function AdminCitasPage() {
     const [branchFilter, setBranchFilter] = useState<string>("all");
     const [barberFilter, setBarberFilter] = useState<string>("all");
     const [searchQuery, setSearchQuery] = useState("");
+    const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [chargeApt, setChargeApt] = useState<AppointmentWithRelations | null>(null);
@@ -623,46 +625,31 @@ export default function AdminCitasPage() {
     return (
         <div className="space-y-6">
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <section className="admin-agenda-hero rounded-2xl border p-5 md:p-6">
-                    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-                        <div className="max-w-3xl space-y-3">
-                            <div className="admin-chip inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]">
-                                <Calendar className="h-3.5 w-3.5" />
-                                Agenda operativa
-                            </div>
-                            <div>
-                                <h1 className="font-display text-3xl font-black tracking-tight text-foreground md:text-5xl">
-                                    Citas
-                                </h1>
-                                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
-                                    {selectedDateDisplay}. Vista diaria para confirmar, cobrar, reprogramar y leer el ritmo del equipo sin perder contexto.
-                                </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                <span className="admin-agenda-pill">
-                                    {isToday ? "Hoy" : "Fecha seleccionada"}
-                                </span>
-                                <span className="admin-agenda-pill">
-                                    Próxima: {nextAppointmentLabel}
-                                </span>
-                                {activeFilterCount > 0 && (
-                                    <span className="admin-agenda-pill">
-                                        {activeFilterCount} filtros activos
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-
+                <AdminPageHeader
+                    eyebrow="Agenda operativa"
+                    title="Citas"
+                    icon={Calendar}
+                    featured
+                    description={`${selectedDateDisplay}. Confirmá, cobrá y reprogramá sin perder el ritmo del equipo.`}
+                    meta={
+                        <>
+                            <span className="admin-agenda-pill">{isToday ? "Hoy" : "Fecha seleccionada"}</span>
+                            <span className="admin-agenda-pill">Próxima: {nextAppointmentLabel}</span>
+                            {activeFilterCount > 0 && (
+                                <span className="admin-agenda-pill">{activeFilterCount} filtros activos</span>
+                            )}
+                        </>
+                    }
+                    action={
                         <DialogTrigger asChild>
-                            <Button id="admin-btn-new-appointment" className="admin-accent-button h-12 rounded-full px-5 font-semibold">
-                                <Plus className="h-4 w-4 mr-2" />
+                            <Button id="admin-btn-new-appointment" className="admin-accent-button h-11 rounded-full px-5 font-semibold">
+                                <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
                                 Nueva cita
                             </Button>
                         </DialogTrigger>
-                    </div>
-
-                    <AgendaSummary metrics={agendaMetrics} />
-                </section>
+                    }
+                    metrics={<AgendaSummary metrics={agendaMetrics} />}
+                />
 
                 <DialogContent className="max-w-2xl bg-card/95 border-border/60 backdrop-blur-xl">
                     <DialogHeader>
@@ -872,13 +859,14 @@ export default function AdminCitasPage() {
             )}
 
             <section className="admin-agenda-filterbar rounded-2xl border p-3">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                    <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 xl:pb-0">
+                <div className="flex w-full min-w-0 flex-col gap-3 md:flex-row md:items-center">
+                    <div className="admin-date-rail flex w-full min-w-0 snap-x snap-mandatory gap-2 overflow-x-auto pb-2 md:pb-0 xl:pb-0">
                         {quickDates.map((date) => {
                             const dateStr = format(date, "yyyy-MM-dd");
                             const isSelected = selectedDate === dateStr;
                             return (
                                 <button
+                                    type="button"
                                     key={dateStr}
                                     onClick={() => setSelectedDate(dateStr)}
                                     className={`admin-date-pill flex-shrink-0 ${isSelected ? "admin-date-pill-active" : ""}`}
@@ -926,13 +914,28 @@ export default function AdminCitasPage() {
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Buscar cliente o teléfono..."
+                            placeholder="Buscar cliente o teléfono…"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="admin-field-focus h-10 pl-9 bg-background/50 border-input/50"
                         />
                     </div>
 
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsMobileFiltersOpen((open) => !open)}
+                        className="justify-between md:hidden"
+                        aria-expanded={isMobileFiltersOpen}
+                    >
+                        <span className="flex items-center gap-2">
+                            <Filter className="h-4 w-4" aria-hidden="true" />
+                            Filtros {activeFilterCount > 0 ? `(${activeFilterCount})` : ""}
+                        </span>
+                        {isMobileFiltersOpen ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+                    </Button>
+
+                    <div className={isMobileFiltersOpen ? "block" : "hidden md:block"}>
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
                         <SelectTrigger className="admin-field-focus w-full">
                             <Filter className="h-4 w-4 mr-2" />
@@ -947,7 +950,9 @@ export default function AdminCitasPage() {
                             <SelectItem value="no_show">No se presentó</SelectItem>
                         </SelectContent>
                     </Select>
+                    </div>
 
+                    <div className={isMobileFiltersOpen ? "block" : "hidden md:block"}>
                     <Select value={branchFilter} onValueChange={setBranchFilter}>
                         <SelectTrigger className="admin-field-focus w-full">
                             <MapPin className="h-4 w-4 mr-2" />
@@ -962,7 +967,9 @@ export default function AdminCitasPage() {
                             ))}
                         </SelectContent>
                     </Select>
+                    </div>
 
+                    <div className={isMobileFiltersOpen ? "block" : "hidden md:block"}>
                     <Select value={barberFilter} onValueChange={setBarberFilter}>
                         <SelectTrigger className="admin-field-focus w-full">
                             <Scissors className="h-4 w-4 mr-2" />
@@ -979,6 +986,7 @@ export default function AdminCitasPage() {
                                 ))}
                         </SelectContent>
                     </Select>
+                    </div>
                 </div>
             </section>
 
@@ -1141,7 +1149,7 @@ export default function AdminCitasPage() {
 
 function AgendaSummary({ metrics }: { metrics: AgendaMetric[] }) {
     return (
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="contents">
             {metrics.map((metric) => {
                 const Icon = metric.icon;
                 return (

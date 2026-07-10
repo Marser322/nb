@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Edit2, Loader2, Minus, Package, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -10,9 +9,9 @@ import { Button } from "@/components/ui/button";
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,6 +37,9 @@ import { createClient } from "@/lib/supabase/client";
 import { PRODUCT_CATEGORIES } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import type { Branch, Product, ProductStock } from "@/types/database.types";
+import { AdminPageHeader, AdminToolbar } from "@/components/admin/admin-ui";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
+import { getProductImageFallback } from "@/lib/static-data";
 
 export default function AdminProductsPage() {
     const { features, isLoaded } = useFeatures();
@@ -60,9 +62,6 @@ export default function AdminProductsPage() {
         image_url: "",
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-    const canRenderProductImage = (url: string | null) =>
-        !!url && (url.startsWith("/") || url.includes(".supabase.co"));
 
     const loadProducts = useCallback(async () => {
         setIsLoading(true);
@@ -288,25 +287,27 @@ export default function AdminProductsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Inventario de productos</h1>
-                    <p className="text-muted-foreground">
-                        Gestioná el stock por sucursal y la visibilidad de la tienda.
-                    </p>
-                </div>
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button id="admin-btn-new-product" onClick={openNewDialog}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Agregar producto
-                        </Button>
-                    </DialogTrigger>
+            <AdminPageHeader
+                eyebrow="Catálogo"
+                title="Inventario de productos"
+                icon={Package}
+                description="Gestioná stock, precios y visibilidad por sucursal."
+                action={(
+                    <Button id="admin-btn-new-product" onClick={openNewDialog}>
+                        <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+                        Agregar producto
+                    </Button>
+                )}
+            />
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogContent className="max-w-md">
                         <DialogHeader>
                             <DialogTitle>
                                 {editingProduct ? "Editar producto" : "Nuevo producto"}
                             </DialogTitle>
+                            <DialogDescription>
+                                Completá la ficha, el precio y la imagen visible en la tienda.
+                            </DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                             <div>
@@ -322,7 +323,7 @@ export default function AdminProductsPage() {
                             <div>
                                 <label className="text-sm font-medium mb-2 block">Descripción</label>
                                 <Input
-                                    placeholder="Cera de acabado mate para estilos texturizados..."
+                                    placeholder="Cera de acabado mate para estilos texturizados…"
                                     value={formData.description}
                                     onChange={(event) => setFormData({ ...formData, description: event.target.value })}
                                     className="text-base md:text-sm"
@@ -405,22 +406,22 @@ export default function AdminProductsPage() {
                             </div>
                         </form>
                     </DialogContent>
-                </Dialog>
-            </div>
+            </Dialog>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
-                <div className="flex items-center gap-4 bg-card p-4 rounded-lg border">
-                    <Search className="h-4 w-4 text-muted-foreground" />
+            <AdminToolbar>
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <Input
-                        placeholder="Buscar producto..."
+                        placeholder="Buscar producto…"
+                        aria-label="Buscar producto"
                         value={searchQuery}
                         onChange={(event) => setSearchQuery(event.target.value)}
-                        className="max-w-sm border-none bg-transparent focus-visible:ring-0 px-0 text-base md:text-sm"
+                        className="min-w-0 border-none bg-transparent px-0 text-base focus-visible:ring-0 md:text-sm"
                     />
                 </div>
-                <div className="bg-card p-4 rounded-lg border">
+                <div className="w-full md:w-72">
                     <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-                        <SelectTrigger className="text-base md:text-sm">
+                        <SelectTrigger aria-label="Filtrar por sucursal" className="w-full text-base md:text-sm">
                             <SelectValue placeholder="Sucursal" />
                         </SelectTrigger>
                         <SelectContent>
@@ -432,9 +433,61 @@ export default function AdminProductsPage() {
                         </SelectContent>
                     </Select>
                 </div>
+            </AdminToolbar>
+
+            <div className="grid gap-3 md:hidden">
+                {isLoading ? (
+                    [...Array(3)].map((_, index) => <div key={index} className="h-36 animate-pulse rounded-2xl bg-muted/40" />)
+                ) : filteredProducts.length === 0 ? (
+                    <IllustratedEmptyState
+                        icon={Package}
+                        imageSrc="/images/empty/no-productos.webp"
+                        imageAlt="Estantería premium de productos New Brothers sin inventario visible"
+                        title="No se encontraron productos"
+                        description={searchQuery ? "Ajustá la búsqueda para ubicar el producto." : "Registrá el primer producto para iniciar el inventario."}
+                    />
+                ) : filteredProducts.map((product) => {
+                    const stockRow = selectedBranchId ? getStockRow(product.id, selectedBranchId) : null;
+                    const branchStock = stockRow?.quantity || 0;
+                    const threshold = stockRow?.low_stock_threshold ?? product.low_stock_threshold ?? 5;
+                    const isLowStock = branchStock <= threshold;
+                    return (
+                        <div key={product.id} className="admin-mobile-record">
+                            <div className="flex gap-3">
+                                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted">
+                                    <ImageWithFallback
+                                        src={product.image_url}
+                                        fallbackSrc={getProductImageFallback(product)}
+                                        alt={product.name}
+                                        fill
+                                        sizes="64px"
+                                        className="object-cover"
+                                        fallbackClassName="h-full w-full"
+                                    />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0"><p className="truncate font-semibold">{product.name}</p><p className="mt-1 text-xs text-muted-foreground">{product.category || "General"}</p></div>
+                                        <Switch checked={product.is_active} onCheckedChange={() => toggleActive(product.id, product.is_active)} aria-label={`${product.is_active ? "Desactivar" : "Activar"} ${product.name}`} />
+                                    </div>
+                                    <p className="mt-2 font-bold text-primary">{formatPrice(product.price)}</p>
+                                </div>
+                            </div>
+                            <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-3">
+                                <div><p className="text-[10px] uppercase tracking-wider text-muted-foreground">Stock sucursal</p><p className={isLowStock ? "font-bold text-primary" : "font-bold"}>{branchStock} <span className="font-normal text-muted-foreground">/ {product.stock} total</span></p></div>
+                                <div className="flex items-center gap-1">
+                                    <Button variant="outline" size="icon" onClick={() => updateStock(product, selectedBranchId, branchStock - 1)} disabled={!selectedBranchId || branchStock <= 0} aria-label={`Restar stock de ${product.name}`}><Minus className="h-4 w-4" aria-hidden="true" /></Button>
+                                    <Button variant="outline" size="icon" onClick={() => updateStock(product, selectedBranchId, branchStock + 1)} disabled={!selectedBranchId} aria-label={`Sumar stock de ${product.name}`}><Plus className="h-4 w-4" aria-hidden="true" /></Button>
+                                    <Button variant="ghost" size="icon" onClick={() => openEditDialog(product)} aria-label={`Editar ${product.name}`}><Edit2 className="h-4 w-4" aria-hidden="true" /></Button>
+                                    <Button variant="ghost" size="icon" onClick={() => deleteProduct(product.id)} aria-label={`Eliminar ${product.name}`} className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
-            <div className="rounded-md border bg-card">
+            <div className="hidden rounded-md border bg-card md:block">
                 <div className="overflow-x-auto">
                     <Table>
                         <TableHeader>
@@ -493,17 +546,15 @@ export default function AdminProductsPage() {
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
                                                     <div className="relative h-10 w-10 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-                                                        {canRenderProductImage(product.image_url) ? (
-                                                            <Image
-                                                                src={product.image_url!}
-                                                                alt={product.name}
-                                                                fill
-                                                                sizes="40px"
-                                                                className="object-cover"
-                                                            />
-                                                        ) : (
-                                                            <Package className="h-5 w-5 text-muted-foreground" />
-                                                        )}
+                                                        <ImageWithFallback
+                                                            src={product.image_url}
+                                                            fallbackSrc={getProductImageFallback(product)}
+                                                            alt={product.name}
+                                                            fill
+                                                            sizes="40px"
+                                                            className="object-cover"
+                                                            fallbackClassName="h-full w-full"
+                                                        />
                                                     </div>
                                                     <div className="font-medium">{product.name}</div>
                                                 </div>
@@ -522,6 +573,7 @@ export default function AdminProductsPage() {
                                                         className="h-10 w-10 md:h-8 md:w-8"
                                                         onClick={() => updateStock(product, selectedBranchId, branchStock - 1)}
                                                         disabled={!selectedBranchId || branchStock <= 0}
+                                                        aria-label={`Restar stock de ${product.name}`}
                                                     >
                                                         <Minus className="h-3 w-3" />
                                                     </Button>
@@ -534,6 +586,7 @@ export default function AdminProductsPage() {
                                                         className="h-10 w-10 md:h-8 md:w-8"
                                                         onClick={() => updateStock(product, selectedBranchId, branchStock + 1)}
                                                         disabled={!selectedBranchId}
+                                                        aria-label={`Sumar stock de ${product.name}`}
                                                     >
                                                         <Plus className="h-3 w-3" />
                                                     </Button>
@@ -558,6 +611,7 @@ export default function AdminProductsPage() {
                                                         size="icon"
                                                         className="h-10 w-10 md:h-8 md:w-8"
                                                         onClick={() => openEditDialog(product)}
+                                                        aria-label={`Editar ${product.name}`}
                                                     >
                                                         <Edit2 className="h-4 w-4" />
                                                     </Button>
@@ -566,6 +620,7 @@ export default function AdminProductsPage() {
                                                         size="icon"
                                                         className="h-10 w-10 text-destructive hover:text-destructive md:h-8 md:w-8"
                                                         onClick={() => deleteProduct(product.id)}
+                                                        aria-label={`Eliminar ${product.name}`}
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>

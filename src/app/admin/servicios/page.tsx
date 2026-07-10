@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,9 +17,9 @@ import { Switch } from "@/components/ui/switch";
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from "@/components/ui/dialog";
 import {
     Select,
@@ -46,6 +45,9 @@ import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils";
 import { SERVICE_CATEGORIES, SERVICE_CATEGORY_LABELS } from "@/lib/constants";
 import type { Service } from "@/types/database.types";
+import { AdminPageHeader, AdminToolbar } from "@/components/admin/admin-ui";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
+import { getServiceImageFallback } from "@/lib/static-data";
 
 const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
 const DEFAULT_CATEGORY = "corte";
@@ -53,9 +55,6 @@ const DEFAULT_CATEGORY = "corte";
 function categoryLabel(category?: string | null) {
     return SERVICE_CATEGORY_LABELS[category || "otro"] || SERVICE_CATEGORY_LABELS.otro;
 }
-
-const canRenderServiceImage = (url: string | null | undefined) =>
-    !!url && (url.startsWith("/") || url.includes(".supabase.co"));
 
 export default function AdminServiciosPage() {
     const [services, setServices] = useState<Service[]>([]);
@@ -231,25 +230,27 @@ export default function AdminServiciosPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Servicios</h1>
-                    <p className="text-muted-foreground">
-                        Gestiona los servicios que ofrecés.
-                    </p>
-                </div>
-                <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
-                    <DialogTrigger asChild>
-                        <Button id="admin-btn-new-service" onClick={openNewDialog}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Nuevo Servicio
-                        </Button>
-                    </DialogTrigger>
+            <AdminPageHeader
+                eyebrow="Catálogo"
+                title="Servicios"
+                icon={Sparkles}
+                description="Organizá precios, duración, categorías y orden de reserva."
+                action={(
+                    <Button id="admin-btn-new-service" onClick={openNewDialog}>
+                        <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+                        Nuevo servicio
+                    </Button>
+                )}
+            />
+            <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
                     <DialogContent className="max-w-md">
                         <DialogHeader>
                             <DialogTitle>
-                                {editingService ? "Editar Servicio" : "Nuevo Servicio"}
+                                {editingService ? "Editar servicio" : "Nuevo servicio"}
                             </DialogTitle>
+                            <DialogDescription>
+                                Definí cómo se presenta y cuánto tiempo bloquea en la agenda.
+                            </DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                             <div>
@@ -265,7 +266,7 @@ export default function AdminServiciosPage() {
                             <div>
                                 <label className="text-sm font-medium mb-2 block">Descripción</label>
                                 <Input
-                                    placeholder="Corte tradicional con tijera o máquina..."
+                                    placeholder="Corte tradicional con tijera o máquina…"
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     className="text-base md:text-sm"
@@ -346,27 +347,27 @@ export default function AdminServiciosPage() {
                                 </Button>
                                 <Button type="submit" disabled={isSubmitting}>
                                     {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                                    {editingService ? "Guardar Cambios" : "Crear Servicio"}
+                                    {editingService ? "Guardar cambios" : "Crear servicio"}
                                 </Button>
                             </div>
                         </form>
                     </DialogContent>
-                </Dialog>
-            </div>
+            </Dialog>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-4">
-                <div className="flex items-center gap-4 bg-card p-4 rounded-lg border">
-                    <Search className="h-4 w-4 text-muted-foreground" />
+            <AdminToolbar>
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <Input
-                        placeholder="Buscar servicio..."
+                        placeholder="Buscar servicio…"
+                        aria-label="Buscar servicio"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="max-w-sm border-none bg-transparent focus-visible:ring-0 px-0 text-base md:text-sm"
+                        className="min-w-0 border-none bg-transparent px-0 text-base focus-visible:ring-0 md:text-sm"
                     />
                 </div>
-                <div className="bg-card p-4 rounded-lg border">
+                <div className="w-full md:w-60">
                     <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                        <SelectTrigger className="text-base md:text-sm">
+                        <SelectTrigger aria-label="Filtrar por categoría" className="w-full text-base md:text-sm">
                             <SelectValue placeholder="Categoría" />
                         </SelectTrigger>
                         <SelectContent>
@@ -379,9 +380,43 @@ export default function AdminServiciosPage() {
                         </SelectContent>
                     </Select>
                 </div>
+            </AdminToolbar>
+
+            <div className="grid gap-3 md:hidden">
+                {isLoading ? <div className="h-32 animate-pulse rounded-2xl bg-muted/40" /> : filteredServices.length === 0 ? (
+                    <IllustratedEmptyState icon={Sparkles} title="No se encontraron servicios" description="Ajustá los filtros o agregá un servicio nuevo." />
+                ) : filteredServices.map((service) => {
+                    const orderIndex = orderedServices.findIndex((item) => item.id === service.id);
+                    return (
+                        <div key={service.id} className="admin-mobile-record">
+                            <div className="flex items-start gap-3">
+                                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-primary/10">
+                                    <ImageWithFallback
+                                        src={service.image_url}
+                                        fallbackSrc={getServiceImageFallback(service)}
+                                        alt={service.name}
+                                        fill
+                                        sizes="64px"
+                                        className="object-cover"
+                                        fallbackClassName="h-full w-full"
+                                    />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate font-semibold">{service.name}</p><p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{service.description}</p></div><Switch checked={service.is_active} onCheckedChange={() => toggleActive(service)} aria-label={`${service.is_active ? "Desactivar" : "Activar"} ${service.name}`} /></div>
+                                    <div className="mt-3 flex flex-wrap gap-2"><Badge variant="outline">{categoryLabel(service.category)}</Badge><Badge variant="outline">{service.duration_minutes} min</Badge><strong className="text-sm text-primary">{formatPrice(service.price)}</strong></div>
+                                </div>
+                            </div>
+                            <div className="mt-4 flex justify-end gap-1 border-t border-border/60 pt-3">
+                                <Button variant="ghost" size="icon" onClick={() => moveService(service, "up")} disabled={orderIndex === 0} aria-label={`Subir ${service.name}`}><ArrowUp className="h-4 w-4" aria-hidden="true" /></Button>
+                                <Button variant="ghost" size="icon" onClick={() => moveService(service, "down")} disabled={orderIndex === orderedServices.length - 1} aria-label={`Bajar ${service.name}`}><ArrowDown className="h-4 w-4" aria-hidden="true" /></Button>
+                                <Button variant="outline" size="sm" onClick={() => openEditDialog(service)}><Edit2 className="mr-2 h-4 w-4" aria-hidden="true" />Editar</Button>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
-            <div className="rounded-md border bg-card">
+            <div className="hidden rounded-md border bg-card md:block">
                 <div className="overflow-x-auto">
                     <Table>
                     <TableHeader>
@@ -438,17 +473,15 @@ export default function AdminServiciosPage() {
                                     <TableCell>
                                         <div className="flex items-center gap-3">
                                             <div className="relative h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center overflow-hidden shrink-0">
-                                                {canRenderServiceImage(service.image_url) ? (
-                                                    <Image
-                                                        src={service.image_url!}
-                                                        alt={service.name}
-                                                        fill
-                                                        sizes="40px"
-                                                        className="object-cover"
-                                                    />
-                                                ) : (
-                                                    <Sparkles className="h-5 w-5 text-primary" />
-                                                )}
+                                                <ImageWithFallback
+                                                    src={service.image_url}
+                                                    fallbackSrc={getServiceImageFallback(service)}
+                                                    alt={service.name}
+                                                    fill
+                                                    sizes="40px"
+                                                    className="object-cover"
+                                                    fallbackClassName="h-full w-full"
+                                                />
                                             </div>
                                             <div>
                                                 <span className="font-medium">{service.name}</span>
