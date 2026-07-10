@@ -93,7 +93,14 @@ export default async function RootLayout({
     const supabase = await createClient();
     businessConfig = await getBusinessConfigServer(supabase);
   } catch (err) {
-    console.error("Error fetching business config for JSON-LD, using defaults:", err);
+    // DYNAMIC_SERVER_USAGE es la señal de control interna de Next.js durante
+    // su intento de prerender estático (esperable en build, no un error real).
+    const isDynamicUsageSignal = Boolean(
+      err && typeof err === "object" && "digest" in err && err.digest === "DYNAMIC_SERVER_USAGE"
+    );
+    if (!isDynamicUsageSignal) {
+      console.error("Error fetching business config for JSON-LD, using defaults:", err);
+    }
     businessConfig = {
       phone: BUSINESS_CONFIG.phone,
       email: BUSINESS_CONFIG.email,
