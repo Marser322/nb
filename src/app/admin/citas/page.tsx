@@ -59,6 +59,7 @@ import { getBookingErrorMessage } from "@/lib/booking-errors";
 import ChargeDialog from "@/components/shared/ChargeDialog";
 import { IllustratedEmptyState } from "@/components/shared/IllustratedEmptyState";
 import { useFeatures } from "@/lib/features";
+import { useBusinessConfig } from "@/lib/business-config";
 import { SendWhatsappDialog } from "@/components/admin/send-whatsapp-dialog";
 
 type AppointmentWithRelations = Appointment & {
@@ -90,6 +91,7 @@ type TimelineGroup = {
 
 export default function AdminCitasPage() {
     const { features } = useFeatures();
+    const { config } = useBusinessConfig();
     const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
     const [filteredAppointments, setFilteredAppointments] = useState<AppointmentWithRelations[]>([]);
     const [selectedDate, setSelectedDate] = useState(format(startOfToday(), "yyyy-MM-dd"));
@@ -395,7 +397,7 @@ export default function AdminCitasPage() {
         if (isReschedLoadingSlots) return true;
         const duration = rescheduleApt?.service?.duration_minutes ?? BUSINESS_CONFIG.timeSlotMinutes;
         const slotsNeeded = Math.ceil(duration / BUSINESS_CONFIG.timeSlotMinutes);
-        const slots = generateTimeSlots();
+        const slots = generateTimeSlots(config.workingHours);
         const startIdx = slots.indexOf(slot);
         for (let i = 0; i < slotsNeeded; i++) {
             const slotToCheck = slots[startIdx + i];
@@ -470,10 +472,12 @@ export default function AdminCitasPage() {
         }
     };
 
-    // Generar slots de tiempo
-    const generateTimeSlots = () => {
+    // Generar slots de tiempo. Por defecto usa BUSINESS_CONFIG (alta manual);
+    // la grilla de reprogramación pasa explícitamente config.workingHours
+    // (vivo, editable desde /admin/configuracion).
+    const generateTimeSlots = (hours: { start: number; end: number } = BUSINESS_CONFIG.workingHours) => {
         const slots = [];
-        for (let h = BUSINESS_CONFIG.workingHours.start; h < BUSINESS_CONFIG.workingHours.end; h++) {
+        for (let h = hours.start; h < hours.end; h++) {
             slots.push(`${h.toString().padStart(2, "0")}:00`);
             slots.push(`${h.toString().padStart(2, "0")}:30`);
         }
@@ -1103,7 +1107,7 @@ export default function AdminCitasPage() {
                                             <SelectValue placeholder={isReschedLoadingSlots ? "Revisando agenda..." : "Elegí un horario"} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {generateTimeSlots().map((slot) => {
+                                            {generateTimeSlots(config.workingHours).map((slot) => {
                                                 const disabled = isRescheduleSlotDisabled(slot);
                                                 return (
                                                     <SelectItem key={slot} value={slot} disabled={disabled}>

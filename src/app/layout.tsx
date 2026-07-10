@@ -7,6 +7,8 @@ import { AiAssistant } from "@/components/chat/AiAssistant";
 import { ThemeProvider } from "@/components/theme-provider";
 import { VisualSkinInitScript } from "@/components/admin/VisualSkinInitScript";
 import { BUSINESS_CONFIG } from "@/lib/constants";
+import { getBusinessConfigServer, type BusinessConfig } from "@/lib/business-config-shared";
+import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://nbbarber.vercel.app";
@@ -52,35 +54,59 @@ export const viewport: Viewport = {
   interactiveWidget: "resizes-content",
 };
 
-const jsonLd = {
-  "@context": "https://schema.org",
-  "@type": "Barbershop",
-  name: BUSINESS_CONFIG.name,
-  description: "New Brothers: barbería premium en Uruguay. Reservá tu turno online para corte de cabello, barba y cuidado personal masculino.",
-  image: `${SITE_URL}/opengraph-image`,
-  telephone: BUSINESS_CONFIG.phone,
-  address: {
-    "@type": "PostalAddress",
-    streetAddress: "Av. Principal 1234",
-    addressLocality: "Centro",
-    addressCountry: "UY",
-  },
-  openingHoursSpecification: {
-    "@type": "OpeningHoursSpecification",
-    dayOfWeek: BUSINESS_CONFIG.workingDays.map(
-      (d) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d]
-    ),
-    opens: `${String(BUSINESS_CONFIG.workingHours.start).padStart(2, "0")}:00`,
-    closes: `${String(BUSINESS_CONFIG.workingHours.end).padStart(2, "0")}:00`,
-  },
-  sameAs: ["https://instagram.com/nbbarber"],
-};
+/** name/location son branding fijo (no editable); el resto sale de la config vigente. */
+function buildJsonLd(config: BusinessConfig) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Barbershop",
+    name: BUSINESS_CONFIG.name,
+    description: "New Brothers: barbería premium en Uruguay. Reservá tu turno online para corte de cabello, barba y cuidado personal masculino.",
+    image: `${SITE_URL}/opengraph-image`,
+    telephone: config.phone,
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "Av. Principal 1234",
+      addressLocality: "Centro",
+      addressCountry: "UY",
+    },
+    openingHoursSpecification: {
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: config.workingDays.map(
+        (d) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d]
+      ),
+      opens: `${String(config.workingHours.start).padStart(2, "0")}:00`,
+      closes: `${String(config.workingHours.end).padStart(2, "0")}:00`,
+    },
+    sameAs: ["https://instagram.com/nbbarber"],
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // El JSON-LD nunca debe romper el render: ante cualquier falla (DB, red,
+  // migración 027 sin correr todavía) cae a BUSINESS_CONFIG (DEFAULTS).
+  let businessConfig: BusinessConfig;
+  try {
+    const supabase = await createClient();
+    businessConfig = await getBusinessConfigServer(supabase);
+  } catch (err) {
+    console.error("Error fetching business config for JSON-LD, using defaults:", err);
+    businessConfig = {
+      phone: BUSINESS_CONFIG.phone,
+      email: BUSINESS_CONFIG.email,
+      instagram: BUSINESS_CONFIG.instagram,
+      workingHours: BUSINESS_CONFIG.workingHours,
+      workingDays: BUSINESS_CONFIG.workingDays,
+      cancellationWindowMinutes: BUSINESS_CONFIG.cancellationWindow,
+      lateToleranceMinutes: BUSINESS_CONFIG.lateToleranceMinutes,
+      bankTransfer: { bank: "", account: "", holder: "" },
+    };
+  }
+  const jsonLd = buildJsonLd(businessConfig);
+
   return (
     <html lang="es" suppressHydrationWarning>
       <head>

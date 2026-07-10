@@ -9,9 +9,10 @@ import { Header, Footer } from "@/components/layout";
 import type { Lookbook } from "@/types/database.types";
 import Link from "next/link";
 import Image from "next/image";
-import { ROUTES, BUSINESS_CONFIG } from "@/lib/constants";
+import { ROUTES } from "@/lib/constants";
 import { STATIC_STYLES, getServiceIdForStyle } from "@/lib/static-data";
 import { useFeatures } from "@/lib/features";
+import { useBusinessConfig } from "@/lib/business-config";
 import { toast } from "sonner";
 import { buildWaLink } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
@@ -22,8 +23,9 @@ type StyleItem = Lookbook & { serviceId?: string | null };
 
 export default function LookbookPage() {
     const { features, isLoaded } = useFeatures();
+    const { config } = useBusinessConfig();
     const router = useRouter();
-    const waLink = buildWaLink(BUSINESS_CONFIG.phone, "Hola, me gustaría reservar un turno.");
+    const waLink = buildWaLink(config.phone, "Hola, me gustaría reservar un turno.");
     const supabase = useMemo(() => createClient(), []);
 
     useEffect(() => {

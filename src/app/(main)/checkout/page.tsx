@@ -15,16 +15,12 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import { useFeatures } from "@/lib/features";
+import { useBusinessConfig } from "@/lib/business-config";
 import { createClient } from "@/lib/supabase/client";
-import { BANK_TRANSFER_INFO } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import { normalizeUyPhone } from "@/lib/whatsapp";
 import { useCartStore } from "@/stores/cartStore";
 import type { Branch, FulfillmentType } from "@/types/database.types";
-
-const hasBankTransferInfo = Boolean(
-    BANK_TRANSFER_INFO.bank && BANK_TRANSFER_INFO.account && BANK_TRANSFER_INFO.holder
-);
 
 type PaymentMethod = "efectivo" | "transferencia";
 
@@ -40,6 +36,7 @@ interface CartItem {
 
 export default function CheckoutPage() {
     const { features, isLoaded: isFeaturesLoaded } = useFeatures();
+    const { config } = useBusinessConfig();
     const router = useRouter();
     const supabase = useMemo(() => createClient(), []);
     const { items, getTotalPrice, clearCart } = useCartStore();
@@ -108,6 +105,9 @@ export default function CheckoutPage() {
     }, [isLoading, items.length, router]);
 
     const selectedBranch = branches.find((branch) => branch.id === branchId);
+    const hasBankTransferInfo = Boolean(
+        config.bankTransfer.bank && config.bankTransfer.account && config.bankTransfer.holder
+    );
 
     const mapCheckoutError = (message?: string) => {
         if (!message) return "No pudimos procesar el pedido.";
@@ -364,9 +364,9 @@ export default function CheckoutPage() {
                                         {hasBankTransferInfo ? (
                                             <>
                                                 <p className="font-semibold text-primary">Datos bancarios:</p>
-                                                <p>Banco: <span className="text-foreground">{BANK_TRANSFER_INFO.bank}</span></p>
-                                                <p>Cuenta: <span className="text-foreground">{BANK_TRANSFER_INFO.account}</span></p>
-                                                <p>Titular: <span className="text-foreground">{BANK_TRANSFER_INFO.holder}</span></p>
+                                                <p>Banco: <span className="text-foreground">{config.bankTransfer.bank}</span></p>
+                                                <p>Cuenta: <span className="text-foreground">{config.bankTransfer.account}</span></p>
+                                                <p>Titular: <span className="text-foreground">{config.bankTransfer.holder}</span></p>
                                             </>
                                         ) : (
                                             <p className="text-muted-foreground">

@@ -9,20 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import {
-    BANK_TRANSFER_INFO,
-    BUSINESS_CONFIG,
     FULFILLMENT_LABELS,
     ORDER_STATUS_COLORS,
     ORDER_STATUS_LABELS,
     PAYMENT_METHOD_LABELS,
     ROUTES,
 } from "@/lib/constants";
+import { useBusinessConfig } from "@/lib/business-config";
 import { formatPrice } from "@/lib/utils";
 import { buildWaLink } from "@/lib/whatsapp";
-
-const hasBankTransferInfo = Boolean(
-    BANK_TRANSFER_INFO.bank && BANK_TRANSFER_INFO.account && BANK_TRANSFER_INFO.holder
-);
 
 type SuccessOrder = {
     id: string;
@@ -38,6 +33,7 @@ function CheckoutSuccessContent() {
     const searchParams = useSearchParams();
     const orderId = searchParams.get("order");
     const supabase = useMemo(() => createClient(), []);
+    const { config } = useBusinessConfig();
     const [order, setOrder] = useState<SuccessOrder | null>(null);
     const [isLoading, setIsLoading] = useState(Boolean(orderId));
 
@@ -59,9 +55,12 @@ function CheckoutSuccessContent() {
     }, [orderId, supabase]);
 
     const shortId = orderId ? orderId.slice(0, 8).toUpperCase() : "pendiente";
+    const hasBankTransferInfo = Boolean(
+        config.bankTransfer.bank && config.bankTransfer.account && config.bankTransfer.holder
+    );
     const waLink = order
         ? buildWaLink(
-              BUSINESS_CONFIG.phone,
+              config.phone,
               `Hola! Acabo de hacer el pedido #${shortId} por ${formatPrice(order.total)} por transferencia. Te paso el comprobante.`
           )
         : "";
@@ -137,9 +136,9 @@ function CheckoutSuccessContent() {
                                         {hasBankTransferInfo ? (
                                             <>
                                                 <p className="font-semibold text-primary text-xs">Datos bancarios:</p>
-                                                <p>Banco: <span className="text-foreground">{BANK_TRANSFER_INFO.bank}</span></p>
-                                                <p>Cuenta: <span className="text-foreground">{BANK_TRANSFER_INFO.account}</span></p>
-                                                <p>Titular: <span className="text-foreground">{BANK_TRANSFER_INFO.holder}</span></p>
+                                                <p>Banco: <span className="text-foreground">{config.bankTransfer.bank}</span></p>
+                                                <p>Cuenta: <span className="text-foreground">{config.bankTransfer.account}</span></p>
+                                                <p>Titular: <span className="text-foreground">{config.bankTransfer.holder}</span></p>
                                             </>
                                         ) : (
                                             <p className="text-muted-foreground text-xs">
